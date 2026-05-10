@@ -1,3 +1,8 @@
+wake:
+  modules:
+    obu: true
+  config:
+    killboatonexit: true
 
 obu:
   # see https://openboatutils.github.io/commands.html
@@ -8,8 +13,8 @@ obu:
       setresetonworldload: false
       allowaccelstacking: false
       # Example of multi-argument setting:
-      # blockslipperiness: "0.989 minecraft:stone,minecraft:granite"
-    # harcoded custom profiles REMOVE<-------------------------------------------------------------------------------------------------------------------
+      # blockslipperiness: 0.989 minecraft:stone,minecraft:granite
+    # harcoded custom profiles REMOVE for public builds <-------------------------------------------------------------------------------------------------------------------
     harbour:
       defaultslipperiness: 0.98
       aircontrol: true
@@ -49,7 +54,6 @@ obu:
       setyawaccel: 1
       stepwhilefalling: true
       blockslipperiness: "0.8 minecraft:grass_block,minecraft:sand,minecraft:stone,minecraft:gravel,minecraft:coarse_dirt,minecraft:cobblestone,minecraft:mossy_cobblestone,minecraft:moss_block"
-
 
   # Semantic Types: float, double, boolean, int, short, byte, string
   # Advanced Types: block_list, entity_list, setting_enum, collision_enum, context_id
