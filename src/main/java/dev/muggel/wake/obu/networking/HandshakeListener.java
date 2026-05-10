@@ -67,11 +67,15 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
                     if (packetId == 0) {
                         int versionId = in.readInt();
                         boolean isUnstable = versionId >= 19 && in.readBoolean();
-                        Player player = event.getPlayer();
-
-                        if (player != null && obuPlayers.add(player.getUniqueId())) {
-                            handleOBUPlayer(player, versionId, isUnstable);
-                        }
+                        UUID playerId = event.getUser().getUUID();
+                        if (obuPlayers.add(playerId)) {
+                            Bukkit.getScheduler().runTask(plugin, () -> {
+                                Player player = Bukkit.getPlayer(playerId);
+                                if (player != null && player.isOnline()) {
+                                    handleOBUPlayer(player, versionId, isUnstable);
+                                    }
+                                });
+                            }
                     }
                 } catch (IOException e) {
                     String identity = event.getPlayer() != null ? event.getPlayer().toString() : "Unknown";
