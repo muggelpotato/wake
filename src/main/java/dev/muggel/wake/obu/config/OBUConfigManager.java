@@ -6,6 +6,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class OBUConfigManager {
@@ -17,10 +18,25 @@ public class OBUConfigManager {
         this.packetSender = packetSender;
     }
 
+    public List<String> resetAndApplyProfile(Player player, String profileName) {
+        try {
+            packetSender.sendDynamicPacket(player, "settings", 0, Collections.emptyList(), new String[0]);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to send reset packet to " + player.getName());
+        }
+        if (!profileName.equalsIgnoreCase("default")) {
+            applyProfile(player, "default");
+        }
+        return applyProfile(player, profileName);
+    }
+
     public List<String> applyProfile(Player player, String profileName) {
         List<String> appliedSettings = new ArrayList<>();
         ConfigurationSection profile = plugin.getConfig().getConfigurationSection("obu.profiles." + profileName);
-        if (profile == null) return appliedSettings;
+        if (profile == null) {
+            plugin.getLogger().warning("Attempted to apply unknown OBU profile: " + profileName);
+            return appliedSettings;
+        }
 
         for (String cmdName : profile.getKeys(false)) {
             ConfigurationSection cmdDef = plugin.getConfig().getConfigurationSection("obu.commands." + cmdName);
@@ -40,10 +56,12 @@ public class OBUConfigManager {
 
                 try {
                     packetSender.sendDynamicPacket(player, channel, id, types, args);
-                    appliedSettings.add(cmdName + " -> " + value);
+                    appliedSettings.add(cmdName + (args.length > 0 ? " -> " + value : ""));
                 } catch (Exception e) {
                     plugin.getLogger().warning("Failed to apply setting '" + cmdName + "' in profile '" + profileName + "'. Check config types.");
                 }
+            } else {
+                plugin.getLogger().warning("Profile '" + profileName + "' uses undefined command: '" + cmdName + "'");
             }
         }
         return appliedSettings;

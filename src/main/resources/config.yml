@@ -9,6 +9,47 @@ obu:
       allowaccelstacking: false
       # Example of multi-argument setting:
       # blockslipperiness: "0.989 minecraft:stone,minecraft:granite"
+    # harcoded custom profiles REMOVE<-------------------------------------------------------------------------------------------------------------------
+    harbour:
+      defaultslipperiness: 0.98
+      aircontrol: true
+      stepsize: 1
+      jumpforce: 0.75
+      setforwardaccel: 0.04
+      setbackwardaccel: 0.03
+      setturnforwardaccel: 0
+      stepwhilefalling: true
+    city:
+      defaultslipperiness: 0.98
+      aircontrol: true
+      stepsize: 1
+      jumpforce: .56
+      setforwardaccel: 0.04
+      setbackwardaccel: 0.03
+      setturnforwardaccel: 0
+      stepwhilefalling: true
+    mazewave:
+      defaultslipperiness: .98
+      aircontrol: true
+      stepsize: 1
+      jumpforce: 0.7
+      setforwardaccel: 0.04
+      setbackwardaccel: 0.03
+      setturnforwardaccel: 0
+      stepwhilefalling: true
+    taiyang-only-first-gear:
+      defaultslipperiness: 0.96
+      aircontrol: true
+      stepsize: 1
+      boatgravity: -0.1
+      jumpforce: 0.1
+      setforwardaccel: 0.06
+      setbackwardaccel: 0.03
+      setturnforwardaccel: 0
+      setyawaccel: 1
+      stepwhilefalling: true
+      blockslipperiness: "0.8 minecraft:grass_block,minecraft:sand,minecraft:stone,minecraft:gravel,minecraft:coarse_dirt,minecraft:cobblestone,minecraft:mossy_cobblestone,minecraft:moss_block"
+
 
   # Semantic Types: float, double, boolean, int, short, byte, string
   # Advanced Types: block_list, entity_list, setting_enum, collision_enum, context_id
