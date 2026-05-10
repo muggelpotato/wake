@@ -25,7 +25,7 @@ public class OBUManager {
 
         PacketSender packetSender = new PacketSender();
         this.configManager = new OBUConfigManager(plugin, packetSender);
-        new HandshakeListener(plugin, packetSender, configManager);
+        new HandshakeListener(plugin, configManager);
 
         PacketEvents.getAPI().getEventManager().registerListener(new BoatLagInterceptor());
 

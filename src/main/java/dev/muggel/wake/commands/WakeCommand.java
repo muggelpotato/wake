@@ -14,6 +14,7 @@ import java.util.List;
 
 public class WakeCommand extends Command {
     private static final String RELOAD_PERMISSION = "wake.reload";
+    private static final String ADMIN_PERMISSION = "wake.admin";
     private final Wake plugin;
 
     public WakeCommand(Wake plugin) {
@@ -28,8 +29,8 @@ public class WakeCommand extends Command {
     public boolean execute(@NotNull CommandSender sender, @NotNull String commandLabel, @NotNull String @NonNull [] args) {
         if (args.length == 0) {
             sender.sendMessage(Component.text("Wake Plugin Commands:", NamedTextColor.YELLOW));
-            sender.sendMessage(Component.text("/" + commandLabel + " reload ", NamedTextColor.AQUA)
-                    .append(Component.text("- Reloads the configuration", NamedTextColor.GRAY)));
+            sender.sendMessage(Component.text("/" + commandLabel + " reload ", NamedTextColor.AQUA).append(Component.text("- Reloads the configuration", NamedTextColor.GRAY)));
+            sender.sendMessage(Component.text("/" + commandLabel + " killboatonexit <true/false> ", NamedTextColor.AQUA).append(Component.text("- Toggles boat removal on exit", NamedTextColor.GRAY)));
             return true;
         }
 
@@ -40,10 +41,30 @@ public class WakeCommand extends Command {
                     sender.sendMessage(Component.text("No permission.", NamedTextColor.RED));
                     return true;
                 }
-                plugin.reloadConfig();
+                plugin.reloadSettings();
                 sender.sendMessage(Component.text("[Wake] ", NamedTextColor.YELLOW)
                         .append(Component.text("Configuration reloaded", NamedTextColor.GREEN)));
                 break;
+            case "killboatonexit":
+                if (!sender.hasPermission(ADMIN_PERMISSION)) {
+                    sender.sendMessage(Component.text("No permission.", NamedTextColor.RED));
+                    return true;
+                }
+                if (args.length < 2) {
+                    sender.sendMessage(Component.text("Usage: /" + commandLabel + " killboatonexit <true|false>", NamedTextColor.RED));
+                    return true;
+                }
+                String raw = args[1].toLowerCase();
+                if (!raw.equals("true") && !raw.equals("false")) {
+                    sender.sendMessage(Component.text("Usage: /" + commandLabel + " killboatonexit <true|false>", NamedTextColor.RED));
+                    return true;
+                }
+                boolean killState = raw.equals("true");
+                plugin.setKillBoatOnExit(killState);
+                sender.sendMessage(Component.text("[Wake] Auto-kill boat set to ", NamedTextColor.YELLOW)
+                        .append(Component.text(String.valueOf(killState), NamedTextColor.AQUA)));
+                break;
+
             default:
                 sender.sendMessage(Component.text("Unknown subcommand. Type /" + commandLabel + " for help.", NamedTextColor.RED));
                 break;
@@ -55,7 +76,7 @@ public class WakeCommand extends Command {
     @Override
     public @NotNull List<String> tabComplete(@NotNull CommandSender sender, @NotNull String alias, @NotNull String @NonNull [] args) {
         if (args.length == 1) {
-            List<String> subCommands = List.of("reload");
+            List<String> subCommands = List.of("reload", "killboatonexit");
             String current = args[0].toLowerCase();
             List<String> matches = new ArrayList<>();
 
@@ -65,6 +86,8 @@ public class WakeCommand extends Command {
                 }
             }
             return matches;
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("killboatonexit")) {
+            return List.of("true", "false");
         }
         return Collections.emptyList();
     }
