@@ -1,5 +1,6 @@
 package dev.muggel.wake.obu.commands;
 
+import dev.muggel.wake.obu.OBUManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -17,7 +18,7 @@ public class OBUHelpCommand extends Command {
 
     public OBUHelpCommand() {
         super("obuhelp");
-        this.setPermission("OBUManager.OBU_PERMISSION");
+        this.setPermission(OBUManager.OBU_PERMISSION);
         this.setDescription("Links to the official OpenBoatUtils Wiki");
         this.setUsage("/obuhelp");
     }

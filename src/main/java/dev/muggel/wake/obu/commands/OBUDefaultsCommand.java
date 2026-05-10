@@ -34,6 +34,7 @@ public class OBUDefaultsCommand extends Command {
         this.setDescription("Queries or applies the vanilla default for an OBU setting");
         this.setUsage("/obudefaults <setting> [apply]");
 
+        // OBU 0.5.0
         defaults.put("falldamage", new String[]{"true"});
         defaults.put("waterelevation", new String[]{"false"});
         defaults.put("aircontrol", new String[]{"false"});
@@ -124,6 +125,7 @@ public class OBUDefaultsCommand extends Command {
             player.sendMessage(successMsg);
 
         } catch (Exception e) {
+            plugin.getLogger().warning("Failed to apply default for " + setting + ": " + e.getMessage());
             player.sendMessage(Component.text("Failed to parse internal default value for: " + setting, NamedTextColor.RED));
         }
 

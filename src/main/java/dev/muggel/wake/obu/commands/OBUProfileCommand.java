@@ -37,7 +37,8 @@ public class OBUProfileCommand extends Command {
 
         if (profileData != null) {
             for (String key : profileData.getKeys(false)) {
-                String val = profileData.getString(key);
+                Object rawVal = profileData.get(key);
+                String val = rawVal != null ? rawVal.toString() : null;
                 hoverText = hoverText.append(Component.newline())
                         .append(Component.text("  - ", NamedTextColor.GRAY))
                         .append(Component.text(key, NamedTextColor.AQUA))

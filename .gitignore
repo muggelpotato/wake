@@ -2,14 +2,14 @@
 .DS_Store
 
 # Gradle cache folder
-.gradle
+.gradle/
 
 # Gradle build folder
-build
+build/
 
 # IntelliJ
 out/
-.idea
+.idea/
 *.iml
 # mpeltonen/sbt-idea plugin
 .idea_modules/
@@ -18,4 +18,4 @@ out/
 hs_err_pid*
 
 # Common working directory
-run
+run/

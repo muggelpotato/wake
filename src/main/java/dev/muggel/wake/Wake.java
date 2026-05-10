@@ -49,7 +49,7 @@ public final class Wake extends JavaPlugin {
         this.killBoatOnExit = getConfig().getBoolean("wake.config.killboatonexit", false);
     }
     public boolean isKillBoatOnExit() { return killBoatOnExit; }
-    public void setKillBoatOnExit(boolean killBoatOnExit) { this.killBoatOnExit = killBoatOnExit; }
+    public void setKillBoatOnExit(boolean killBoatOnExit) { this.killBoatOnExit = killBoatOnExit; } // non persistent
 
     public OBUManager getObuManager() {
         return obuManager;

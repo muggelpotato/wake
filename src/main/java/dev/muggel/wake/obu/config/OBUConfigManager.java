@@ -45,9 +45,16 @@ public class OBUConfigManager {
                 int id = cmdDef.getInt("id");
                 String channel = cmdDef.getString("channel", "settings");
                 List<String> types = cmdDef.getStringList("types");
-                String value = profile.getString(cmdName);
 
-                String[] args = (value != null && !value.isBlank()) ? value.split(" ") : new String[0];
+                List<String> argList;
+                if (profile.isList(cmdName)) {
+                    argList = profile.getStringList(cmdName);
+                } else {
+                    String value = profile.getString(cmdName);
+                    argList = (value != null && !value.isBlank()) ? Collections.singletonList(value) : Collections.emptyList();
+                }
+
+                String[] args = argList.toArray(new String[0]);
 
                 if (args.length != types.size()) {
                     plugin.getLogger().warning("Profile '" + profileName + "' has incorrect argument count for '" + cmdName + "'. Expected " + types.size());
@@ -56,7 +63,7 @@ public class OBUConfigManager {
 
                 try {
                     packetSender.sendDynamicPacket(player, channel, id, types, args);
-                    appliedSettings.add(cmdName + (args.length > 0 ? " -> " + value : ""));
+                    appliedSettings.add(cmdName + (args.length > 0 ? " -> " + String.join(", ", args) : ""));
                 } catch (Exception e) {
                     plugin.getLogger().warning("Failed to apply setting '" + cmdName + "' in profile '" + profileName + "'. Check config types.");
                 }
