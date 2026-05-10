@@ -7,15 +7,4 @@ reviews:
   poem: false
   path_instructions:
     - path: "src/main/java/**"
-      instructions: |
-        You are a Senior Minecraft Systems Engineer. 
-        Focus on:
-        1. Thread safety (No Bukkit API in Async tasks).
-        2. Memory leaks (Use UUIDs, not Player objects).
-        3. Performance (Avoid heavy logic in Move/Chat events).
-        4. Modern API (Adventure/Component over ChatColor).
-  path_filters:
-  - "!target/**"
-  - "!build/**"
-  - "!.gradle/**"
-  - "!.idea/**"
+      instructions: "Expert Minecraft Dev: Flag Bukkit API in async, Player objects in Maps, and legacy ChatColor."
