@@ -22,9 +22,9 @@ public class OBUConfigManager {
         try {
             packetSender.sendDynamicPacket(player, "settings", 0, Collections.emptyList(), new String[0]);
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to send reset packet to " + player.getName());
+            plugin.getLogger().warning("Failed to send reset packet to " + player.getName() + ": "  + e.getMessage());
         }
-        if (!profileName.equalsIgnoreCase("default")) {
+        if (!"default".equalsIgnoreCase(profileName)) {
             applyProfile(player, "default");
         }
         return applyProfile(player, profileName);

@@ -87,9 +87,13 @@ public class OBUProfileCommand extends Command {
             return true;
         }
 
-        configManager.resetAndApplyProfile(player, profileName);
+        List<String> appliedSettings = configManager.resetAndApplyProfile(player, profileName);
+        if (appliedSettings.isEmpty()) {
+            player.sendMessage(Component.text("[Wake] ", NamedTextColor.YELLOW)
+                    .append(Component.text("Failed to apply profile. Check server logs.", NamedTextColor.RED)));
+            return true;
+        }
         Component hoverText = getProfileHoverText(profileName);
-
         player.sendMessage(Component.text("[Wake] ", NamedTextColor.YELLOW)
                 .append(Component.text("Applied profile: ", NamedTextColor.WHITE))
                 .append(Component.text(profileName, NamedTextColor.AQUA)

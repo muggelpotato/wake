@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.List;
 
 public class WakeCommand extends Command {
+    private static final String RELOAD_PERMISSION = "wake.reload";
     private final Wake plugin;
 
     public WakeCommand(Wake plugin) {
@@ -35,9 +36,13 @@ public class WakeCommand extends Command {
         String subCommand = args[0].toLowerCase();
         switch (subCommand) {
             case "reload":
+                if (!sender.hasPermission(RELOAD_PERMISSION)) {
+                    sender.sendMessage(Component.text("No permission.", NamedTextColor.RED));
+                    return true;
+                }
                 plugin.reloadConfig();
                 sender.sendMessage(Component.text("[Wake] ", NamedTextColor.YELLOW)
-                        .append(Component.text("Configuration reloaded! Changes are live.", NamedTextColor.GREEN)));
+                        .append(Component.text("Configuration reloaded", NamedTextColor.GREEN)));
                 break;
             default:
                 sender.sendMessage(Component.text("Unknown subcommand. Type /" + commandLabel + " for help.", NamedTextColor.RED));
