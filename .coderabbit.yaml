@@ -4,6 +4,7 @@ reviews:
   auto_review:
     enabled: false
   review_status: false
+  poem: false
   path_instructions:
     - path: "src/main/java/**"
       instructions: |
