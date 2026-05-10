@@ -41,7 +41,7 @@ public class WakeCommand extends Command {
                     sender.sendMessage(Component.text("No permission.", NamedTextColor.RED));
                     return true;
                 }
-                plugin.reloadConfig();
+                plugin.reloadSettings();
                 sender.sendMessage(Component.text("[Wake] ", NamedTextColor.YELLOW)
                         .append(Component.text("Configuration reloaded", NamedTextColor.GREEN)));
                 break;
@@ -54,7 +54,12 @@ public class WakeCommand extends Command {
                     sender.sendMessage(Component.text("Usage: /" + commandLabel + " killboatonexit <true|false>", NamedTextColor.RED));
                     return true;
                 }
-                boolean killState = Boolean.parseBoolean(args[1]);
+                String raw = args[1].toLowerCase();
+                if (!raw.equals("true") && !raw.equals("false")) {
+                    sender.sendMessage(Component.text("Usage: /" + commandLabel + " killboatonexit <true|false>", NamedTextColor.RED));
+                    return true;
+                }
+                boolean killState = raw.equals("true");
                 plugin.setKillBoatOnExit(killState);
                 sender.sendMessage(Component.text("[Wake] Auto-kill boat set to ", NamedTextColor.YELLOW)
                         .append(Component.text(String.valueOf(killState), NamedTextColor.AQUA)));
@@ -79,14 +84,6 @@ public class WakeCommand extends Command {
                 if (cmd.startsWith(current)) {
                     matches.add(cmd);
                 }
-            }
-            return matches;
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("module")) {
-            List<String> modules = List.of("obu");
-            String current = args[1].toLowerCase();
-            List<String> matches = new ArrayList<>();
-            for (String mod : modules) {
-                if (mod.startsWith(current)) matches.add(mod);
             }
             return matches;
         } else if (args.length == 2 && args[0].equalsIgnoreCase("killboatonexit")) {

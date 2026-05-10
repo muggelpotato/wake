@@ -21,12 +21,13 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class HandshakeListener extends PacketListenerAbstract implements Listener {
 
     private final Wake plugin;
     private final OBUConfigManager configManager;
-    private final Set<UUID> obuPlayers = new HashSet<>();
+    private final Set<UUID> obuPlayers = ConcurrentHashMap.newKeySet();
 
     public HandshakeListener(Wake plugin, OBUConfigManager configManager) {
         this.plugin = plugin;
@@ -52,7 +53,9 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
                         String unstableTag = isUnstable ? " [UNSTABLE]" : "";
                         plugin.getLogger().info("OBU Config Phase Detected: " + event.getUser().getName() + " (v" + versionId + ")" + unstableTag);
                     }
-                } catch (IOException ignored) {}
+                } catch (IOException e) {
+                    plugin.getLogger().warning("Failed to parse openboatutils:configuration packet from " + event.getUser().getName() + ": " + e.getMessage());
+                }
             }
         }
         // OBU < 0.5.0
@@ -66,12 +69,14 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
                         boolean isUnstable = versionId >= 19 && in.readBoolean();
                         Player player = event.getPlayer();
 
-                        if (player != null && !obuPlayers.contains(player.getUniqueId())) {
-                            obuPlayers.add(player.getUniqueId());
+                        if (player != null && obuPlayers.add(player.getUniqueId())) {
                             handleOBUPlayer(player, versionId, isUnstable);
                         }
                     }
-                } catch (IOException ignored) {}
+                } catch (IOException e) {
+                    String identity = event.getPlayer() != null ? event.getPlayer().toString() : "Unknown";
+                    plugin.getLogger().warning("Failed to parse openboatutils:settings packet from " + identity + ": " + e.getMessage());
+                }
             }
         }
     }

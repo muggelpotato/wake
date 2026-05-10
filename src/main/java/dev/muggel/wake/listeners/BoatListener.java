@@ -1,6 +1,7 @@
 package dev.muggel.wake.listeners;
 
 import dev.muggel.wake.Wake;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Boat;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -13,11 +14,17 @@ public class BoatListener implements Listener {
         this.plugin = plugin;
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
     public void onVehicleExit(VehicleExitEvent event) {
         if (event.getVehicle() instanceof Boat boat) {
             if (plugin.isKillBoatOnExit()) {
-                boat.remove();
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (boat.isValid() && boat.getPassengers().isEmpty()) {
+                        boat.remove();
+                    }
+                });
+
+
             }
         }
     }
