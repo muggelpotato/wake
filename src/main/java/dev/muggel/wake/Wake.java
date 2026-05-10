@@ -32,8 +32,4 @@ public final class Wake extends JavaPlugin {
         PacketEvents.getAPI().terminate();
         getLogger().info("wake has been disabled");
     }
-
-    public OBUManager getOBUManager() {
-        return this.obuManager;
-    }
 }

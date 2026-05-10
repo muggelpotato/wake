@@ -8,11 +8,6 @@ import org.bukkit.entity.Player;
 import java.util.List;
 
 public class PacketSender {
-    private final Wake plugin;
-    public PacketSender(Wake plugin) {
-        this.plugin = plugin;
-    }
-
     public void sendDynamicPacket(Player player, String channel, int packetId, List<String> semanticTypes, String[] rawArgs) throws Exception {
         PacketByteBuf buf = new PacketByteBuf();
         buf.writeShort((short) packetId);

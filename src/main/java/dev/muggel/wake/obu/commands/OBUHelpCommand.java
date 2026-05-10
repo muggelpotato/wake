@@ -16,7 +16,7 @@ import java.util.List;
 
 public class OBUHelpCommand extends Command {
 
-    public OBUHelpCommand(Wake plugin) {
+    public OBUHelpCommand() {
         super("obuhelp");
         this.setPermission("OBUManager.OBU_PERMISSION");
         this.setDescription("Links to the official OpenBoatUtils Wiki");

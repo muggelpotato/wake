@@ -8,14 +8,20 @@ public class PacketByteBuf {
     private final ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
     private final DataOutputStream out = new DataOutputStream(byteArrayOutputStream);
 
-    public PacketByteBuf writeFloat(float v) throws IOException { out.writeFloat(v); return this; }
-    public PacketByteBuf writeBoolean(boolean v) throws IOException { out.writeBoolean(v); return this; }
-    public PacketByteBuf writeDouble(double v) throws IOException { out.writeDouble(v); return this; }
-    public PacketByteBuf writeShort(short v) throws IOException { out.writeShort(v); return this; }
-    public PacketByteBuf writeInt(int v) throws IOException { out.writeInt(v); return this; }
-    public PacketByteBuf writeByte(byte v) throws IOException { out.writeByte(v); return this; }
+    public void writeFloat(float v) throws IOException { out.writeFloat(v);
+    }
+    public void writeBoolean(boolean v) throws IOException { out.writeBoolean(v);
+    }
+    public void writeDouble(double v) throws IOException { out.writeDouble(v);
+    }
+    public void writeShort(short v) throws IOException { out.writeShort(v);
+    }
+    public void writeInt(int v) throws IOException { out.writeInt(v);
+    }
+    public void writeByte(byte v) throws IOException { out.writeByte(v);
+    }
 
-    public PacketByteBuf writeString(String s) throws IOException {
+    public void writeString(String s) throws IOException {
         int len = s.length();
         while (true) {
             if ((len & ~0x7F) == 0) {
@@ -26,12 +32,6 @@ public class PacketByteBuf {
             len >>>= 7;
         }
         out.writeBytes(s);
-        return this;
-    }
-
-    public PacketByteBuf writeShortArray(short[] array) throws IOException {
-        for (short v : array) out.writeShort(v);
-        return this;
     }
 
     public byte[] toBytes() { return byteArrayOutputStream.toByteArray(); }

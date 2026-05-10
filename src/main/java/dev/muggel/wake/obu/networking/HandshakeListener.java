@@ -37,7 +37,7 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
 
     @Override
     public void onPacketReceive(PacketReceiveEvent event) {
-        Player player = (Player) event.getPlayer();
+        Player player = event.getPlayer();
         if (player == null) return;
 
         if (event.getPacketType() == PacketType.Play.Client.CLIENT_SETTINGS) {

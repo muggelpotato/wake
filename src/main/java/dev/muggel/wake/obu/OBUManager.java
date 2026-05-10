@@ -12,7 +12,6 @@ import org.bukkit.command.CommandMap;
 import org.bukkit.configuration.ConfigurationSection;
 
 import java.util.List;
-import java.util.Objects;
 
 public class OBUManager {
     private final PacketSender packetSender;
@@ -20,17 +19,17 @@ public class OBUManager {
     public OBUManager(Wake plugin) {
         plugin.getLogger().info("Initializing OpenBoatUtils Feature");
 
-        this.packetSender = new PacketSender(plugin);
+        this.packetSender = new PacketSender();
         OBUConfigManager configManager = new OBUConfigManager(plugin, packetSender);
         new HandshakeListener(plugin, packetSender, configManager);
 
-        PacketEvents.getAPI().getEventManager().registerListener(new BoatLagInterceptor(plugin));
+        PacketEvents.getAPI().getEventManager().registerListener(new BoatLagInterceptor());
 
 
         CommandMap commandMap = Bukkit.getServer().getCommandMap();
         ConfigurationSection commands = plugin.getConfig().getConfigurationSection("obu.commands");
 
-        commandMap.register("wakeobu", new dev.muggel.wake.obu.commands.OBUHelpCommand(plugin));
+        commandMap.register("wakeobu", new dev.muggel.wake.obu.commands.OBUHelpCommand());
         commandMap.register("wakeobu", new dev.muggel.wake.obu.commands.OBUDefaultsCommand(plugin, packetSender));
 
         if (commands != null) {
@@ -46,6 +45,4 @@ public class OBUManager {
 
         plugin.getLogger().info("OBU Module successfully loaded!");
     }
-
-    public PacketSender getPacketSender() { return packetSender; }
 }
