@@ -54,4 +54,5 @@ public final class Wake extends JavaPlugin {
     public OBUManager getObuManager() {
         return obuManager;
     }
+
 }
