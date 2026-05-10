@@ -1,0 +1,9 @@
+name: wake
+version: '${version}'
+
+main: dev.muggel.wake.Wake
+api-version: '1.21.11'
+load: POSTWORLD
+
+authors: [ muggel ]
+website: https://muggel.dev

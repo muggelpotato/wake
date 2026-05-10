@@ -1,0 +1,197 @@
+
+obu:
+  # see https://openboatutils.github.io/commands.html
+  profiles:
+    default:
+      setinterpolationten: true
+      collisionmode: NO_ENTITIES
+      setresetonworldload: false
+      allowaccelstacking: false
+      # Example of multi-argument setting:
+      # blockslipperiness: "0.989 minecraft:stone,minecraft:granite"
+
+  # Semantic Types: float, double, boolean, int, short, byte, string
+  # Advanced Types: block_list, entity_list, setting_enum, collision_enum, context_id
+  commands:
+    # --- CONTEXTS ---
+    resetcontext:
+      id: 0
+      channel: "context"
+      types: []
+    switchcontext:
+      id: 1
+      channel: "context"
+      types:
+        - context_id
+    dropcontext:
+      id: 2
+      channel: "context"
+      types:
+        - context_id
+
+    # --- SETTINGS ---
+    reset:
+      id: 0
+      channel: "settings"
+      types: []
+    stepsize:
+      id: 1
+      channel: "settings"
+      types:
+        - float
+    defaultslipperiness:
+      id: 2
+      channel: "settings"
+      types:
+        - float
+    blockslipperiness:
+      id: 3
+      channel: "settings"
+      types:
+        - float
+        - block_list
+    falldamage:
+      id: 4
+      channel: "settings"
+      types:
+        - boolean
+    waterelevation:
+      id: 5
+      channel: "settings"
+      types:
+        - boolean
+    aircontrol:
+      id: 6
+      channel: "settings"
+      types:
+        - boolean
+    jumpforce:
+      id: 7
+      channel: "settings"
+      types:
+        - float
+    boatgravity:
+      id: 9
+      channel: "settings"
+      types:
+        - double
+    setyawaccel:
+      id: 10
+      channel: "settings"
+      types:
+        - float
+    setforwardaccel:
+      id: 11
+      channel: "settings"
+      types:
+        - float
+    setbackwardaccel:
+      id: 12
+      channel: "settings"
+      types:
+        - float
+    setturnforwardaccel:
+      id: 13
+      channel: "settings"
+      types:
+        - float
+    allowaccelstacking:
+      id: 14
+      channel: "settings"
+      types:
+        - boolean
+    underwatercontrol:
+      id: 16
+      channel: "settings"
+      types:
+        - boolean
+    surfacewatercontrol:
+      id: 17
+      channel: "settings"
+      types:
+        - boolean
+    coyotetime:
+      id: 19
+      channel: "settings"
+      types:
+        - int
+    waterjumping:
+      id: 20
+      channel: "settings"
+      types:
+        - boolean
+    swimforce:
+      id: 21
+      channel: "settings"
+      types:
+        - float
+    removeblockslipperiness:
+      id: 22
+      channel: "settings"
+      types:
+        - block_list
+    clearslipperiness:
+      id: 23
+      channel: "settings"
+      types: []
+    setblocksetting:
+      id: 26
+      channel: "settings"
+      types:
+        - setting_enum
+        - float
+        - block_list
+    collisionmode:
+      id: 27
+      channel: "settings"
+      types:
+        - collision_enum
+    stepwhilefalling:
+      id: 28
+      channel: "settings"
+      types:
+        - boolean
+    setinterpolationten:
+      id: 29
+      channel: "settings"
+      types:
+        - boolean
+    setcollisionresolution:
+      id: 30
+      channel: "settings"
+      types:
+        - byte
+    addcollisionfilter:
+      id: 31
+      channel: "settings"
+      types:
+        - entity_list
+    clearcollisionfilter:
+      id: 32
+      channel: "settings"
+      types: []
+    setwalltapmultiplier:
+      id: 34
+      channel: "settings"
+      types:
+        - float
+    setjumps:
+      id: 35
+      channel: "settings"
+      types:
+        - int
+    setscale:
+      id: 36
+      channel: "settings"
+      types:
+        - float
+    setstepupslipperiness:
+      id: 37
+      channel: "settings"
+      types:
+        - float
+    setresetonworldload:
+      id: 38
+      channel: "settings"
+      types:
+        - boolean
