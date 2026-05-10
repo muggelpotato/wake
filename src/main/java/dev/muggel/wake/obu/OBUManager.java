@@ -3,6 +3,9 @@ package dev.muggel.wake.obu;
 import com.github.retrooper.packetevents.PacketEvents;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.obu.commands.OBUCommands;
+import dev.muggel.wake.obu.commands.OBUDefaultsCommand;
+import dev.muggel.wake.obu.commands.OBUHelpCommand;
+import dev.muggel.wake.obu.commands.OBUProfileCommand;
 import dev.muggel.wake.obu.config.OBUConfigManager;
 import dev.muggel.wake.obu.networking.interceptors.BoatLagInterceptor;
 import dev.muggel.wake.obu.networking.HandshakeListener;
@@ -15,11 +18,13 @@ import java.util.List;
 
 public class OBUManager {
     public static final String OBU_PERMISSION = "wake.obu.commands";
+    private final OBUConfigManager configManager;
+
     public OBUManager(Wake plugin) {
-        plugin.getLogger().info("Initializing OpenBoatUtils Feature");
+        plugin.getLogger().info("Initializing OpenBoatUtils Module");
 
         PacketSender packetSender = new PacketSender();
-        OBUConfigManager configManager = new OBUConfigManager(plugin, packetSender);
+        this.configManager = new OBUConfigManager(plugin, packetSender);
         new HandshakeListener(plugin, packetSender, configManager);
 
         PacketEvents.getAPI().getEventManager().registerListener(new BoatLagInterceptor());
@@ -28,8 +33,9 @@ public class OBUManager {
         CommandMap commandMap = Bukkit.getServer().getCommandMap();
         ConfigurationSection commands = plugin.getConfig().getConfigurationSection("obu.commands");
 
-        commandMap.register("wakeobu", new dev.muggel.wake.obu.commands.OBUHelpCommand());
-        commandMap.register("wakeobu", new dev.muggel.wake.obu.commands.OBUDefaultsCommand(plugin, packetSender));
+        commandMap.register("wakeobu", new OBUHelpCommand());
+        commandMap.register("wakeobu", new OBUDefaultsCommand(plugin, packetSender));
+        commandMap.register("wakeobu", new OBUProfileCommand(plugin, configManager));
 
         if (commands != null) {
             for (String cmdName : commands.getKeys(false)) {
@@ -43,5 +49,8 @@ public class OBUManager {
         }
 
         plugin.getLogger().info("OBU Module successfully loaded!");
+    }
+    public OBUConfigManager getConfigManager() {
+        return configManager;
     }
 }
