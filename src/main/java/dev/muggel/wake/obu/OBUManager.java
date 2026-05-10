@@ -14,12 +14,11 @@ import org.bukkit.configuration.ConfigurationSection;
 import java.util.List;
 
 public class OBUManager {
-    private final PacketSender packetSender;
     public static final String OBU_PERMISSION = "wake.obu.commands";
     public OBUManager(Wake plugin) {
         plugin.getLogger().info("Initializing OpenBoatUtils Feature");
 
-        this.packetSender = new PacketSender();
+        PacketSender packetSender = new PacketSender();
         OBUConfigManager configManager = new OBUConfigManager(plugin, packetSender);
         new HandshakeListener(plugin, packetSender, configManager);
 

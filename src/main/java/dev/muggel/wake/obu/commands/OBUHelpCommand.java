@@ -1,6 +1,5 @@
 package dev.muggel.wake.obu.commands;
 
-import dev.muggel.wake.Wake;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;

@@ -2,7 +2,6 @@ package dev.muggel.wake.obu.networking;
 
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPluginMessage;
-import dev.muggel.wake.Wake;
 import org.bukkit.entity.Player;
 
 import java.util.List;

@@ -6,7 +6,6 @@ import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class Wake extends JavaPlugin {
-    private OBUManager obuManager;
 
     @Override
     public void onLoad() {
@@ -19,7 +18,7 @@ public final class Wake extends JavaPlugin {
         // Plugin startup logic
         PacketEvents.getAPI().init();
         saveDefaultConfig();
-        this.obuManager = new OBUManager(this);
+        new OBUManager(this);
 
 
 
