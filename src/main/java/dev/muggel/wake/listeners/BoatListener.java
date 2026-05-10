@@ -23,8 +23,6 @@ public class BoatListener implements Listener {
                         boat.remove();
                     }
                 });
-
-
             }
         }
     }

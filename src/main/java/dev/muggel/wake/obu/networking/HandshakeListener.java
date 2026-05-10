@@ -18,7 +18,6 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -89,11 +88,7 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         if (obuPlayers.contains(player.getUniqueId())) {
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (player.isOnline()) {
-                    configManager.resetAndApplyProfile(player, "default");
-                }
-            });
+            configManager.resetAndApplyProfile(player, "default");
         }
     }
 
@@ -105,6 +100,6 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     private void handleOBUPlayer(Player player, int versionId, boolean isUnstable) {
         String unstableTag = isUnstable ? " [UNSTABLE BUILD]" : "";
         plugin.getLogger().info(player.getName() + " connected with OBU Version ID: " + versionId + unstableTag);
-        Bukkit.getScheduler().runTask(plugin, () -> configManager.resetAndApplyProfile(player, "default"));
+        configManager.resetAndApplyProfile(player, "default");
     }
 }

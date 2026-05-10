@@ -126,6 +126,7 @@ public class OBUCommands extends Command {
         }
 
         List<String> suggestions = new ArrayList<>();
+        final int MAX_SUGGESTIONS = 50;
 
         for (Keyed item : registry) {
             if (item instanceof Material mat && !mat.isBlock()) continue;
@@ -133,8 +134,9 @@ public class OBUCommands extends Command {
             String justName = item.getKey().getKey();
 
             if (key.startsWith(search) || justName.startsWith(search)) {
-                    suggestions.add(prefix + key);
-                }
+                suggestions.add(prefix + key);
+                if (suggestions.size() >= MAX_SUGGESTIONS) break;
+            }
 
         }
         return suggestions;

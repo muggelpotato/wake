@@ -76,14 +76,14 @@ public class WakeCommand extends Command {
     @Override
     public @NotNull List<String> tabComplete(@NotNull CommandSender sender, @NotNull String alias, @NotNull String @NonNull [] args) {
         if (args.length == 1) {
-            List<String> subCommands = List.of("reload", "killboatonexit");
             String current = args[0].toLowerCase();
             List<String> matches = new ArrayList<>();
 
-            for (String cmd : subCommands) {
-                if (cmd.startsWith(current)) {
-                    matches.add(cmd);
+            if (sender.hasPermission(RELOAD_PERMISSION) && "reload".startsWith(current)) {
+                matches.add("reload");
                 }
+            if (sender.hasPermission(ADMIN_PERMISSION) && "killboatonexit".startsWith(current)) {
+                matches.add("killboatonexit");
             }
             return matches;
         } else if (args.length == 2 && args[0].equalsIgnoreCase("killboatonexit")) {

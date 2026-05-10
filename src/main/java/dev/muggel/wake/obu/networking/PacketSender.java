@@ -4,10 +4,14 @@ import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPluginMessage;
 import org.bukkit.entity.Player;
 
+import java.io.IOException;
 import java.util.List;
 
 public class PacketSender {
-    public void sendDynamicPacket(Player player, String channel, int packetId, List<String> semanticTypes, String[] rawArgs) throws Exception {
+    public void sendDynamicPacket(Player player, String channel, int packetId, List<String> semanticTypes, String[] rawArgs) throws IOException {
+        if (rawArgs.length < semanticTypes.size()) {
+            throw new IllegalArgumentException("Argument count mismatch: expected " + semanticTypes.size() + " arguments, but got " + rawArgs.length);
+        }
         PacketByteBuf buf = new PacketByteBuf();
         buf.writeShort((short) packetId);
 
