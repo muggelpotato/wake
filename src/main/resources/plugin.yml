@@ -2,7 +2,7 @@ name: wake
 version: '${version}'
 
 main: dev.muggel.wake.Wake
-api-version: '1.21.11'
+api-version: '1.21'
 load: POSTWORLD
 
 authors: [muggel]
