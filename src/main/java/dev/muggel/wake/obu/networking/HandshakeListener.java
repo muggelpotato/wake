@@ -1,13 +1,14 @@
 package dev.muggel.wake.obu.networking;
 
-import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListenerAbstract;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.configuration.client.WrapperConfigClientPluginMessage;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPluginMessage;
 import dev.muggel.wake.Wake;
-import dev.muggel.wake.obu.config.OBUConfigManager;
+import dev.muggel.wake.obu.config.OBUProfileManager;
+import dev.muggel.wake.obu.model.OBUProfile;
+import dev.muggel.wake.obu.service.OBUService;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -25,14 +26,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class HandshakeListener extends PacketListenerAbstract implements Listener {
 
     private final Wake plugin;
-    private final OBUConfigManager configManager;
+    private final OBUProfileManager profileManager;
+    private final OBUService obuService;
     private final Set<UUID> obuPlayers = ConcurrentHashMap.newKeySet();
 
-    public HandshakeListener(Wake plugin, OBUConfigManager configManager) {
+    public HandshakeListener(Wake plugin, OBUProfileManager profileManager, OBUService obuService) {
         this.plugin = plugin;
-        this.configManager = configManager;
-        PacketEvents.getAPI().getEventManager().registerListener(this);
-        plugin.getServer().getPluginManager().registerEvents(this, plugin);
+        this.profileManager = profileManager;
+        this.obuService = obuService;
     }
 
     @Override
@@ -88,7 +89,7 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         if (obuPlayers.contains(player.getUniqueId())) {
-            configManager.resetAndApplyProfile(player, "default");
+            obuService.applyDefaultProfile(player, profileManager);
         }
     }
 
@@ -100,6 +101,6 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     private void handleOBUPlayer(Player player, int versionId, boolean isUnstable) {
         String unstableTag = isUnstable ? " [UNSTABLE BUILD]" : "";
         plugin.getLogger().info(player.getName() + " connected with OBU Version ID: " + versionId + unstableTag);
-        configManager.resetAndApplyProfile(player, "default");
+        obuService.applyDefaultProfile(player, profileManager);
     }
 }
