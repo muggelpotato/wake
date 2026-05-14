@@ -1,144 +1,108 @@
 package dev.muggel.wake.obu.commands;
 
-import dev.muggel.wake.obu.OBUManager;
+import dev.muggel.wake.core.WakeColors;
+import dev.muggel.wake.obu.OBUProtocol;
 import dev.muggel.wake.obu.config.OBUConfigManager;
 import dev.muggel.wake.obu.networking.PacketSender;
+import dev.muggel.wake.core.commands.BaseCommand;
+import dev.muggel.wake.core.commands.SmartCompleter;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.Keyed;
-import org.bukkit.Material;
 import org.bukkit.Registry;
-import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-import org.jspecify.annotations.NonNull;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
-public class OBUCommands extends Command {
-    private final int packetId;
-    private final String channel;
-    private final List<String> expectedTypes;
+public class OBUCommands extends BaseCommand {
+    private final OBUProtocol.Definition definition;
     private final PacketSender packetSender;
     private final OBUConfigManager configManager;
 
-
-    public OBUCommands(String name, int packetId, String channel, List<String> expectedTypes, PacketSender packetSender, OBUConfigManager configManager) {
-        super(name);
-        this.packetId = packetId;
-        this.channel = channel;
-        this.expectedTypes = expectedTypes;
+    public OBUCommands(OBUProtocol.Definition definition, PacketSender packetSender, OBUConfigManager configManager) {
+        super(definition.name());
+        this.definition = definition;
         this.packetSender = packetSender;
         this.configManager = configManager;
-        this.setPermission(OBUManager.OBU_PERMISSION);
-        this.setDescription("OpenBoatUtils " + channel + " configuration for " + name);
-        StringBuilder usageBuilder = new StringBuilder("/").append(name);
-        for (String type : expectedTypes) {
+        this.setPermission(definition.getPermission());
+        this.setDescription("OpenBoatUtils " + definition.channel() + " configuration for " + definition.name());
+        
+        StringBuilder usageBuilder = new StringBuilder("/").append(definition.name());
+        for (String type : definition.types()) {
             usageBuilder.append(" <").append(type).append(">");
         }
         this.setUsage(usageBuilder.toString());
+        this.setPlayerOnly(true);
     }
 
     @Override
-    public boolean execute(@NotNull CommandSender sender, @NotNull String commandLabel, @NotNull String @NonNull [] args) {
-        if (!(sender instanceof Player player)) return true;
+    public boolean onExecute(@NotNull CommandSender sender, @NotNull String commandLabel, @NotNull String[] args) {
+        Player player = (Player) sender;
 
-        if (!player.hasPermission(OBUManager.OBU_PERMISSION)) {
-            player.sendMessage(Component.text("No permission.", NamedTextColor.RED));
-            return true;
-        }
-
-        if (args.length != expectedTypes.size()) {
-            player.sendMessage(Component.text("Usage: " + this.getUsage(), NamedTextColor.RED));
+        if (args.length != definition.types().size()) {
+            player.sendMessage(Component.text("[Wake] ", WakeColors.SECONDARY)
+                    .append(Component.text("Usage: " + this.getUsage(), WakeColors.ERROR)));
             return true;
         }
 
         try {
-            packetSender.sendDynamicPacket(player, channel, packetId, expectedTypes, args);
+            packetSender.sendDynamicPacket(player, definition.channel(), definition.id(), definition.types(), args);
 
             // default flags notice on reset
-            if (packetId == 0 && channel.equals("settings")) {
+            if (definition.id() == 0 && definition.channel().equals("settings")) {
                 List<String> appliedSettings = configManager.applyProfile(player, "default");
-                player.sendMessage(Component.text("[Wake] ", NamedTextColor.YELLOW).append(Component.text("Applied Server Defaults: ", NamedTextColor.WHITE)));
+                player.sendMessage(Component.text("[Wake] ", WakeColors.SECONDARY)
+                        .append(Component.text("Applied Server Defaults:", WakeColors.NEUTRAL)));
 
                 if (appliedSettings.isEmpty()) {
-                    player.sendMessage(Component.text("   No default settings configured", NamedTextColor.GRAY));
+                    player.sendMessage(Component.text("  No settings configured", WakeColors.NEUTRAL));
                 } else {
                     for (String applied : appliedSettings) {
-                        player.sendMessage(Component.text("  - ", NamedTextColor.GRAY).append(Component.text(applied, NamedTextColor.AQUA)));
+                        String[] split = applied.split(": ", 2);
+                        if (split.length == 2) {
+                            player.sendMessage(Component.text("  - ", WakeColors.NEUTRAL)
+                                    .append(Component.text(split[0], WakeColors.ACCENT))
+                                    .append(Component.text(": ", WakeColors.NEUTRAL))
+                                    .append(Component.text(split[1], WakeColors.PRIMARY)));
+                        } else {
+                            player.sendMessage(Component.text("  - ", WakeColors.NEUTRAL)
+                                    .append(Component.text(applied, WakeColors.ACCENT)));
+                        }
                     }
                 }
-                player.sendMessage(Component.text("Note: You can manually override them", NamedTextColor.GRAY));
             } else {
                 String valueStr = String.join(" ", args);
-                Component successMsg = Component.text("Successfully configured ", NamedTextColor.GRAY)
-                        .append(Component.text(commandLabel, NamedTextColor.AQUA))
-                        .append(Component.text(" to ", NamedTextColor.GRAY))
-                        .append(Component.text(valueStr, NamedTextColor.WHITE));
+                Component successMsg = Component.text("[Wake] ", WakeColors.SECONDARY)
+                        .append(Component.text("Set ", WakeColors.NEUTRAL))
+                        .append(Component.text(commandLabel, WakeColors.ACCENT))
+                        .append(Component.text(" to ", WakeColors.NEUTRAL))
+                        .append(Component.text(valueStr, WakeColors.PRIMARY));
                 player.sendMessage(successMsg);
             }
         } catch (Exception e) {
-            player.sendMessage(Component.text("Invalid data format. Expected types: " + expectedTypes, NamedTextColor.RED));
-            player.sendMessage(Component.text("Usage: " + this.getUsage(), NamedTextColor.RED));
+            player.sendMessage(Component.text("[Wake] ", WakeColors.SECONDARY)
+                    .append(Component.text("Invalid data format. Expected types: " + definition.types(), WakeColors.ERROR)));
         }
         return true;
     }
 
     @Override
-    public @NotNull List<String> tabComplete(@NotNull CommandSender sender, @NotNull String alias, @NotNull String @NonNull [] args) throws IllegalArgumentException {
-        if (args.length <= expectedTypes.size()) {
-            String expectedType = expectedTypes.get(args.length - 1).toLowerCase();
+    public @NotNull List<String> onTabComplete(@NotNull CommandSender sender, @NotNull String alias, @NotNull String[] args) {
+        if (args.length <= definition.types().size()) {
+            String expectedType = definition.types().get(args.length - 1).toLowerCase();
+            String currentArg = args[args.length - 1];
 
-            if  (expectedType.equals("block_list")) {
-                return getSmartRegistrySuggestions(args[args.length - 1], Registry.MATERIAL);
-            } else if (expectedType.equals("entity_list")) {
-                return getSmartRegistrySuggestions(args[args.length - 1], Registry.ENTITY_TYPE);
-            }
-            List<String> suggestions = switch (expectedType) {
-                case "boolean" -> List.of("true", "false");
-                case "collision_enum" -> List.of("VANILLA", "NO_BOATS_OR_PLAYERS", "NO_ENTITIES", "ENTITYTYPE_FILTER", "NO_BOATS_OR_PLAYERS_PLUS_FILTER");
-                case "setting_enum" -> List.of("JUMP_FORCE", "FORWARDS_ACCEL", "BACKWARDS_ACCEL", "YAW_ACCEL", "TURN_FORWARDS_ACCEL", "WALLTAP_MULTIPLIER", "JUMPS", "COYOTE_TIME");
+            return switch (expectedType) {
+                case "block_list" -> SmartCompleter.registry(currentArg, Registry.MATERIAL);
+                case "entity_list" -> SmartCompleter.registry(currentArg, Registry.ENTITY_TYPE);
+                case "boolean" -> SmartCompleter.filter(currentArg, SmartCompleter.BOOLEAN);
+                case "collision_enum" -> SmartCompleter.filter(currentArg, List.of("VANILLA", "NO_BOATS_OR_PLAYERS", "NO_ENTITIES", "ENTITYTYPE_FILTER", "NO_BOATS_OR_PLAYERS_PLUS_FILTER"));
+                case "setting_enum" -> SmartCompleter.filter(currentArg, List.of("JUMP_FORCE", "FORWARDS_ACCEL", "BACKWARDS_ACCEL", "YAW_ACCEL", "TURN_FORWARDS_ACCEL", "WALLTAP_MULTIPLIER", "JUMPS", "COYOTE_TIME"));
                 case "context_id" -> List.of("<namespace:context_name>");
                 default -> List.of("<" + expectedType + ">");
             };
-
-            String currentArg = args[args.length - 1].toLowerCase();
-            return suggestions.stream()
-                    .filter(s -> s.startsWith("<") || s.toLowerCase().startsWith(currentArg))
-                    .collect(Collectors.toList());
         }
         return Collections.emptyList();
-    }
-
-    private List<String> getSmartRegistrySuggestions(String currentInput, Registry<? extends Keyed> registry) {
-        String current = currentInput.toLowerCase();
-        String prefix = "";
-        String search = current;
-
-        if (current.contains(",")) {
-            int lastComma = current.lastIndexOf(",");
-            prefix = current.substring(0, lastComma + 1);
-            search = current.substring(lastComma + 1);
-        }
-
-        List<String> suggestions = new ArrayList<>();
-        final int MAX_SUGGESTIONS = 50;
-
-        for (Keyed item : registry) {
-            if (item instanceof Material mat && !mat.isBlock()) continue;
-            String key = item.getKey().toString();
-            String justName = item.getKey().getKey();
-
-            if (key.startsWith(search) || justName.startsWith(search)) {
-                suggestions.add(prefix + key);
-                if (suggestions.size() >= MAX_SUGGESTIONS) break;
-            }
-
-        }
-        return suggestions;
     }
 }

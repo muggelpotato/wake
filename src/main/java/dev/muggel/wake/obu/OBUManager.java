@@ -1,7 +1,7 @@
 package dev.muggel.wake.obu;
 
-import com.github.retrooper.packetevents.PacketEvents;
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.WakeModule;
 import dev.muggel.wake.obu.commands.OBUCommands;
 import dev.muggel.wake.obu.commands.OBUDefaultsCommand;
 import dev.muggel.wake.obu.commands.OBUHelpCommand;
@@ -12,44 +12,47 @@ import dev.muggel.wake.obu.networking.HandshakeListener;
 import dev.muggel.wake.obu.networking.PacketSender;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandMap;
-import org.bukkit.configuration.ConfigurationSection;
 
-import java.util.List;
-
-public class OBUManager {
+public class OBUManager implements WakeModule {
     public static final String OBU_PERMISSION = "wake.obu.commands";
-    private final OBUConfigManager configManager;
+    private OBUConfigManager configManager;
 
-    public OBUManager(Wake plugin) {
+    @Override
+    public String getId() { return "obu"; }
+
+    @Override
+    public void onEnable(Wake plugin) {
         plugin.getLogger().info("Initializing OpenBoatUtils Module");
 
         PacketSender packetSender = new PacketSender();
         this.configManager = new OBUConfigManager(plugin, packetSender);
         new HandshakeListener(plugin, configManager);
 
-        PacketEvents.getAPI().getEventManager().registerListener(new BoatLagInterceptor());
+        com.github.retrooper.packetevents.PacketEvents.getAPI().getEventManager().registerListener(new BoatLagInterceptor());
 
-
+        // register all commands of the obu module
         CommandMap commandMap = Bukkit.getServer().getCommandMap();
-        ConfigurationSection commands = plugin.getConfig().getConfigurationSection("obu.commands");
+        
+        OBUHelpCommand helpCmd = new OBUHelpCommand();
+        helpCmd.setParentPermission(OBU_PERMISSION);
+        commandMap.register("wakeobu", helpCmd);
 
-        commandMap.register("wakeobu", new OBUHelpCommand());
-        commandMap.register("wakeobu", new OBUDefaultsCommand(plugin, packetSender));
-        commandMap.register("wakeobu", new OBUProfileCommand(plugin, configManager));
+        OBUDefaultsCommand defaultsCmd = new OBUDefaultsCommand(plugin, packetSender);
+        defaultsCmd.setParentPermission(OBU_PERMISSION);
+        commandMap.register("wakeobu", defaultsCmd);
 
-        if (commands != null) {
-            for (String cmdName : commands.getKeys(false)) {
-                int id = commands.getInt(cmdName + ".id");
-                String channel = commands.getString(cmdName + ".channel", "settings");
-                List<String> types = commands.getStringList(cmdName + ".types");
+        OBUProfileCommand profileCmd = new OBUProfileCommand(plugin, configManager);
+        profileCmd.setParentPermission(OBU_PERMISSION);
+        commandMap.register("wakeobu", profileCmd);
 
-                // Registers native commands with the fallback prefix (e.g., /wakeobu:stepsize)
-                commandMap.register("wakeobu", new OBUCommands(cmdName, id, channel, types, packetSender, configManager));
-            }
+        for (String cmdName : OBUProtocol.getRegisteredNames()) {
+            OBUProtocol.Definition def = OBUProtocol.get(cmdName);
+            OBUCommands cmd = new OBUCommands(def, packetSender, configManager);
+            cmd.setParentPermission(OBU_PERMISSION);
+            commandMap.register("wakeobu", cmd);
         }
-
-        plugin.getLogger().info("OBU Module successfully loaded!");
     }
+
     public OBUConfigManager getConfigManager() {
         return configManager;
     }

@@ -1,45 +1,37 @@
 package dev.muggel.wake.obu.commands;
 
+import dev.muggel.wake.core.WakeColors;
 import dev.muggel.wake.obu.OBUManager;
+import dev.muggel.wake.core.commands.BaseCommand;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-import org.jspecify.annotations.NonNull;
 
-import java.util.Collections;
-import java.util.List;
-
-public class OBUHelpCommand extends Command {
+public class OBUHelpCommand extends BaseCommand {
 
     public OBUHelpCommand() {
         super("obuhelp");
         this.setPermission(OBUManager.OBU_PERMISSION);
         this.setDescription("Links to the official OpenBoatUtils Wiki");
         this.setUsage("/obuhelp");
+        this.setPlayerOnly(true);
     }
 
     @Override
-    public boolean execute(@NotNull CommandSender sender, @NotNull String commandLabel, @NotNull String @NonNull [] args) {
-        if (!(sender instanceof Player player)) return true;
+    public boolean onExecute(@NotNull CommandSender sender, @NotNull String commandLabel, @NotNull String[] args) {
+        Player player = (Player) sender;
         String url = "https://openboatutils.github.io/commands.html";
 
-        Component message = Component.text("[OBU Help] ", NamedTextColor.GRAY)
-                .append(Component.text("Click here to read the Wiki: ", NamedTextColor.WHITE))
-                .append(Component.text("Settings & Commands", NamedTextColor.YELLOW))
+        Component message = Component.text("[OBU Help] ", WakeColors.SECONDARY)
+                .append(Component.text("Click here to read the Wiki: ", WakeColors.NEUTRAL))
+                .append(Component.text("Settings & Commands", WakeColors.PRIMARY))
                 .clickEvent(ClickEvent.openUrl(url))
-                .hoverEvent(HoverEvent.showText(Component.text("Open in Browser", NamedTextColor.GREEN)));
+                .hoverEvent(HoverEvent.showText(Component.text("Open in Browser", WakeColors.ACCENT)));
 
         player.sendMessage(message);
         return true;
-    }
-
-    @Override
-    public @NotNull List<String> tabComplete(@NotNull CommandSender sender, @NotNull String alias, @NotNull String @NonNull [] args) {
-        return Collections.emptyList();
     }
 }

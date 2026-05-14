@@ -1,6 +1,7 @@
 package dev.muggel.wake.obu.config;
 
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.obu.OBUProtocol;
 import dev.muggel.wake.obu.networking.PacketSender;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
@@ -39,13 +40,9 @@ public class OBUConfigManager {
         }
 
         for (String cmdName : profile.getKeys(false)) {
-            ConfigurationSection cmdDef = plugin.getConfig().getConfigurationSection("obu.commands." + cmdName);
+            OBUProtocol.Definition def = OBUProtocol.get(cmdName);
 
-            if (cmdDef != null) {
-                int id = cmdDef.getInt("id");
-                String channel = cmdDef.getString("channel", "settings");
-                List<String> types = cmdDef.getStringList("types");
-
+            if (def != null) {
                 List<String> argList;
                 if (profile.isList(cmdName)) {
                     argList = profile.getStringList(cmdName);
@@ -56,14 +53,14 @@ public class OBUConfigManager {
 
                 String[] args = argList.toArray(new String[0]);
 
-                if (args.length != types.size()) {
-                    plugin.getLogger().warning("Profile '" + profileName + "' has incorrect argument count for '" + cmdName + "'. Expected " + types.size());
+                if (args.length != def.types().size()) {
+                    plugin.getLogger().warning("Profile '" + profileName + "' has incorrect argument count for '" + cmdName + "'. Expected " + def.types().size());
                     continue;
                 }
 
                 try {
-                    packetSender.sendDynamicPacket(player, channel, id, types, args);
-                    appliedSettings.add(cmdName + (args.length > 0 ? " -> " + String.join(", ", args) : ""));
+                    packetSender.sendDynamicPacket(player, def.channel(), def.id(), def.types(), args);
+                    appliedSettings.add(cmdName + (args.length > 0 ? ": " + String.join(", ", args) : ""));
                 } catch (Exception e) {
                     plugin.getLogger().warning("Failed to apply setting '" + cmdName + "' in profile '" + profileName + "'. Check config types.");
                 }

@@ -1,57 +1,76 @@
 package dev.muggel.wake;
 
-import com.github.retrooper.packetevents.PacketEvents;
-import dev.muggel.wake.commands.WakeCommand;
-import dev.muggel.wake.listeners.BoatListener;
+import dev.muggel.wake.core.WakeModule;
+import dev.muggel.wake.core.GeneralModule;
+import dev.muggel.wake.core.commands.WakeCommand;
 import dev.muggel.wake.obu.OBUManager;
-import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public final class Wake extends JavaPlugin {
-    private OBUManager obuManager;
-    private boolean killBoatOnExit;
+    private final List<WakeModule> modules = new ArrayList<>();
 
     @Override
     public void onLoad() {
-        PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
-        PacketEvents.getAPI().load();
+        initPacketEvents();
     }
 
     @Override
     public void onEnable() {
-        // Plugin startup logic
-        PacketEvents.getAPI().init();
+        com.github.retrooper.packetevents.PacketEvents.getAPI().init();
+
         saveDefaultConfig();
         reloadSettings();
-        Bukkit.getServer().getCommandMap().register("wake", new WakeCommand(this));
-        Bukkit.getPluginManager().registerEvents(new BoatListener(this), this);
 
-        if (getConfig().getBoolean("wake.modules.obu", true)) {
-            this.obuManager = new OBUManager(this);
-        } else {
-            getLogger().info("OBU Module is disabled in config.yml.");
-        }
+        Bukkit.getServer().getCommandMap().register("wake", new WakeCommand(this));
+
+        // Register Modules
+        registerModule(new GeneralModule());
+        registerModule(new OBUManager());
 
         getLogger().info("wake has been enabled");
     }
 
+    private void initPacketEvents() {
+        com.github.retrooper.packetevents.PacketEvents.setAPI(io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder.build(this));
+        com.github.retrooper.packetevents.PacketEvents.getAPI().load();
+    }
+
+    private void registerModule(WakeModule module) {
+        if (getConfig().getBoolean("wake.modules." + module.getId(), true)) {
+            module.onEnable(this);
+            modules.add(module);
+        } else {
+            getLogger().info("Module '" + module.getId() + "' is disabled in config.yml.");
+        }
+    }
+
     @Override
     public void onDisable() {
-        // Plugin shutdown logic
-        PacketEvents.getAPI().terminate();
+        for (WakeModule module : modules) {
+            module.onDisable(this);
+        }
+        com.github.retrooper.packetevents.PacketEvents.getAPI().terminate();
         getLogger().info("wake has been disabled");
     }
 
-    // temporary
     public void reloadSettings() {
         reloadConfig();
-        this.killBoatOnExit = getConfig().getBoolean("wake.config.killboatonexit", false);
+        for (WakeModule module : modules) {
+            if (module instanceof GeneralModule gm) {
+                gm.reload(this);
+            }
+        }
     }
-    public boolean isKillBoatOnExit() { return killBoatOnExit; }
-    public void setKillBoatOnExit(boolean killBoatOnExit) { this.killBoatOnExit = killBoatOnExit; } // non persistent
 
-    public OBUManager getObuManager() {
-        return obuManager;
+    public <T extends WakeModule> T getModule(Class<T> clazz) {
+        return modules.stream()
+                .filter(clazz::isInstance)
+                .map(clazz::cast)
+                .findFirst()
+                .orElse(null);
     }
 }
