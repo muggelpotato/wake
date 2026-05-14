@@ -1,28 +1,30 @@
 package dev.muggel.wake.obu.commands;
 
 import dev.muggel.wake.core.WakeColors;
-import dev.muggel.wake.obu.OBUManager;
-import dev.muggel.wake.core.commands.BaseCommand;
+import dev.muggel.wake.obu.OBUModule;
+import dev.muggel.wake.core.commands.SubCommand;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
 
-public class OBUHelpCommand extends BaseCommand {
+import java.util.Collections;
+import java.util.List;
 
-    public OBUHelpCommand() {
-        super("obuhelp");
-        this.setPermission(OBUManager.OBU_PERMISSION);
-        this.setDescription("Links to the official OpenBoatUtils Wiki");
-        this.setUsage("/obuhelp");
-        this.setPlayerOnly(true);
+public class OBUHelpSubCommand implements SubCommand {
+
+    @Override
+    public String getName() {
+        return "help";
     }
 
     @Override
-    public boolean onExecute(@NotNull CommandSender sender, @NotNull String commandLabel, @NotNull String[] args) {
-        Player player = (Player) sender;
+    public String getPermission() {
+        return OBUModule.OBU_PERMISSION;
+    }
+
+    @Override
+    public void execute(CommandSender sender, String label, String[] args) {
         String url = "https://openboatutils.github.io/commands.html";
 
         Component message = Component.text("[OBU Help] ", WakeColors.SECONDARY)
@@ -31,7 +33,6 @@ public class OBUHelpCommand extends BaseCommand {
                 .clickEvent(ClickEvent.openUrl(url))
                 .hoverEvent(HoverEvent.showText(Component.text("Open in Browser", WakeColors.ACCENT)));
 
-        player.sendMessage(message);
-        return true;
+        sender.sendMessage(message);
     }
 }

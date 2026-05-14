@@ -26,7 +26,7 @@ public class SmartCompleter {
         if (current.contains(",")) {
             int lastComma = current.lastIndexOf(",");
             prefix = current.substring(0, lastComma + 1);
-            search = current.substring(lastComma + 1);
+            search = current.substring(lastComma + 1).trim();
         }
 
         List<String> suggestions = new ArrayList<>();

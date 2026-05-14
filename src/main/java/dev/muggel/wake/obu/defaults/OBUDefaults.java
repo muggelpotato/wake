@@ -1,5 +1,6 @@
 package dev.muggel.wake.obu.defaults;
 
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -34,11 +35,12 @@ public class OBUDefaults {
     );
 
     private static Map.Entry<String, OBUDefaultValue> entry(String name, String... values) {
-        return Map.entry(name.toLowerCase(), new OBUDefaultValue(name, values));
+        return Map.entry(name.toLowerCase(Locale.ROOT), new OBUDefaultValue(name, values));
     }
 
     public static Optional<OBUDefaultValue> get(String name) {
-        return Optional.ofNullable(DEFAULTS.get(name.toLowerCase()));
+        if (name == null) return Optional.empty();
+        return Optional.ofNullable(DEFAULTS.get(name.toLowerCase(Locale.ROOT)));
     }
 
     public static Set<String> getNames() {

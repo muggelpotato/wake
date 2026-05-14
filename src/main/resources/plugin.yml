@@ -7,3 +7,58 @@ load: POSTWORLD
 
 authors: [muggel]
 website: https://muggel.dev
+
+permissions:
+  wake:
+    description: Master permission for the Wake plugin
+    default: op
+    children:
+      wake.commands: true
+      wake.obu: true
+  wake.commands:
+    description: Permission for base wake commands
+    children:
+      wake.commands.reload: true
+      wake.commands.killboatonexit: true
+  wake.obu:
+    description: Master permission for OBU features
+    children:
+      wake.obu.commands: true
+  wake.obu.commands:
+    description: Permission to use OBU commands
+    children:
+      wake.obu.commands.falldamage: true
+      wake.obu.commands.waterelevation: true
+      wake.obu.commands.aircontrol: true
+      wake.obu.commands.defaultslipperiness: true
+      wake.obu.commands.jumpforce: true
+      wake.obu.commands.stepsize: true
+      wake.obu.commands.boatgravity: true
+      wake.obu.commands.setyawaccel: true
+      wake.obu.commands.setforwardaccel: true
+      wake.obu.commands.setbackwardaccel: true
+      wake.obu.commands.setturnforwardaccel: true
+      wake.obu.commands.allowaccelstacking: true
+      wake.obu.commands.underwatercontrol: true
+      wake.obu.commands.surfacewatercontrol: true
+      wake.obu.commands.coyotetime: true
+      wake.obu.commands.waterjumping: true
+      wake.obu.commands.swimforce: true
+      wake.obu.commands.collisionmode: true
+      wake.obu.commands.stepwhilefalling: true
+      wake.obu.commands.setcollisionresolution: true
+      wake.obu.commands.setwalltapmultiplier: true
+      wake.obu.commands.setjumps: true
+      wake.obu.commands.setscale: true
+      wake.obu.commands.setstepupslipperiness: true
+      wake.obu.commands.setresetonworldload: true
+      wake.obu.commands.reset: true
+      wake.obu.commands.resetcontext: true
+      wake.obu.commands.switchcontext: true
+      wake.obu.commands.dropcontext: true
+      wake.obu.commands.removeblockslipperiness: true
+      wake.obu.commands.clearslipperiness: true
+      wake.obu.commands.setblocksetting: true
+      wake.obu.commands.addcollisionfilter: true
+      wake.obu.commands.clearcollisionfilter: true
+      wake.obu.commands.setinterpolationten: true

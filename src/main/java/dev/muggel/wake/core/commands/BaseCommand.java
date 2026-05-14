@@ -12,12 +12,10 @@ import java.util.List;
 
 /**
  * base class for all wake commands
- * handles permission checks
+ * handles permission checks and player-only restriction
  */
 public abstract class BaseCommand extends Command {
     private boolean playerOnly = false;
-    private String parentPermission = null;
-    private String specificPermission = null;
 
     protected BaseCommand(@NotNull String name) {
         super(name);
@@ -31,35 +29,13 @@ public abstract class BaseCommand extends Command {
         this.playerOnly = playerOnly;
     }
 
-    public void setParentPermission(String parentPermission) {
-        this.parentPermission = parentPermission;
-        super.setPermission(parentPermission);
-    }
-
-    @Override
-    public void setPermission(String permission) {
-        if (this.parentPermission == null) {
-            super.setPermission(permission);
-        }
-        this.specificPermission = permission;
-    }
-
-    @Override
-    public String getPermission() {
-        return this.specificPermission;
-    }
-
     @Override
     public boolean testPermission(@NotNull CommandSender target) {
-        return hasBasePermission(target) && hasSpecificPermission(target);
-    }
-
-    private boolean hasBasePermission(@NotNull CommandSender target) {
-        return parentPermission == null || target.hasPermission(parentPermission);
-    }
-
-    private boolean hasSpecificPermission(@NotNull CommandSender target) {
-        return specificPermission == null || target.hasPermission(specificPermission);
+        String perm = getPermission();
+        if (perm == null || perm.isEmpty()) {
+            return true;
+        }
+        return target.hasPermission(perm);
     }
 
     @Override
@@ -69,12 +45,7 @@ public abstract class BaseCommand extends Command {
             return true;
         }
 
-        if (!hasBasePermission(sender)) {
-            sender.sendMessage(Component.text("No permission (Module access denied).", WakeColors.ERROR));
-            return true;
-        }
-
-        if (!hasSpecificPermission(sender)) {
+        if (!testPermission(sender)) {
             sender.sendMessage(Component.text("No permission.", WakeColors.ERROR));
             return true;
         }
@@ -86,7 +57,10 @@ public abstract class BaseCommand extends Command {
 
     @Override
     public @NotNull List<String> tabComplete(@NotNull CommandSender sender, @NotNull String alias, @NotNull String[] args) throws IllegalArgumentException {
-        if (!hasBasePermission(sender) || !hasSpecificPermission(sender)) {
+        if (playerOnly && !(sender instanceof Player)) {
+            return Collections.emptyList();
+        }
+        if (!testPermission(sender)) {
             return Collections.emptyList();
         }
         return onTabComplete(sender, alias, args);

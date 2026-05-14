@@ -1,6 +1,7 @@
 package dev.muggel.wake.obu;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -49,7 +50,7 @@ public class OBUProtocol {
     );
 
     private static Map.Entry<String, Definition> entry(String name, int id, String channel, List<String> types) {
-        return Map.entry(name.toLowerCase(), new Definition(name, id, channel, types));
+        return Map.entry(name.toLowerCase(Locale.ROOT), new Definition(name, id, channel, types));
     }
 
     public static Set<String> getRegisteredNames() {
@@ -57,12 +58,13 @@ public class OBUProtocol {
     }
 
     public static Definition get(String name) {
-        return COMMANDS.get(name.toLowerCase());
+        if (name == null) return null;
+        return COMMANDS.get(name.toLowerCase(Locale.ROOT));
     }
 
     public record Definition(String name, int id, String channel, List<String> types) {
         public String getPermission() {
-            return "wake.obu.commands." + name.toLowerCase();
+            return "wake.obu.commands." + name.toLowerCase(Locale.ROOT);
         }
     }
 }

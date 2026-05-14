@@ -6,6 +6,7 @@ wake:
     killboatonexit: true
 
 obu:
+  # see https://openboatutils.github.io/commands.html
   profiles:
     default:
       setinterpolationten: true
