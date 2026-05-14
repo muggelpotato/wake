@@ -42,6 +42,7 @@ public class OBUModule extends AbstractModule {
 
     @Override
     protected void onModuleDisable(Wake plugin) {
+        if (obuService == null) return;
         for (Player player : Bukkit.getOnlinePlayers()) {
             obuService.resetPlayer(player);
         }
@@ -49,7 +50,7 @@ public class OBUModule extends AbstractModule {
 
     @Override
     public void reload(Wake plugin) {
-        if (profileManager != null) {
+        if (profileManager != null && obuService != null) {
             profileManager.loadProfiles();
             for (Player player : Bukkit.getOnlinePlayers()) {
                 obuService.applyDefaultProfile(player, profileManager);

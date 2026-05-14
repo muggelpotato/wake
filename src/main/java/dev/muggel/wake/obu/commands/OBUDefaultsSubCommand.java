@@ -110,7 +110,7 @@ public class OBUDefaultsSubCommand implements SubCommand {
         if (args.length == 1) {
             return SmartCompleter.filter(args[0], OBUDefaults.getNames());
         } else if (args.length == 2) {
-            if (OBUDefaults.get(args[0]).isPresent()) {
+            if (OBUDefaults.get(args[0].toLowerCase()).isPresent()) {
                 return SmartCompleter.filter(args[1], List.of("apply"));
             }
         }

@@ -23,6 +23,9 @@ public class ModuleManager {
     }
 
     public void registerModule(Module module) {
+        if (registeredModules.containsKey(module.getId())) {
+            throw new IllegalStateException("Duplicate module id: " + module.getId());
+        }
         registeredModules.put(module.getId(), module);
     }
 
@@ -68,8 +71,14 @@ public class ModuleManager {
     }
 
     public void disableAll() {
-        for (String moduleId : activeModules) {
-            registeredModules.get(moduleId).onDisable(plugin);
+        for (String moduleId : new java.util.HashSet<>(activeModules)) {
+            Module module = registeredModules.get(moduleId);
+            if (module == null) continue;
+            try {
+                module.onDisable(plugin);
+            } catch (Exception e) {
+                plugin.getLogger().severe("Failed to disable module '" + moduleId + "': " + e.getMessage());
+            }
         }
         activeModules.clear();
     }

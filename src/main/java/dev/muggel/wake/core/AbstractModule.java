@@ -39,7 +39,9 @@ public abstract class AbstractModule implements Module {
 
     @Override
     public final void onDisable(Wake plugin) {
+        try {
         onModuleDisable(plugin);
+        } finally {
         if (commandRegistry != null) {
             commandRegistry.unregisterAll();
             commandRegistry = null;
@@ -52,6 +54,7 @@ public abstract class AbstractModule implements Module {
             PacketEvents.getAPI().getEventManager().unregisterListener(listener);
         }
         packetListeners.clear();
+        }
     }
     
     @Override

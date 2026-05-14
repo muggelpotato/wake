@@ -34,6 +34,9 @@ public class OBUParentCommand extends ParentCommand {
 
         for (String cmdName : OBUProtocol.getRegisteredNames()) {
             OBUProtocol.Definition def = OBUProtocol.get(cmdName);
+            if (def == null) {
+                continue;
+            }
             registerSubCommand(new ProtocolSubCommand(def, obuService, profileManager));
         }
     }
@@ -51,21 +54,28 @@ public class OBUParentCommand extends ParentCommand {
     public @NotNull List<String> onTabComplete(@NotNull CommandSender sender, @NotNull String alias, @NotNull String[] args) {
         if (args.length == 1) {
             String current = args[0].toLowerCase().replace("-", "");
-            
-            List<String> utilitySuggestions = UTILS.stream()
-                    .filter(name -> name.startsWith(current))
-                    .map(name -> "-" + name + "-")
-                    .sorted()
-                    .toList();
+            List<String> suggestions = new ArrayList<>();
 
-            List<String> settingsSuggestions = OBUProtocol.getRegisteredNames().stream()
-                    .filter(name -> name.startsWith(current))
-                    .sorted()
-                    .toList();
+            for (String util : UTILS) {
+                if (util.startsWith(current)) {
+                    SubCommand sub = subCommands.get(util);
+                    if (sub != null && (sub.getPermission() == null || sender.hasPermission(sub.getPermission()))) {
+                        suggestions.add("-" + util + "-");
+                    }
+                }
+            }
 
-            List<String> all = new ArrayList<>(utilitySuggestions);
-            all.addAll(settingsSuggestions);
-            return all;
+            for (String setting : OBUProtocol.getRegisteredNames()) {
+                if (setting.startsWith(current)) {
+                    SubCommand sub = subCommands.get(setting);
+                    if (sub != null && (sub.getPermission() == null || sender.hasPermission(sub.getPermission()))) {
+                        suggestions.add(setting);
+                    }
+                }
+            }
+
+            Collections.sort(suggestions);
+            return suggestions;
         }
 
         if (args.length > 1) {

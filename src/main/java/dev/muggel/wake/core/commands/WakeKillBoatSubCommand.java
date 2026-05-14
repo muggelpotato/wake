@@ -30,7 +30,7 @@ public class WakeKillBoatSubCommand implements SubCommand {
             return;
         }
 
-        if (args.length < 1) {
+        if (args.length != 1) {
             sender.sendMessage(Component.text("Usage: /" + label + " killboatonexit <true|false>", WakeColors.ERROR));
             return;
         }

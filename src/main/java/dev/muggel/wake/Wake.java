@@ -11,6 +11,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class Wake extends JavaPlugin {
     private ModuleManager moduleManager;
+    private WakeCommand wakeCommand;
 
     @Override
     public void onEnable() {
@@ -21,7 +22,8 @@ public final class Wake extends JavaPlugin {
         registerModules();
         moduleManager.syncModules(Bukkit.getConsoleSender());
 
-        Bukkit.getServer().getCommandMap().register("wake", new WakeCommand(this));
+        wakeCommand = new WakeCommand(this);
+        Bukkit.getServer().getCommandMap().register("wake", wakeCommand);
 
         getLogger().info("wake has been enabled");
     }
@@ -39,6 +41,10 @@ public final class Wake extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (wakeCommand != null) {
+            wakeCommand.unregister(Bukkit.getServer().getCommandMap());
+            wakeCommand = null;
+        }
         if (moduleManager != null) {
             moduleManager.disableAll();
         }

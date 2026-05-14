@@ -61,6 +61,11 @@ public class OBUProfileSubCommand implements SubCommand {
             return;
         }
 
+        if (args.length > 1) {
+            player.sendMessage(Component.text("Usage: /" + label + " profile [name]", WakeColors.ERROR));
+            return;
+        }
+
         if (args.length == 0) {
             player.sendMessage(Component.text("Available OBU Profiles:", WakeColors.SECONDARY));
 

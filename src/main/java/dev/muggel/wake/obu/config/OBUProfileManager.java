@@ -41,7 +41,12 @@ public class OBUProfileManager {
                 if (profileSection.isList(settingKey)) {
                     args = profileSection.getStringList(settingKey).toArray(new String[0]);
                 } else {
-                    args = new String[]{profileSection.getString(settingKey)};
+                    String value = profileSection.getString(settingKey);
+                    if  (value == null) {
+                        plugin.getLogger().warning("Invalid OBU value in profile '" + key + "' for setting '" + settingKey + "'.");
+                        continue;
+                    }
+                    args = new String[]{value};
                 }
                 settings.add(new OBUSetting(def, args));
             }
@@ -50,7 +55,7 @@ public class OBUProfileManager {
     }
 
     public java.util.Set<String> getProfileNames() {
-        return profiles.keySet();
+        return java.util.Collections.unmodifiableSet(profiles.keySet());
     }
 
     public OBUProfile getProfile(String name) {
@@ -58,6 +63,6 @@ public class OBUProfileManager {
     }
 
     public Map<String, OBUProfile> getProfiles() {
-        return profiles;
+        return java.util.Collections.unmodifiableMap(profiles);
     }
 }

@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
  * handles routing and tab completion for subcommands
  */
 public abstract class ParentCommand extends BaseCommand {
-    private final Map<String, SubCommand> subCommands = new HashMap<>();
+    protected final Map<String, SubCommand> subCommands = new HashMap<>();
 
     protected ParentCommand(@NotNull String name) {
         super(name);

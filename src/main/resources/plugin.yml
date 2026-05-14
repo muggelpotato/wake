@@ -31,6 +31,7 @@ permissions:
       wake.obu.commands.waterelevation: true
       wake.obu.commands.aircontrol: true
       wake.obu.commands.defaultslipperiness: true
+      wake.obu.commands.blockslipperiness: true
       wake.obu.commands.jumpforce: true
       wake.obu.commands.stepsize: true
       wake.obu.commands.boatgravity: true
