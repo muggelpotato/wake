@@ -18,15 +18,24 @@ permissions:
   wake.commands:
     description: Permission for base wake commands
     children:
+      wake.commands.use: true
       wake.commands.reload: true
       wake.commands.killboatonexit: true
+  wake.commands.use:
+    description: Permission to use the base /wake command
   wake.obu:
     description: Master permission for OBU features
     children:
       wake.obu.commands: true
+  wake.obu.commands.use:
+    description: Permission to use the base /wobu command
   wake.obu.commands:
     description: Permission to use OBU commands
     children:
+      wake.obu.commands.use: true
+      wake.obu.commands.profile: true
+      wake.obu.commands.defaults: true
+      wake.obu.commands.help: true
       wake.obu.commands.falldamage: true
       wake.obu.commands.waterelevation: true
       wake.obu.commands.aircontrol: true

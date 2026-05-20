@@ -23,6 +23,7 @@ tasks {
     runServer {
         minecraftVersion("1.21.11")
         jvmArgs("-Xms2G", "-Xmx6G")
+        pluginJars.from(shadowJar)
     }
 
     processResources {
@@ -32,13 +33,18 @@ tasks {
             expand(props)
         }
     }
-    shadowJar {
-        relocate("com.github.retrooper.packetevents", "dev.muggel.wake.libs.packetevents")
-        relocate("io.github.retrooper.packetevents", "dev.muggel.wake.libs.packetevents_api")
-        archiveClassifier.set("")
+
+    jar {
+        enabled = false
     }
 
-    build {
+    shadowJar {
+        archiveClassifier.set("")
+        relocate("com.github.retrooper.packetevents", "dev.muggel.wake.libs.packetevents.api")
+        relocate("io.github.retrooper.packetevents", "dev.muggel.wake.libs.packetevents.impl")
+    }
+
+    assemble {
         dependsOn(shadowJar)
     }
 }

@@ -5,6 +5,8 @@ import dev.muggel.wake.core.ModuleManager;
 import dev.muggel.wake.core.WakeModule;
 import dev.muggel.wake.core.commands.WakeCommand;
 import dev.muggel.wake.obu.OBUModule;
+import com.github.retrooper.packetevents.PacketEvents;
+import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -14,8 +16,13 @@ public final class Wake extends JavaPlugin {
     private WakeCommand wakeCommand;
 
     @Override
+    public void onLoad() {
+        PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
+        PacketEvents.getAPI().load();
+    }
+
+    @Override
     public void onEnable() {
-        initPacketEvents();
         saveDefaultConfig();
 
         this.moduleManager = new ModuleManager(this);
@@ -25,18 +32,14 @@ public final class Wake extends JavaPlugin {
         wakeCommand = new WakeCommand(this);
         Bukkit.getServer().getCommandMap().register("wake", wakeCommand);
 
+        PacketEvents.getAPI().init();
+
         getLogger().info("wake has been enabled");
     }
 
     private void registerModules() {
         moduleManager.registerModule(new WakeModule());
         moduleManager.registerModule(new OBUModule());
-    }
-
-    private void initPacketEvents() {
-        com.github.retrooper.packetevents.PacketEvents.setAPI(io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder.build(this));
-        com.github.retrooper.packetevents.PacketEvents.getAPI().load();
-        com.github.retrooper.packetevents.PacketEvents.getAPI().init();
     }
 
     @Override
@@ -48,7 +51,7 @@ public final class Wake extends JavaPlugin {
         if (moduleManager != null) {
             moduleManager.disableAll();
         }
-        com.github.retrooper.packetevents.PacketEvents.getAPI().terminate();
+        PacketEvents.getAPI().terminate();
         getLogger().info("wake has been disabled");
     }
 

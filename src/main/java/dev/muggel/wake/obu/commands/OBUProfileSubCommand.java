@@ -33,7 +33,7 @@ public class OBUProfileSubCommand implements SubCommand {
 
     @Override
     public String getPermission() {
-        return OBUModule.OBU_PERMISSION;
+        return "wake.obu.commands.profile";
     }
 
     private Component getProfileHoverText(OBUProfile profile) {

@@ -34,7 +34,7 @@ public class OBUDefaultsSubCommand implements SubCommand {
 
     @Override
     public String getPermission() {
-        return OBUModule.OBU_PERMISSION;
+        return "wake.obu.commands.defaults";
     }
 
     @Override

@@ -25,7 +25,7 @@ public class OBUParentCommand extends ParentCommand {
         this.setAliases(List.of("wobu"));
         this.setDescription("Main command for OpenBoatUtils");
         this.setUsage("/wakeobu <setting|utility> [args...]");
-        this.setPermission(OBUModule.OBU_PERMISSION);
+        this.setPermission("wake.obu.commands.use");
         this.setPlayerOnly(true);
 
         registerSubCommand(new OBUHelpSubCommand());
