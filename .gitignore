@@ -20,5 +20,7 @@ hs_err_pid*
 # Common working directory
 run/
 
-# Gemini
 GEMINI.md
+OBUContext
+ARCHITECTURE.md
+IMPLEMENTATION.md
