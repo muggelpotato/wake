@@ -12,7 +12,7 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    implementation("com.github.retrooper:packetevents-spigot:2.12.1")
+    implementation("com.github.retrooper:packetevents-spigot:2.13.0")
 }
 
 java {

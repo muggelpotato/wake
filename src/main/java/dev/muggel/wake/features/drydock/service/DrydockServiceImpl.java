@@ -21,7 +21,7 @@ public class DrydockServiceImpl implements DrydockService {
     public void giveDrydockBoat(Player player, @NonNull EntityType boatType, int variant) {
         if (boatType.getEntityClass() != null && Boat.class.isAssignableFrom(boatType.getEntityClass())) {
             String boatId = boatType.getKey().toString();
-            String command = String.format(Locale.US, "give %s %s[minecraft:entity_data={id:\"%s\",Air:%ds}] 1",
+            String command = String.format(Locale.US, "minecraft:give %s %s[minecraft:entity_data={id:\"%s\",Air:%ds}] 1",
                     player.getName(), boatId, boatId, variant);
             
             Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), command);

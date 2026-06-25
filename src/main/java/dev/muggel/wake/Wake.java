@@ -51,8 +51,10 @@ public final class Wake extends JavaPlugin {
         moduleManager.registerModule(new DrydockModule());
     }
 
+    @SuppressWarnings("UnstableApiUsage")
     private void initPacketEvents() {
         PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
+        PacketEvents.getAPI().getSettings().checkForUpdates(false);
         PacketEvents.getAPI().load();
         PacketEvents.getAPI().init();
     }
