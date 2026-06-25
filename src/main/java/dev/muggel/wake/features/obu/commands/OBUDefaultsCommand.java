@@ -65,34 +65,31 @@ public class OBUDefaultsCommand {
                                 String baseName = service.getActiveContextName(player);
                                 Map<String, OBUSetting> overrides = service.getSyncManager().getLocalOverrides(player.getUniqueId());
                                 
-                                OBUSetting effectiveSetting = null;
+                                OBUSetting effectiveSetting;
                                 boolean isServerDefault = false;
                                 
-                                OBUDefinition protocolDef = OBUDefinition.get(settingName);
-                                if (protocolDef != null) {
-                                    int id = protocolDef.id();
-                                    effectiveSetting = overrides.values().stream().filter(s -> s.definition().id() == id).findFirst().orElse(null);
-                                    if (effectiveSetting == null && sandboxName != null) {
-                                        OBUContext sb = contextManager.getContext(sandboxName);
-                                        if (sb != null) {
-                                            for (OBUSetting s : sb.getSettings()) {
-                                                if (s.definition().id() == id) {
-                                                    effectiveSetting = s;
-                                                    break;
-                                                }
+                                int id = def.id();
+                                effectiveSetting = overrides.values().stream().filter(s -> s.definition().id() == id).findFirst().orElse(null);
+                                if (effectiveSetting == null && sandboxName != null) {
+                                    OBUContext sb = contextManager.getContext(sandboxName);
+                                    if (sb != null) {
+                                        for (OBUSetting s : sb.getSettings()) {
+                                            if (s.definition().id() == id) {
+                                                effectiveSetting = s;
+                                                break;
                                             }
                                         }
                                     }
-                                    
-                                    if (effectiveSetting == null && baseName != null) {
-                                        OBUContext base = contextManager.getContext(baseName);
-                                        if (base != null) {
-                                            for (OBUSetting s : base.getSettings()) {
-                                                if (s.definition().id() == id) {
-                                                    effectiveSetting = s;
-                                                    isServerDefault = true;
-                                                    break;
-                                                }
+                                }
+                                
+                                if (effectiveSetting == null && baseName != null) {
+                                    OBUContext base = contextManager.getContext(baseName);
+                                    if (base != null) {
+                                        for (OBUSetting s : base.getSettings()) {
+                                            if (s.definition().id() == id) {
+                                                effectiveSetting = s;
+                                                isServerDefault = true;
+                                                break;
                                             }
                                         }
                                     }

@@ -17,7 +17,6 @@ import io.papermc.paper.command.brigadier.argument.CustomArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import org.jspecify.annotations.NonNull;
 
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.List;
 import java.util.ArrayList;
@@ -54,7 +53,8 @@ public class BlockListArgumentType implements CustomArgumentType<String, String>
                 key = trimmed.contains(":") ? NamespacedKey.fromString(trimmed) : NamespacedKey.minecraft(trimmed.toLowerCase());
             } catch (IllegalArgumentException ignored) {}
 
-            if (key == null || Registry.MATERIAL.get(key) == null || !Objects.requireNonNull(Registry.MATERIAL.get(key)).isBlock()) {
+            Material material = key != null ? Registry.MATERIAL.get(key) : null;
+            if (material == null || !material.isBlock()) {
                 reader.setCursor(currentOffset);
                 throw INVALID_BLOCK.createWithContext(reader, trimmed);
             }

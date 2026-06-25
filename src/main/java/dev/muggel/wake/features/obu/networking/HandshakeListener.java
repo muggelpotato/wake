@@ -85,19 +85,19 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     @EventHandler
     public void onVehicleEnter(@NonNull VehicleEnterEvent event) {
         if (event.getVehicle() instanceof Boat boat && event.getEntered() instanceof Player) {
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                obuService.getSyncManager().broadcastSync(boat);
-            });
+            handleVehicleChange(boat);
         }
     }
 
     @EventHandler
     public void onVehicleExit(@NonNull VehicleExitEvent event) {
         if (event.getVehicle() instanceof Boat boat && event.getExited() instanceof Player) {
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                obuService.getSyncManager().broadcastSync(boat);
-            });
+            handleVehicleChange(boat);
         }
+    }
+
+    private void handleVehicleChange(Boat boat) {
+        Bukkit.getScheduler().runTask(plugin, () -> obuService.getSyncManager().broadcastSync(boat));
     }
 
     @EventHandler
