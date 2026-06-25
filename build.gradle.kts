@@ -12,17 +12,19 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    implementation("com.github.retrooper:packetevents-spigot:2.12.1")
+    implementation("com.github.retrooper:packetevents-spigot:2.13.0")
 }
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
+    withSourcesJar()
 }
 
 tasks {
     runServer {
         minecraftVersion("1.21.11")
         jvmArgs("-Xms2G", "-Xmx6G")
+        pluginJars.from(shadowJar)
     }
 
     processResources {
@@ -32,13 +34,18 @@ tasks {
             expand(props)
         }
     }
-    shadowJar {
-        relocate("com.github.retrooper.packetevents", "dev.muggel.wake.libs.packetevents")
-        relocate("io.github.retrooper.packetevents", "dev.muggel.wake.libs.packetevents_api")
-        archiveClassifier.set("")
+
+    jar {
+        enabled = false
     }
 
-    build {
+    shadowJar {
+        archiveClassifier.set("")
+        relocate("com.github.retrooper.packetevents", "dev.muggel.wake.libs.packetevents.api")
+        relocate("io.github.retrooper.packetevents", "dev.muggel.wake.libs.packetevents.impl")
+    }
+
+    assemble {
         dependsOn(shadowJar)
     }
 }
