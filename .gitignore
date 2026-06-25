@@ -21,6 +21,6 @@ hs_err_pid*
 run/
 
 GEMINI.md
+AGENTS.md
 OBUContext
-ARCHITECTURE.md
-IMPLEMENTATION.md
+temp/

@@ -1,18 +1,31 @@
 wake:
   modules:
+    base: true
     obu: true
+    drydock: true
   config:
-    # default setting for sessions, reset on server restart
-    killboatonexit: true
-
+    show_hints: true
 obu:
   # see https://openboatutils.github.io/commands.html
-  profiles:
+  versions:
+    latest: 22
+    rejected:
+      - 8
+      - 12
+      - 15
+      - 20
+      - 21
+  contexts:
     default:
       setinterpolationten: true
-      collisionmode: NO_ENTITIES
+      collisionmode: "NO_ENTITIES"
       setresetonworldload: false
       allowaccelstacking: false
+      falldamage: false
+      stepwhilefalling: true
+      setmultistepping: true
+      fixdoublewaterelevation: true
+      sethoneycompatibility: true
     harbour:
       defaultslipperiness: 0.98
       aircontrol: true
@@ -52,5 +65,12 @@ obu:
       setyawaccel: 1
       stepwhilefalling: true
       blockslipperiness:
-      - 0.8
-      - minecraft:grass_block,minecraft:sand,minecraft:stone,minecraft:gravel,minecraft:coarse_dirt,minecraft:cobblestone,minecraft:mossy_cobblestone,minecraft:moss_block
+        - "0.8 grass_block, sand, stone, gravel, coarse_dirt, cobblestone, mossy_cobblestone, moss_block"
+    example:
+      jumpforce: 1
+      aircontrol: true
+      blockslipperiness:
+        - "0.98 create:crushing_wheel, create:cogwheel, ice, packed_ice, blue_ice, avaritia:block_infinity"
+      setblocksetting:
+        - "WALLTAP_MULTIPLIER 1 stone, light_blue_concrete, blue_concrete"
+        - "JUMPS 2 stone"

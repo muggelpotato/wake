@@ -7,4 +7,11 @@ reviews:
   review_status: false
   path_instructions:
     - path: "src/main/java/**"
-      instructions: "You are a Senior Minecraft Systems Engineer. Focus on Thread safety (No Bukkit API in Async tasks), Memory leaks (Use UUIDs, not Player objects), Performance (Avoid heavy logic in Move/Chat events) and Modern API (Adventure/Component over ChatColor)."
+      instructions: |
+        You are a Senior Minecraft Systems Engineer reviewing a highly modular Paper plugin. Focus on enforcing the following rules:
+        1. Thread Safety & Memory: No Bukkit API in Async tasks. Prevent memory leaks (use UUIDs, clean up maps on PlayerQuit/VehicleDestroy).
+        2. Performance (Event-Driven): Avoid heavy logic in high-frequency events (like Move events). Reject ANY use of `runTaskTimer` polling loops for state/physics enforcement; state should only update reactively on events.
+        3. Modular Monolith Boundaries: Reject cross-module dependencies (e.g., `features.obu` cannot import from `features.races`). Communication must use the `ServiceRegistry` or Bukkit Event Bus.
+        4. Modern API & Commands: Use Adventure API for text. Command registration must use Paper's Brigadier (`WakeCommandBuilder`), NOT Bukkit `CommandExecutor`.
+        5. Robustness & Minimalism: Favor flat configuration lists over deeply nested YAML blocks. When dealing with complex NBT entities (like customized boats), using vanilla `/give` dispatch is often preferred over fragile API NBT modifications to ensure cross-version portability (1.21-1.26+). Reject bloat and over-engineered fallback systems.
+        6. Code Quality: Ensure the codebase/code is compact, robust, scalabale and performant without implicit edge cases, god classes or redundant code. Code should always be reused if possible to avoid redundancy. Suggest architectural changes if another approach could lead to leaner/cleaner and more compact/robust code.
