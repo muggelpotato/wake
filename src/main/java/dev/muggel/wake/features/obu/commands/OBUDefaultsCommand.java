@@ -18,7 +18,6 @@ import dev.muggel.wake.features.obu.service.OBUContextManager;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import java.util.Arrays;
 import java.util.Map;
-import java.util.Objects;
 
 import dev.muggel.wake.features.obu.context.OBUContext;
 import org.jspecify.annotations.NonNull;
@@ -49,12 +48,18 @@ public class OBUDefaultsCommand {
                             CommandSender sender = ctx.getSource().getSender();
 
                             if (sender instanceof Player player) {
+                                OBUModule obuModule = plugin.getModule(OBUModule.class);
+                                if (obuModule == null) {
+                                    plugin.getMessageManager().send(sender, "commands.obu.not_loaded");
+                                    return 0;
+                                }
+
                                 plugin.getMessageManager().send(sender, "commands.obu.defaults.vanilla",
                                         Placeholder.parsed("setting", settingName),
                                         Placeholder.parsed("value", defValueStr));
                                 
-                                OBUService service = Objects.requireNonNull(plugin.getModule(OBUModule.class)).getObuService();
-                                OBUContextManager contextManager = Objects.requireNonNull(plugin.getModule(OBUModule.class)).getContextManager();
+                                OBUService service = obuModule.getObuService();
+                                OBUContextManager contextManager = obuModule.getContextManager();
                                 
                                 String sandboxName = service.getPlayerActiveSandbox(player);
                                 String baseName = service.getActiveContextName(player);

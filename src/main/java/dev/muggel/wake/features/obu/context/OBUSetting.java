@@ -15,8 +15,10 @@ public record OBUSetting(OBUDefinition definition, String[] args) {
 
     public @NonNull String getUniqueKey() {
         if (definition.canRepeat() && args.length > 0) {
-            if (definition == OBUDefinition.blockslipperiness || definition == OBUDefinition.removeblockslipperiness) {
+            if (definition == OBUDefinition.blockslipperiness) {
                 return definition.id() + ":" + (args.length > 1 ? args[1] : "");
+            } else if (definition == OBUDefinition.removeblockslipperiness) {
+                return definition.id() + ":" + args[0];
             } else if (definition == OBUDefinition.setblocksetting) {
                 return definition.id() + ":" + args[0] + ":" + (args.length > 2 ? args[2] : "");
             } else if (definition == OBUDefinition.addcollisionfilter) {

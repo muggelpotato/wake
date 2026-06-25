@@ -5,7 +5,6 @@ import dev.muggel.wake.features.obu.api.OBUService;
 import dev.muggel.wake.features.obu.context.OBUContext;
 import dev.muggel.wake.features.obu.context.OBUSetting;
 import dev.muggel.wake.features.obu.networking.PacketSender;
-import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
@@ -44,6 +43,11 @@ public class OBUServiceImpl implements OBUService {
         activeSandboxContexts.remove(uuid);
         activeContexts.remove(uuid);
         syncManager.cleanup(uuid);
+    }
+
+    @Override
+    public void cleanupBoat(@NonNull Boat boat) {
+        syncManager.cleanup(boat.getUniqueId());
     }
 
     @Override
@@ -116,9 +120,9 @@ public class OBUServiceImpl implements OBUService {
             return;
         }
 
-        boat.getPersistentDataContainer().set(key, PersistentDataType.STRING, contextName);
         OBUContext context = contextManager.getContext(contextName);
         if (context != null) {
+            boat.getPersistentDataContainer().set(key, PersistentDataType.STRING, contextName);
             syncManager.broadcastSync(boat);
         }
     }

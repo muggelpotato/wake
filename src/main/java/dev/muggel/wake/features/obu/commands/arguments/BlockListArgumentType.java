@@ -49,7 +49,10 @@ public class BlockListArgumentType implements CustomArgumentType<String, String>
         for (String b : blocks) {
             if (b.isEmpty()) continue;
             String trimmed = b.trim();
-            NamespacedKey key = trimmed.contains(":") ? NamespacedKey.fromString(trimmed) : NamespacedKey.minecraft(trimmed.toLowerCase());
+            NamespacedKey key = null;
+            try {
+                key = trimmed.contains(":") ? NamespacedKey.fromString(trimmed) : NamespacedKey.minecraft(trimmed.toLowerCase());
+            } catch (IllegalArgumentException ignored) {}
 
             if (key == null || Registry.MATERIAL.get(key) == null || !Objects.requireNonNull(Registry.MATERIAL.get(key)).isBlock()) {
                 reader.setCursor(currentOffset);

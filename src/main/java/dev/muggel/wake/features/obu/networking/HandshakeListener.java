@@ -16,7 +16,6 @@ import org.bukkit.entity.Boat;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.vehicle.VehicleDestroyEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
@@ -68,8 +67,6 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
         }
     }
 
-    @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) { }
 
     @EventHandler
     public void onPlayerQuit(@NonNull PlayerQuitEvent event) {
@@ -106,7 +103,7 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     @EventHandler
     public void onVehicleDestroy(@NonNull VehicleDestroyEvent event) {
         if (event.getVehicle() instanceof Boat boat) {
-            obuService.getSyncManager().cleanup(boat.getUniqueId());
+            obuService.cleanupBoat(boat);
         }
     }
 

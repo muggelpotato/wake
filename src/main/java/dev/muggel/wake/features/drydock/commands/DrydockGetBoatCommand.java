@@ -15,9 +15,11 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
 
-import java.util.stream.Stream;
+import java.util.List;
 
 public class DrydockGetBoatCommand {
+    private static final List<String> SUPPORTED_VARIANTS = List.of("parkour");
+    private static final List<String> SUPPORTED_OARS = List.of("oars", "nooars");
 
     public static void register(@NonNull LiteralArgumentBuilder<CommandSourceStack> root, Wake plugin, DrydockService service) {
         root.then(Commands.literal("getboat")
@@ -35,24 +37,23 @@ public class DrydockGetBoatCommand {
                         .then(Commands.argument("variant", StringArgumentType.word())
                                 .suggests((ctx, builder) -> {
                                     String remaining = builder.getRemaining().toLowerCase();
-                                    Stream.of("parkour")
+                                    SUPPORTED_VARIANTS.stream()
                                             .filter(v -> v.startsWith(remaining))
                                             .forEach(builder::suggest);
                                     return builder.buildFuture();
                                 })
-                                .executes(ctx -> executeGive(ctx, plugin, service, true))
+                                .executes(ctx -> executeGive(ctx, plugin, service, null))
                                 .then(Commands.argument("oars", StringArgumentType.word())
                                         .suggests((ctx, builder) -> {
                                             String remaining = builder.getRemaining().toLowerCase();
-                                            Stream.of("oars", "nooars")
+                                            SUPPORTED_OARS.stream()
                                                     .filter(v -> v.startsWith(remaining))
                                                     .forEach(builder::suggest);
                                             return builder.buildFuture();
                                         })
                                         .executes(ctx -> {
                                             String oarsStr = StringArgumentType.getString(ctx, "oars");
-                                            boolean oars = oarsStr.equalsIgnoreCase("oars");
-                                            return executeGive(ctx, plugin, service, oars);
+                                            return executeGive(ctx, plugin, service, oarsStr);
                                         })
                                 )
                         )
@@ -60,7 +61,7 @@ public class DrydockGetBoatCommand {
         );
     }
 
-    private static int executeGive(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin, DrydockService service, boolean oars) {
+    private static int executeGive(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin, DrydockService service, String oarsStr) {
         if (!(ctx.getSource().getSender() instanceof Player p)) {
             plugin.getMessageManager().send(ctx.getSource().getSender(), "commands.only_players");
             return 0;
@@ -76,6 +77,20 @@ public class DrydockGetBoatCommand {
         }
 
         String variantStr = StringArgumentType.getString(ctx, "variant");
+        if (SUPPORTED_VARIANTS.stream().noneMatch(v -> v.equalsIgnoreCase(variantStr))) {
+            plugin.getMessageManager().send(p, "commands.drydock.invalid_variant");
+            return 0;
+        }
+
+        boolean oars = true;
+        if (oarsStr != null) {
+            if (SUPPORTED_OARS.stream().noneMatch(o -> o.equalsIgnoreCase(oarsStr))) {
+                plugin.getMessageManager().send(p, "commands.drydock.invalid_oars");
+                return 0;
+            }
+            oars = oarsStr.equalsIgnoreCase("oars");
+        }
+
         int variantId = getVariantId(variantStr, oars);
 
         service.giveDrydockBoat(p, type, variantId);

@@ -7,12 +7,14 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import org.bukkit.Bukkit;
 import org.jspecify.annotations.NonNull;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
 public class StateManager {
@@ -20,6 +22,12 @@ public class StateManager {
     private final File file;
     private final Gson gson;
     private Map<String, Object> state = new HashMap<>();
+    private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "wake-state-saver");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final Object writeLock = new Object();
 
     public StateManager(@NonNull Wake plugin) {
         this.plugin = plugin;
@@ -46,7 +54,7 @@ public class StateManager {
     public void save() {
         createParentDirs();
         final Map<String, Object> stateCopy = new HashMap<>(state);
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> writeToFile(stateCopy));
+        executor.submit(() -> writeToFile(stateCopy));
     }
 
     public void saveSync() {
@@ -62,10 +70,24 @@ public class StateManager {
     }
 
     private void writeToFile(Map<String, Object> stateCopy) {
-        try (FileWriter writer = new FileWriter(file)) {
-            gson.toJson(stateCopy, writer);
-        } catch (IOException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to save state.json", e);
+        synchronized (writeLock) {
+            try (FileWriter writer = new FileWriter(file)) {
+                gson.toJson(stateCopy, writer);
+            } catch (IOException e) {
+                plugin.getLogger().log(Level.SEVERE, "Failed to save state.json", e);
+            }
+        }
+    }
+
+    public void shutdown() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -90,11 +112,10 @@ public class StateManager {
         if (defaultValue instanceof String && val instanceof String) {
             return (T) val;
         }
-        try {
-            return (T) val;
-        } catch (ClassCastException e) {
+        if (defaultValue != null && !defaultValue.getClass().isInstance(val)) {
             return defaultValue;
         }
+        return (T) val;
     }
 
     public void set(String key, Object value) {

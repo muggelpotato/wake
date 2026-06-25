@@ -13,6 +13,8 @@ public interface OBUService {
     
     void cleanupPlayer(Player player);
 
+    void cleanupBoat(Boat boat);
+
     void applyDefaultContext(Player player);
 
     void applyContext(Player player, OBUContext context);

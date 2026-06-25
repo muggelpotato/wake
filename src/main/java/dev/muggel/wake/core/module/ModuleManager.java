@@ -88,6 +88,6 @@ public final class ModuleManager {
     }
 
     private boolean isModuleEnabled(String id) {
-        return plugin.getConfig().getBoolean("modules." + id + ".enabled", plugin.getConfig().getBoolean("wake.modules." + id, true));
+        return plugin.getConfig().getBoolean("modules." + id + ".enabled", true);
     }
 }

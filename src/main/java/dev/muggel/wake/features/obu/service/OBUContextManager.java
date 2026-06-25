@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -78,7 +79,7 @@ public class OBUContextManager {
                     settings.add(new OBUSetting(def, new String[]{value}));
                 }
             }
-            tempSettings.put(key.toLowerCase(), settings);
+            tempSettings.put(key.toLowerCase(Locale.ROOT), settings);
         }
 
         List<OBUSetting> defaultSettings = tempSettings.getOrDefault("default", Collections.emptyList());
@@ -109,13 +110,13 @@ public class OBUContextManager {
     }
 
     public OBUContext getContext(@NonNull String name) {
-        return contexts.get(name.toLowerCase());
+        return contexts.get(name.toLowerCase(Locale.ROOT));
     }
 
     private final Set<String> sandboxes = new HashSet<>();
 
     public void createSandbox(@NonNull String name) {
-        String lower = name.toLowerCase();
+        String lower = name.toLowerCase(Locale.ROOT);
         contexts.put(lower, new OBUContext(name, new ArrayList<>()));
         sandboxes.add(lower);
     }
@@ -130,7 +131,7 @@ public class OBUContextManager {
         List<OBUSetting> settings = new ArrayList<>(context.getSettings());
         settings.removeIf(s -> s.getUniqueKey().equals(setting.getUniqueKey()));
         settings.add(setting);
-        contexts.put(name.toLowerCase(), new OBUContext(context.name(), settings));
+        contexts.put(name.toLowerCase(Locale.ROOT), new OBUContext(context.name(), settings));
     }
 
     public boolean removeContextSetting(String name, int settingId) {
@@ -139,7 +140,7 @@ public class OBUContextManager {
         List<OBUSetting> settings = new ArrayList<>(context.getSettings());
         boolean removed = settings.removeIf(s -> s.definition().id() == settingId);
         if (removed) {
-            contexts.put(name.toLowerCase(), new OBUContext(context.name(), settings));
+            contexts.put(name.toLowerCase(Locale.ROOT), new OBUContext(context.name(), settings));
             return true;
         }
         return false;

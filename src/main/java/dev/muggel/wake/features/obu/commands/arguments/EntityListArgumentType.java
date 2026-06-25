@@ -55,11 +55,16 @@ public class EntityListArgumentType implements CustomArgumentType<String, String
                 UUID.fromString(trimmed);
                 isValid = true;
             } catch (IllegalArgumentException e) {
-                NamespacedKey key = trimmed.contains(":") ? NamespacedKey.fromString(trimmed) : NamespacedKey.minecraft(trimmed.toLowerCase());
-                if (key != null && Registry.ENTITY_TYPE.get(key) != null && Registry.ENTITY_TYPE.get(key) != EntityType.UNKNOWN) {
-                    isValid = true;
-                    trimmed = key.toString();
-                }
+                try {
+                    NamespacedKey key = trimmed.contains(":") ? NamespacedKey.fromString(trimmed) : NamespacedKey.minecraft(trimmed.toLowerCase());
+                    if (key != null) {
+                        EntityType type = Registry.ENTITY_TYPE.get(key);
+                        if (type != null && type != EntityType.UNKNOWN) {
+                            isValid = true;
+                            trimmed = key.toString();
+                        }
+                    }
+                } catch (IllegalArgumentException ignored) {}
             }
 
             if (!isValid) {

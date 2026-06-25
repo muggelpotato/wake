@@ -52,7 +52,6 @@ public class OBUContextCommand {
                             CommandSender sender = ctx.getSource().getSender();
                             if (target instanceof Player p) {
                                 service.applyDefaultContext(p);
-                                service.getSyncManager().syncPlayer(p);
                                 String targetStr = p.equals(sender) ? "you" : p.getName();
                                 plugin.getMessageManager().send(sender, "commands.obu.context.applied", Placeholder.parsed("context", "vanilla defaults (removed)"), Placeholder.parsed("target", targetStr));
                             } else if (target instanceof Boat boat) {

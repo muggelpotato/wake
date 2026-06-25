@@ -29,7 +29,7 @@ public class WakeKillBoatCommand {
         }
 
         boolean killState = BoolArgumentType.getBool(ctx, "state");
-        core.setKillBoatOnExit(killState);
+        plugin.getStateManager().set("killboatonexit", killState);
 
         plugin.getMessageManager().send(sender, "commands.setting_updated",
                 Placeholder.parsed("state", String.valueOf(killState)));

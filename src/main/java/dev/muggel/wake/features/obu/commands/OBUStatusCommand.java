@@ -130,7 +130,7 @@ public class OBUStatusCommand {
                         }
                     }
 
-                    if (activeSandbox == null && plugin.getConfig().getBoolean("wake.config.show_hints", true)) {
+                    if (activeSandbox == null && plugin.getConfig().getBoolean("config.show_hints", true)) {
                         plugin.getMessageManager().send(player, "commands.obu.status.hint");
                     }
 

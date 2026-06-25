@@ -18,7 +18,7 @@ public class WakeReloadCommand {
 
     private static int execute(CommandContext<CommandSourceStack> ctx, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        List<Component> feedback = plugin.reloadSettings(sender);
+        List<Component> feedback = plugin.reloadSettings();
 
         plugin.getMessageManager().send(sender, "commands.reload.success");
         for (Component msg : feedback) {

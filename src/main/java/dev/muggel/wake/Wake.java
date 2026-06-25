@@ -12,7 +12,6 @@ import dev.muggel.wake.features.base.commands.WakeCommandRegistry;
 import com.github.retrooper.packetevents.PacketEvents;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bukkit.Bukkit;
-import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import net.kyori.adventure.text.Component;
@@ -64,6 +63,7 @@ public final class Wake extends JavaPlugin {
         try {
             if (stateManager != null) {
                 stateManager.saveSync();
+                stateManager.shutdown();
             }
             if (moduleManager != null) {
                 moduleManager.disableAll();
@@ -76,13 +76,15 @@ public final class Wake extends JavaPlugin {
                     serviceRegistry = null;
                 }
             } finally {
-                PacketEvents.getAPI().terminate();
+                try {
+                    PacketEvents.getAPI().terminate();
+                } catch (IllegalStateException ignored) {}
                 getLogger().info("Wake has been disabled");
             }
         }
     }
 
-    public List<Component> reloadSettings(CommandSender sender) {
+    public List<Component> reloadSettings() {
         reloadConfig();
         if (messageManager != null) {
             messageManager.reload();

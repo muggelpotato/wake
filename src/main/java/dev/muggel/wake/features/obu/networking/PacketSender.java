@@ -18,7 +18,10 @@ public class PacketSender {
         writeSettingArgs(buf, setting.definition().types(), setting.args());
     }
 
-    private void writeSettingArgs(PacketByteBuf buf, @NonNull List<String> semanticTypes, String[] rawArgs) throws IOException {
+    private void writeSettingArgs(PacketByteBuf buf, @NonNull List<String> semanticTypes, String @NonNull [] rawArgs) throws IOException {
+        if (rawArgs.length < semanticTypes.size()) {
+            throw new IllegalArgumentException("Not enough arguments for setting. Expected: " + semanticTypes.size() + ", Got: " + rawArgs.length);
+        }
         for (int i = 0; i < semanticTypes.size(); i++) {
             String arg = rawArgs[i];
             String type = semanticTypes.get(i).toLowerCase();

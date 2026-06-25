@@ -14,6 +14,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -56,7 +57,11 @@ public class OBUSyncManager {
     }
     
     public Map<String, OBUSetting> getLocalOverrides(UUID uuid) {
-        return localOverrides.getOrDefault(uuid, new HashMap<>());
+        Map<String, OBUSetting> overrides = localOverrides.get(uuid);
+        if (overrides == null) {
+            return Collections.emptyMap();
+        }
+        return Collections.unmodifiableMap(overrides);
     }
 
     public List<OBUSetting> calculateAbsoluteTruth(UUID uuid) {

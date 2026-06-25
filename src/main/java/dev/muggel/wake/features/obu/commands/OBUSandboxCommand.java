@@ -51,7 +51,7 @@ public class OBUSandboxCommand {
                                         enterSandbox(player, lower, service);
                                     }
                                     plugin.getMessageManager().send(sender, "commands.obu.sandbox.created", Placeholder.parsed("sandbox", name));
-                                    if (plugin.getConfig().getBoolean("wake.config.show_hints", true)) {
+                                    if (plugin.getConfig().getBoolean("config.show_hints", true)) {
                                         plugin.getMessageManager().send(sender, "commands.obu.sandbox.hint");
                                     }
                                     return Command.SINGLE_SUCCESS;
@@ -96,7 +96,7 @@ public class OBUSandboxCommand {
                                             if (sender instanceof Player p) {
                                                 enterSandbox(p, newName, service);
                                                 plugin.getMessageManager().send(sender, "commands.obu.sandbox.switched", Placeholder.parsed("sandbox", newName));
-                                                if (plugin.getConfig().getBoolean("wake.config.show_hints", true)) {
+                                                if (plugin.getConfig().getBoolean("config.show_hints", true)) {
                                                     plugin.getMessageManager().send(sender, "commands.obu.sandbox.hint");
                                                 }
                                             }
@@ -121,13 +121,29 @@ public class OBUSandboxCommand {
                                                 byte[] decoded = Base64.getUrlDecoder().decode(code);
                                                 if (decoded.length >= 2 && decoded[0] == (byte) 0x1f && decoded[1] == (byte) 0x8b) {
                                                     try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(decoded))) {
-                                                        decodedStr = new String(gzip.readAllBytes(), StandardCharsets.UTF_8);
+                                                        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                                                        byte[] buffer = new byte[4096];
+                                                        int len;
+                                                        int totalRead = 0;
+                                                        int limit = 65536;
+                                                        while ((len = gzip.read(buffer)) != -1) {
+                                                            totalRead += len;
+                                                            if (totalRead > limit) {
+                                                                throw new IOException("Decompressed payload exceeds maximum size of 64KB");
+                                                            }
+                                                            bos.write(buffer, 0, len);
+                                                        }
+                                                        decodedStr = bos.toString(StandardCharsets.UTF_8);
                                                     }
                                                 } else {
+                                                    if (decoded.length > 65536) {
+                                                        throw new IOException("Payload exceeds maximum size of 64KB.");
+                                                    }
                                                     decodedStr = new String(decoded, StandardCharsets.UTF_8);
                                                 }
                                             } catch (Exception e) {
-                                                plugin.getMessageManager().send(sender, "commands.obu.sandbox.import_fail", Placeholder.parsed("error", "Invalid Share Code format."));
+                                                String errMsg = (e instanceof IOException && e.getMessage() != null) ? e.getMessage() : "Invalid Share Code format.";
+                                                plugin.getMessageManager().send(sender, "commands.obu.sandbox.import_fail", Placeholder.parsed("error", errMsg));
                                                 return 0;
                                             }
 
@@ -159,7 +175,7 @@ public class OBUSandboxCommand {
                                             if (sender instanceof Player p) {
                                                 enterSandbox(p, name, service);
                                                 plugin.getMessageManager().send(sender, "commands.obu.sandbox.switched", Placeholder.parsed("sandbox", name));
-                                                if (plugin.getConfig().getBoolean("wake.config.show_hints", true)) {
+                                                if (plugin.getConfig().getBoolean("config.show_hints", true)) {
                                                     plugin.getMessageManager().send(sender, "commands.obu.sandbox.hint");
                                                 }
                                             }
@@ -195,7 +211,7 @@ public class OBUSandboxCommand {
 
                                     enterSandbox(player, lower, service);
                                     plugin.getMessageManager().send(player, "commands.obu.sandbox.dropped", Placeholder.parsed("sandbox", name));
-                                    if (plugin.getConfig().getBoolean("wake.config.show_hints", true)) {
+                                    if (plugin.getConfig().getBoolean("config.show_hints", true)) {
                                         plugin.getMessageManager().send(player, "commands.obu.sandbox.hint");
                                     }
                                     return Command.SINGLE_SUCCESS;
@@ -282,18 +298,18 @@ public class OBUSandboxCommand {
                                     }
 
                                     StringBuilder yaml = new StringBuilder();
-                                    yaml.append("obu:\n  contexts:\n    ").append(context.name()).append(":\n");
+                                    yaml.append("obu:\n  contexts:\n    \"").append(escapeYaml(context.name())).append("\":\n");
                                     if (context.getSettings().isEmpty()) {
                                         yaml.append("      # No settings configured\n");
                                     } else {
                                         for (OBUSetting setting : context.getSettings()) {
                                             yaml.append("      ").append(setting.definition().name()).append(": ");
                                             if (setting.args().length == 1) {
-                                                yaml.append("\"").append(setting.args()[0]).append("\"\n");
+                                                yaml.append("\"").append(escapeYaml(setting.args()[0])).append("\"\n");
                                             } else {
                                                 yaml.append("\n");
                                                 for (String arg : setting.args()) {
-                                                    yaml.append("        - \"").append(arg).append("\"\n");
+                                                    yaml.append("        - \"").append(escapeYaml(arg)).append("\"\n");
                                                 }
                                             }
                                         }
@@ -340,5 +356,10 @@ public class OBUSandboxCommand {
             service.broadcastBoatContext(boat);
         }
         service.getSyncManager().syncPlayer(player);
+    }
+
+    private static @NonNull String escapeYaml(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
     }
 }
