@@ -2,7 +2,6 @@ package dev.muggel.wake.features.obu;
 
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.module.AbstractModule;
-import dev.muggel.wake.features.obu.commands.OBUCommandRegistry;
 import dev.muggel.wake.features.obu.service.OBUContextManager;
 import dev.muggel.wake.features.obu.networking.HandshakeListener;
 import dev.muggel.wake.features.obu.networking.PacketSender;
@@ -11,6 +10,8 @@ import dev.muggel.wake.features.obu.api.OBUService;
 import dev.muggel.wake.features.obu.service.OBUServiceImpl;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import java.util.UUID;
+import java.util.Collections;
 
 public class OBUModule extends AbstractModule {
     private OBUContextManager contextManager;
@@ -36,8 +37,6 @@ public class OBUModule extends AbstractModule {
         registerPacketListener(handshakeListener);
         registerPacketListener(new BoatLagInterceptor());
 
-        new OBUCommandRegistry(plugin).register();
-
         for (Player player : Bukkit.getOnlinePlayers()) {
             obuService.applyDefaultContext(player);
         }
@@ -46,14 +45,38 @@ public class OBUModule extends AbstractModule {
     @Override
     protected void onModuleDisable() {
         if (obuService == null) return;
+        PacketSender packetSender = new PacketSender();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            obuService.resetPlayer(player);
+            obuService.cleanupPlayer(player);
+            try {
+                packetSender.sendWipePlayer(player, "wake_personal");
+            } catch (Exception e) {
+                plugin.getLogger().warning("Failed to send wipe packet: " + e.getMessage());
+            }
         }
+
+        try {
+            for (UUID boatId : obuService.getSyncManager().getKnownBoatContexts()) {
+                var emptyPacket = packetSender.createEntityContextPacket(boatId, Collections.emptyList());
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    packetSender.sendPrecompiledPacket(player, emptyPacket);
+                }
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to wipe boat contexts: " + e.getMessage());
+        }
+
         Wake.getServiceRegistry().unregister(OBUService.class);
 
-        Bukkit.getMessenger().unregisterOutgoingPluginChannel(plugin, OBUDefinition.CHANNEL_SETTINGS);
-        Bukkit.getMessenger().unregisterOutgoingPluginChannel(plugin, OBUDefinition.CHANNEL_CONTEXT);
-        Bukkit.getMessenger().unregisterOutgoingPluginChannel(plugin, OBUDefinition.CHANNEL_CONFIGURATION);
+        if (plugin.isEnabled()) {
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (Wake.getServiceRegistry().get(OBUService.class) == null) {
+                    Bukkit.getMessenger().unregisterOutgoingPluginChannel(plugin, OBUDefinition.CHANNEL_SETTINGS);
+                    Bukkit.getMessenger().unregisterOutgoingPluginChannel(plugin, OBUDefinition.CHANNEL_CONTEXT);
+                    Bukkit.getMessenger().unregisterOutgoingPluginChannel(plugin, OBUDefinition.CHANNEL_CONFIGURATION);
+                }
+            });
+        }
     }
 
     @Override
