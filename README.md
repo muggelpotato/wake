@@ -76,4 +76,4 @@ Wake is primarily developed as a hobby project **for small hobby server projects
 - [PaperMC](https://papermc.io/): For providing the Paper API that Wake makes use of
 - [PacketEvents](https://www.packetevents.com/): For providing the NMS-free packet manipulation engine that Wake makes use of
 - [OpenBoatUtils](https://github.com/OpenBoatUtils/OpenBoatUtils): The client-side mod that powers a big portion of Wake's features
-- @microwavedram for implementing suggested OBU features that Wake will make use of and for giving me the idea of how to fix boatlag via [BoatLagInterceptor](src/main/java/dev/muggel/wake/features/obu/networking/interceptors/BoatLagInterceptor.java)
+- [@microwavedram](https://github.com/microwavedram) for implementing suggested OBU features that Wake will make use of and for giving me the idea of how to fix boatlag via [BoatLagInterceptor](src/main/java/dev/muggel/wake/features/obu/networking/interceptors/BoatLagInterceptor.java)
