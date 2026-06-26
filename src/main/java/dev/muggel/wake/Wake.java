@@ -9,6 +9,8 @@ import dev.muggel.wake.features.drydock.DrydockModule;
 import dev.muggel.wake.features.obu.OBUModule;
 import dev.muggel.wake.features.base.BaseModule;
 import dev.muggel.wake.features.base.commands.WakeCommandRegistry;
+import dev.muggel.wake.features.obu.commands.OBUCommandRegistry;
+import dev.muggel.wake.features.drydock.commands.DrydockCommandRegistry;
 import com.github.retrooper.packetevents.PacketEvents;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bukkit.Bukkit;
@@ -37,6 +39,8 @@ public final class Wake extends JavaPlugin {
         serviceRegistry = new ServiceRegistry();
         
         new WakeCommandRegistry(this).register();
+        new OBUCommandRegistry(this).register();
+        new DrydockCommandRegistry(this).register();
         
         this.moduleManager = new ModuleManager(this);
         registerModules();

@@ -15,18 +15,13 @@ import org.jspecify.annotations.NonNull;
 
 public class WakeKillBoatCommand {
     public static void register(@NonNull LiteralArgumentBuilder<CommandSourceStack> root, Wake plugin) {
-        root.then(WakeCommandBuilder.literal("killboatonexit", "wake.command.wake.killboatonexit")
+        root.then(WakeCommandBuilder.moduleLiteral("killboatonexit", "wake.command.wake.killboatonexit", plugin, BaseModule.class)
                 .then(Commands.argument("state", BoolArgumentType.bool())
                         .executes(ctx -> execute(ctx, plugin))));
     }
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, @NonNull Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        BaseModule core = plugin.getModule(BaseModule.class);
-        if (core == null) {
-            plugin.getMessageManager().send(sender, "commands.base_disabled");
-            return 0;
-        }
 
         boolean killState = BoolArgumentType.getBool(ctx, "state");
         plugin.getStateManager().set("killboatonexit", killState);

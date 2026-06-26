@@ -36,10 +36,19 @@ public final class ModuleManager {
                 boolean isCurrentlyEnabled = activeModules.containsKey(id);
 
                 if (shouldBeEnabled && !isCurrentlyEnabled) {
-                    module.onEnable(plugin);
-                    activeModules.put(id, module);
-                    plugin.getLogger().info("Module '" + id + "' has been enabled");
-                    feedback.add(plugin.getMessageManager().getComponent("commands.reload.enabled", Placeholder.parsed("module", id)));
+                    try {
+                        module.onEnable(plugin);
+                        activeModules.put(id, module);
+                        plugin.getLogger().info("Module '" + id + "' has been enabled");
+                        feedback.add(plugin.getMessageManager().getComponent("commands.reload.enabled", Placeholder.parsed("module", id)));
+                    } catch (Exception e) {
+                        try {
+                            module.onDisable();
+                        } catch (Exception disableEx) {
+                            plugin.getLogger().log(Level.SEVERE, "Failed to cleanup module '" + id + "' after enable failure", disableEx);
+                        }
+                        throw e;
+                    }
                 } else if (!shouldBeEnabled && isCurrentlyEnabled) {
                     WakeModule activeInstance = activeModules.remove(id);
                     if (activeInstance != null) {

@@ -28,6 +28,7 @@ public class OBUSyncManager {
     private final OBUContextManager contextManager;
     private final OBUService obuService;
     private final Map<UUID, Map<String, OBUSetting>> localOverrides = new HashMap<>();
+    private final Set<UUID> knownBoatContexts = new HashSet<>();
 
     public OBUSyncManager(Wake plugin, PacketSender packetSender, OBUContextManager contextManager, OBUService obuService) {
         this.plugin = plugin;
@@ -118,8 +119,8 @@ public class OBUSyncManager {
         String personalContextName = "wake_personal";
         
         try {
-            if (truth.isEmpty()) { // full reset when e.g. new sandbox context
-                packetSender.sendResetSettings(player);
+            if (truth.isEmpty()) { 
+                packetSender.sendWipePlayer(player, personalContextName);
             } else {
                 packetSender.sendStoreContext(player, personalContextName, truth);
                 packetSender.sendSwitchContext(player, personalContextName);
@@ -138,6 +139,7 @@ public class OBUSyncManager {
         List<OBUSetting> settings = calculateAbsoluteTruth(boat.getUniqueId());
         
         try {
+            knownBoatContexts.add(boat.getUniqueId());
             var packet = packetSender.createEntityContextPacket(boat.getUniqueId(), settings);
             packetSender.sendPrecompiledPacket(viewer, packet);
         } catch (Exception e) {
@@ -155,6 +157,7 @@ public class OBUSyncManager {
         }
 
         try {
+            knownBoatContexts.add(boat.getUniqueId());
             var packet = packetSender.createEntityContextPacket(boat.getUniqueId(), settings);
             for (Player viewer : viewers) {
                 packetSender.sendPrecompiledPacket(viewer, packet);
@@ -162,5 +165,9 @@ public class OBUSyncManager {
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to broadcast boat state: " + e.getMessage());
         }
+    }
+
+    public Set<UUID> getKnownBoatContexts() {
+        return knownBoatContexts;
     }
 }

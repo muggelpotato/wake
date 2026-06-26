@@ -83,10 +83,23 @@ public class PacketSender {
         return String.join(",", validEntities);
     }
 
-    public void sendResetSettings(Player player) throws IOException {
+    public void sendWipePlayer(Player player, @NonNull String contextId) throws IOException {
+        sendDropContext(player, contextId);
+        sendResetContext(player);
+    }
+
+    public void sendResetContext(Player player) throws IOException {
         PacketByteBuf buf = new PacketByteBuf();
-        buf.writeShort((short) OBUDefinition.reset.id());
-        sendPrecompiledPacket(player, new WrapperPlayServerPluginMessage(OBUDefinition.CHANNEL_SETTINGS, buf.toBytes()));
+        buf.writeShort((short) OBUDefinition.ContextPacket.RESET_CONTEXT.getId());
+        sendContextPacket(player, buf);
+    }
+
+    public void sendDropContext(Player player, @NonNull String contextId) throws IOException {
+        PacketByteBuf buf = new PacketByteBuf();
+        buf.writeShort((short) OBUDefinition.ContextPacket.DROP_CONTEXT.getId());
+        String namespaced = contextId.contains(":") ? contextId : "wake:" + contextId;
+        buf.writeString(namespaced);
+        sendContextPacket(player, buf);
     }
 
     public void sendRawSetting(Player player, OBUSetting setting) throws IOException {

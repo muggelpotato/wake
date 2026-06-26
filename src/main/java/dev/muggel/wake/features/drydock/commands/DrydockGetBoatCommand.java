@@ -21,7 +21,7 @@ public class DrydockGetBoatCommand {
     private static final List<String> SUPPORTED_VARIANTS = List.of("parkour");
     private static final List<String> SUPPORTED_OARS = List.of("oars", "nooars");
 
-    public static void register(@NonNull LiteralArgumentBuilder<CommandSourceStack> root, Wake plugin, DrydockService service) {
+    public static void register(@NonNull LiteralArgumentBuilder<CommandSourceStack> root, Wake plugin) {
         root.then(Commands.literal("getboat")
                 .then(Commands.argument("boat_type", StringArgumentType.word())
                         .suggests((ctx, builder) -> {
@@ -42,7 +42,7 @@ public class DrydockGetBoatCommand {
                                             .forEach(builder::suggest);
                                     return builder.buildFuture();
                                 })
-                                .executes(ctx -> executeGive(ctx, plugin, service, null))
+                                .executes(ctx -> executeGive(ctx, plugin, null))
                                 .then(Commands.argument("oars", StringArgumentType.word())
                                         .suggests((ctx, builder) -> {
                                             String remaining = builder.getRemaining().toLowerCase();
@@ -53,7 +53,7 @@ public class DrydockGetBoatCommand {
                                         })
                                         .executes(ctx -> {
                                             String oarsStr = StringArgumentType.getString(ctx, "oars");
-                                            return executeGive(ctx, plugin, service, oarsStr);
+                                            return executeGive(ctx, plugin, oarsStr);
                                         })
                                 )
                         )
@@ -61,9 +61,14 @@ public class DrydockGetBoatCommand {
         );
     }
 
-    private static int executeGive(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin, DrydockService service, String oarsStr) {
+    private static int executeGive(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin, String oarsStr) {
         if (!(ctx.getSource().getSender() instanceof Player p)) {
             plugin.getMessageManager().send(ctx.getSource().getSender(), "commands.only_players");
+            return 0;
+        }
+
+        DrydockService service = Wake.getServiceRegistry().get(DrydockService.class);
+        if (service == null) {
             return 0;
         }
 

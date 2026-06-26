@@ -3,6 +3,7 @@ package dev.muggel.wake.features.obu.commands;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.WakeCommandBuilder;
+import dev.muggel.wake.features.obu.OBUModule;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
@@ -20,7 +21,7 @@ public class OBUCommandRegistry {
         plugin.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> {
             final Commands commands = event.registrar();
 
-            LiteralArgumentBuilder<CommandSourceStack> wobuRoot = WakeCommandBuilder.literal("wakeobu", "wake.obu.commands");
+            LiteralArgumentBuilder<CommandSourceStack> wobuRoot = WakeCommandBuilder.moduleLiteral("wakeobu", "wake.obu.commands", plugin, OBUModule.class);
 
             OBUHelpCommand.register(wobuRoot, plugin);
             OBUDefaultsCommand.register(wobuRoot, plugin);
