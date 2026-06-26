@@ -68,9 +68,6 @@ public class DrydockGetBoatCommand {
         }
 
         DrydockService service = Wake.getServiceRegistry().get(DrydockService.class);
-        if (service == null) {
-            return 0;
-        }
 
         String boatTypeStr = StringArgumentType.getString(ctx, "boat_type");
         NamespacedKey key = NamespacedKey.minecraft(boatTypeStr.toLowerCase());

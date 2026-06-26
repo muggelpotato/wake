@@ -10,6 +10,8 @@ import dev.muggel.wake.features.obu.api.OBUService;
 import dev.muggel.wake.features.obu.service.OBUServiceImpl;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import java.util.UUID;
+import java.util.Collections;
 
 public class OBUModule extends AbstractModule {
     private OBUContextManager contextManager;
@@ -54,8 +56,8 @@ public class OBUModule extends AbstractModule {
         }
 
         try {
-            for (java.util.UUID boatId : obuService.getSyncManager().getKnownBoatContexts()) {
-                var emptyPacket = packetSender.createEntityContextPacket(boatId, java.util.Collections.emptyList());
+            for (UUID boatId : obuService.getSyncManager().getKnownBoatContexts()) {
+                var emptyPacket = packetSender.createEntityContextPacket(boatId, Collections.emptyList());
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     packetSender.sendPrecompiledPacket(player, emptyPacket);
                 }
@@ -65,6 +67,16 @@ public class OBUModule extends AbstractModule {
         }
 
         Wake.getServiceRegistry().unregister(OBUService.class);
+
+        if (plugin.isEnabled()) {
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (Wake.getServiceRegistry().get(OBUService.class) == null) {
+                    Bukkit.getMessenger().unregisterOutgoingPluginChannel(plugin, OBUDefinition.CHANNEL_SETTINGS);
+                    Bukkit.getMessenger().unregisterOutgoingPluginChannel(plugin, OBUDefinition.CHANNEL_CONTEXT);
+                    Bukkit.getMessenger().unregisterOutgoingPluginChannel(plugin, OBUDefinition.CHANNEL_CONFIGURATION);
+                }
+            });
+        }
     }
 
     @Override

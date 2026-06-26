@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class OBUSyncManager {
     private final Wake plugin;
@@ -28,7 +29,7 @@ public class OBUSyncManager {
     private final OBUContextManager contextManager;
     private final OBUService obuService;
     private final Map<UUID, Map<String, OBUSetting>> localOverrides = new HashMap<>();
-    private final Set<UUID> knownBoatContexts = new HashSet<>();
+    private final Set<UUID> knownBoatContexts = ConcurrentHashMap.newKeySet();
 
     public OBUSyncManager(Wake plugin, PacketSender packetSender, OBUContextManager contextManager, OBUService obuService) {
         this.plugin = plugin;
@@ -39,6 +40,7 @@ public class OBUSyncManager {
 
     public void cleanup(UUID uuid) {
         localOverrides.remove(uuid);
+        knownBoatContexts.remove(uuid);
     }
 
     public void addLocalOverride(UUID uuid, OBUSetting setting) {

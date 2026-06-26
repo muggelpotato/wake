@@ -97,8 +97,7 @@ public class PacketSender {
     public void sendDropContext(Player player, @NonNull String contextId) throws IOException {
         PacketByteBuf buf = new PacketByteBuf();
         buf.writeShort((short) OBUDefinition.ContextPacket.DROP_CONTEXT.getId());
-        String namespaced = contextId.contains(":") ? contextId : "wake:" + contextId;
-        buf.writeString(namespaced);
+        buf.writeString(getNamespacedContextId(contextId));
         sendContextPacket(player, buf);
     }
 
@@ -111,21 +110,23 @@ public class PacketSender {
     public void sendSwitchContext(Player player, @NonNull String contextId) throws IOException {
         PacketByteBuf buf = new PacketByteBuf();
         buf.writeShort((short) OBUDefinition.ContextPacket.SWITCH_CONTEXT.getId());
-        String namespaced = contextId.contains(":") ? contextId : "wake:" + contextId;
-        buf.writeString(namespaced);
+        buf.writeString(getNamespacedContextId(contextId));
         sendContextPacket(player, buf);
     }
 
     public void sendStoreContext(Player player, @NonNull String contextId, @NonNull List<OBUSetting> settings) throws IOException {
         PacketByteBuf buf = new PacketByteBuf();
         buf.writeShort((short) OBUDefinition.ContextPacket.STORE_CONTEXT.getId());
-        String namespaced = contextId.contains(":") ? contextId : "wake:" + contextId;
-        buf.writeString(namespaced);
+        buf.writeString(getNamespacedContextId(contextId));
         buf.writeInt(settings.size());
         for (OBUSetting setting : settings) {
             writeSetting(buf, setting);
         }
         sendContextPacket(player, buf);
+    }
+
+    private @NonNull String getNamespacedContextId(@NonNull String contextId) {
+        return contextId.contains(":") ? contextId : "wake:" + contextId;
     }
 
     public WrapperPlayServerPluginMessage createEntityContextPacket(@NonNull UUID entityUuid, @NonNull List<OBUSetting> settings) throws IOException {
