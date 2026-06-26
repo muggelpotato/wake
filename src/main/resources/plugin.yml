@@ -7,3 +7,4 @@ load: POSTWORLD
 
 authors: [muggel]
 website: https://muggel.dev
+softdepend: [AxiomPaper]

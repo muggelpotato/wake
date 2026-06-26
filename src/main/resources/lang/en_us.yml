@@ -2,6 +2,7 @@ prefix: "<secondary>[Wake] </secondary>"
 commands:
   only_players: "<prefix><danger>This command can only be executed by players</danger>"
   only_entities: "<prefix><danger>This command must be executed by an entity or via /execute as <targets></danger>"
+  requires_version: "<prefix><danger>This feature requires Minecraft 1.21.2+ or newer</danger>"
   setting_updated: "<prefix><neutral>Auto-kill boat set to </neutral><primary><state></primary>"
   killemptyboats:
     success: "<prefix><neutral>Successfully removed </neutral><primary><amount></primary><neutral> empty boats</neutral>"

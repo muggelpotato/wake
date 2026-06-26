@@ -32,7 +32,7 @@ public final class ModuleManager {
         for (WakeModule module : registeredModules) {
             try {
                 String id = module.getId();
-                boolean shouldBeEnabled = isModuleEnabled(id);
+                boolean shouldBeEnabled = isModuleEnabled(id) && module.isCompatible();
                 boolean isCurrentlyEnabled = activeModules.containsKey(id);
 
                 if (shouldBeEnabled && !isCurrentlyEnabled) {
