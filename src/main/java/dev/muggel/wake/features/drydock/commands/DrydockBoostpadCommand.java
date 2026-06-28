@@ -25,6 +25,7 @@ import org.jspecify.annotations.NonNull;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -73,7 +74,7 @@ public class DrydockBoostpadCommand {
     }
 
     private static CompletableFuture<Suggestions> suggestBlockKeys(@NonNull SuggestionsBuilder builder) {
-        String remaining = builder.getRemaining().toLowerCase();
+        String remaining = builder.getRemaining().toLowerCase(Locale.ROOT);
         for (String key : getBlockKeys()) {
             if (key.startsWith(remaining) || key.contains(remaining)) {
                 builder.suggest(key);
@@ -87,7 +88,7 @@ public class DrydockBoostpadCommand {
     }
 
     private static CompletableFuture<Suggestions> suggestConfiguredBlocks(Wake plugin, @NonNull SuggestionsBuilder builder) {
-        String remaining = builder.getRemaining().toLowerCase();
+        String remaining = builder.getRemaining().toLowerCase(Locale.ROOT);
         for (String key : getConfiguredBoostpads(plugin).keySet()) {
             if (key.startsWith(remaining) || key.contains(remaining)) {
                 builder.suggest(key);
@@ -220,10 +221,10 @@ public class DrydockBoostpadCommand {
 
     private static String findMatchingKey(Map<String, Map<String, Object>> map, String input) {
         if (input == null) return null;
-        String clean = input.toLowerCase();
+        String clean = input.toLowerCase(Locale.ROOT);
         String full = clean.contains(":") ? clean : "minecraft:" + clean;
         for (String key : map.keySet()) {
-            String lowerKey = key.toLowerCase();
+            String lowerKey = key.toLowerCase(Locale.ROOT);
             if (lowerKey.equals(clean) || lowerKey.equals(full) || lowerKey.endsWith(":" + clean)) {
                 return key;
             }
@@ -246,7 +247,7 @@ public class DrydockBoostpadCommand {
                         String k = e2.getKey().toString();
                         if (!copy.containsKey(k)) copy.put(k, e2.getValue());
                     }
-                    result.put(entry.getKey().toString().toLowerCase(), copy);
+                    result.put(entry.getKey().toString().toLowerCase(Locale.ROOT), copy);
                 }
             }
         }
