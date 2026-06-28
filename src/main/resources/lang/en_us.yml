@@ -17,6 +17,18 @@ commands:
     invalid_boat: "<prefix><danger>Invalid boat type specified</danger>"
     invalid_variant: "<prefix><danger>Invalid variant specified</danger>"
     invalid_oars: "<prefix><danger>Invalid oars setting specified</danger>"
+    invalid_block: "<prefix><danger>Invalid block specified</danger>"
+    block_added: "<prefix><neutral>Added boostpad block</neutral>"
+    block_not_found: "<prefix><danger>Block is not in the boostpad list</danger>"
+    block_removed: "<prefix><neutral>Removed boostpad block</neutral>"
+    boostpad_status: "<prefix><neutral>Boostpads enabled: </neutral><primary><enabled></primary><newline><prefix><neutral>Configured boostpads:</neutral><newline><blocks>"
+    boostpad_item_enabled: "  <neutral>- <accent><block></accent>: <primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><hitbox>%</primary> hitbox</neutral>"
+    boostpad_item_disabled: "  <neutral>- <danger><block></danger>: <primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><hitbox>%</primary> hitbox</neutral>"
+    boostpad_empty: "  <muted_dark>(No blocks configured)</muted_dark>"
+    boostpad_enabled: "<prefix><neutral>Boostpads </neutral><primary>enabled</primary>"
+    boostpad_disabled: "<prefix><neutral>Boostpads </neutral><danger>disabled</danger>"
+    boostpad_block_enabled: "<prefix><neutral>Boostpad profile for <accent><block></accent> is now </neutral><primary>enabled</primary>"
+    boostpad_block_disabled: "<prefix><neutral>Boostpad profile for <accent><block></accent> is now </neutral><danger>disabled</danger>"
   obu:
     not_loaded: "<prefix><danger>OBU module is not loaded</danger>"
     defaults:
@@ -68,8 +80,8 @@ commands:
       code: "<click:copy_to_clipboard:'<code>'><hover:show_text:'<accent>Copy Share Code</accent>'><primary>[Click to copy Share Code]</primary></hover></click><newline><neutral>- For <accent>You</accent> to share and import the context</neutral>"
       header_export: "<prefix><neutral>Exported Sandbox <accent><sandbox></accent>:</neutral>"
     status:
-      player: "<secondary>[Wake] == Player Context ==</secondary>"
-      boat: "<newline><hover:show_text:'<primary>Overrides Player Context!</primary><newline><neutral>Look at the boat and run <primary>/wobu</primary> commands to apply settings to this specific boat or use <primary>/execute as</primary></neutral>'><secondary>[Wake] == Boat Context ==</secondary></hover>"
+      player: "<prefix><secondary> == Player Context ==</secondary>"
+      boat: "<newline><hover:show_text:'<primary>Overrides Player Context!</primary><newline><neutral>Look at the boat and run <primary>/wobu</primary> commands to apply settings to this specific boat or use <primary>/execute as</primary></neutral>'><prefix><secondary> == Boat Context ==</secondary></hover>"
       subtitle: "  <primary><contexts></primary> <accent>Context Applied:</accent>"
       empty: "  <muted_dark>(No settings applied)</muted_dark>"
       line: "    <neutral>- <name>: <primary><value></primary></neutral>"
@@ -79,7 +91,7 @@ commands:
       temp: "  <overridden>Temporary Overrides:</overridden>"
       hint: "<newline><prefix><hover:show_text:'<primary>Temporary Settings</primary><newline><neutral>Local changes sync to your context but aren\\'t saved</neutral><newline><newline><primary>Sandboxes</primary><newline><neutral>Use sandboxes to test, and export </neutral><newline><neutral>your configurations</neutral><newline><newline><accent>/wobu -sandbox create <name></accent>'><info>Hint</info></hover>"
     help:
-      header: "<secondary>== OpenBoatUtils Help ==</secondary>"
+      header: "<prefix> <secondary>== OpenBoatUtils Help ==</secondary>"
       status: "  <accent>/wobu -status</accent><neutral><newline>  - View your active context and temporary overrides</neutral>"
       sandbox: "  <accent>/wobu -sandbox</accent><neutral><newline>  - Create and manage isolated environments for OBU settings</neutral>"
       context: "  <accent>/wobu -context</accent><neutral><newline>  - List or apply preset contexts to yourself or boats</neutral>"

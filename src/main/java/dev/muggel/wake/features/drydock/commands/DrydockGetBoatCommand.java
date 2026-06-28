@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.commands.WakeCommandBuilder;
 import dev.muggel.wake.features.drydock.api.DrydockService;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
@@ -21,7 +22,7 @@ public class DrydockGetBoatCommand {
     private static final List<String> SUPPORTED_OARS = List.of("oars", "nooars");
 
     public static void register(@NonNull LiteralArgumentBuilder<CommandSourceStack> root, Wake plugin) {
-        root.then(Commands.literal("getboat")
+        root.then(WakeCommandBuilder.literal("getboat", "wake.drydock.commands.getboat")
                 .then(Commands.argument("boat_type", StringArgumentType.word())
                         .suggests((ctx, builder) -> {
                             String remaining = builder.getRemaining().toLowerCase();

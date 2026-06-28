@@ -1,6 +1,7 @@
 package dev.muggel.wake.features.obu.service;
 
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.features.obu.OBUDefinition;
 import dev.muggel.wake.features.obu.api.OBUService;
 import dev.muggel.wake.features.obu.context.OBUContext;
 import dev.muggel.wake.features.obu.context.OBUSetting;
@@ -13,6 +14,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.jspecify.annotations.NonNull;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -169,5 +171,28 @@ public class OBUServiceImpl implements OBUService {
     @Override
     public OBUSyncManager getSyncManager() {
         return syncManager;
+    }
+
+    @Override
+    public double getVehicleScale(UUID uuid) {
+        if (uuid == null) return 1.0;
+        List<OBUSetting> truth = syncManager.calculateAbsoluteTruth(uuid);
+        for (OBUSetting setting : truth) {
+            if (setting.definition() == OBUDefinition.setscale && setting.args().length > 0) {
+                try {
+                    return Double.parseDouble(setting.args()[0]);
+                } catch (Exception ignored) {}
+            }
+        }
+        return 1.0;
+    }
+
+    @Override
+    public void applyRelativeImpulse(Player player, double x, double y, double z) {
+        if (player == null) return;
+        OBUSetting setting = new OBUSetting(OBUDefinition.applyimpulserelative, new String[]{
+                String.valueOf(x), String.valueOf(y), String.valueOf(z)
+        });
+        applySetting(player, setting);
     }
 }
