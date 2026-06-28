@@ -74,17 +74,29 @@ public class DrydockBoostpadCommand {
 
     private static CompletableFuture<Suggestions> suggestBlockKeys(@NonNull SuggestionsBuilder builder) {
         String remaining = builder.getRemaining().toLowerCase();
-        getBlockKeys().stream()
-                .filter(name -> name.startsWith(remaining) || name.contains(remaining))
-                .forEach(builder::suggest);
+        for (String key : getBlockKeys()) {
+            if (key.startsWith(remaining) || key.contains(remaining)) {
+                builder.suggest(key);
+            }
+            String path = key.contains(":") ? key.substring(key.indexOf(':') + 1) : key;
+            if (!remaining.contains(":") && (path.startsWith(remaining) || path.contains(remaining)) && !path.equals(key)) {
+                builder.suggest(path);
+            }
+        }
         return builder.buildFuture();
     }
 
     private static CompletableFuture<Suggestions> suggestConfiguredBlocks(Wake plugin, @NonNull SuggestionsBuilder builder) {
         String remaining = builder.getRemaining().toLowerCase();
-        getConfiguredBoostpads(plugin).keySet().stream()
-                .filter(name -> name.startsWith(remaining) || name.contains(remaining))
-                .forEach(builder::suggest);
+        for (String key : getConfiguredBoostpads(plugin).keySet()) {
+            if (key.startsWith(remaining) || key.contains(remaining)) {
+                builder.suggest(key);
+            }
+            String path = key.contains(":") ? key.substring(key.indexOf(':') + 1) : key;
+            if (!remaining.contains(":") && (path.startsWith(remaining) || path.contains(remaining)) && !path.equals(key)) {
+                builder.suggest(path);
+            }
+        }
         return builder.buildFuture();
     }
 
@@ -265,14 +277,17 @@ public class DrydockBoostpadCommand {
     }
 
     private static boolean parseBoolean(Object obj) {
+        if (obj == null) return true;
         return obj instanceof Boolean b ? b : Boolean.parseBoolean(obj.toString());
     }
 
     private static double parseDouble(Object obj) {
+        if (obj == null) return 0.0;
         return obj instanceof Number num ? num.doubleValue() : Double.parseDouble(obj.toString());
     }
 
     private static long parseLong(Object obj) {
+        if (obj == null) return 0L;
         return obj instanceof Number num ? num.longValue() : (long) Double.parseDouble(obj.toString());
     }
 
@@ -280,7 +295,7 @@ public class DrydockBoostpadCommand {
         if (cachedBlockKeys == null) {
             cachedBlockKeys = Registry.MATERIAL.stream()
                     .filter(Material::isBlock)
-                    .map(m -> m.getKey().getKey())
+                    .map(m -> m.getKey().toString())
                     .toList();
         }
         return cachedBlockKeys;

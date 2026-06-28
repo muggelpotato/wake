@@ -12,6 +12,7 @@ import org.bukkit.entity.Boat;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.vehicle.VehicleDestroyEvent;
@@ -48,7 +49,16 @@ public class BoostpadDetectorListener implements Listener {
                 long delayMs,
                 int hitboxPercent
         ) {
-            this(blockKey, enabled, forceX, forceY, forceZ, delayMs, hitboxPercent, (hitboxPercent / 100.0) - 1.0);
+            this(
+                    blockKey,
+                    enabled,
+                    Double.isFinite(forceX) ? forceX : 0.0,
+                    Double.isFinite(forceY) ? forceY : 0.0,
+                    Double.isFinite(forceZ) ? forceZ : 0.0,
+                    Math.max(0L, delayMs),
+                    Math.clamp(hitboxPercent, 0, 245),
+                    (Math.clamp(hitboxPercent, 0, 245) / 100.0) - 1.0
+            );
         }
     }
 
@@ -91,6 +101,7 @@ public class BoostpadDetectorListener implements Listener {
     }
 
     public void unregister() {
+        HandlerList.unregisterAll(this);
         INSTANCES.remove(this);
         lastBoostTimes.clear();
         materialConfigs.clear();
@@ -103,10 +114,12 @@ public class BoostpadDetectorListener implements Listener {
 
     @EventHandler
     public void onPlayerQuit(@NonNull PlayerQuitEvent event) {
-        lastBoostTimes.remove(event.getPlayer().getUniqueId());
+        if (event.getPlayer().getVehicle() instanceof Boat boat) {
+            lastBoostTimes.remove(boat.getUniqueId());
+        }
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onVehicleMove(@NonNull VehicleMoveEvent event) {
         if (!enabled || materialConfigs.isEmpty()) {
             return;

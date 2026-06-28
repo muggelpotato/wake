@@ -118,6 +118,9 @@ public class OBUSyncManager {
     // sync player context via personal context to avoid mutating base contexts
     public void syncPlayer(@NonNull Player player) {
         List<OBUSetting> truth = calculateAbsoluteTruth(player.getUniqueId());
+        if (obuService instanceof OBUServiceImpl impl) {
+            impl.updateVehicleScaleCache(player.getUniqueId(), truth);
+        }
         String personalContextName = "wake_personal";
         
         try {
@@ -139,6 +142,9 @@ public class OBUSyncManager {
     // specific viewer
     public void syncToViewer(@NonNull Boat boat, Player viewer) {
         List<OBUSetting> settings = calculateAbsoluteTruth(boat.getUniqueId());
+        if (obuService instanceof OBUServiceImpl impl) {
+            impl.updateVehicleScaleCache(boat.getUniqueId(), settings);
+        }
         
         try {
             knownBoatContexts.add(boat.getUniqueId());
@@ -152,6 +158,9 @@ public class OBUSyncManager {
     // everyone with the boat rendered
     public void broadcastSync(@NonNull Boat boat) {
         List<OBUSetting> settings = calculateAbsoluteTruth(boat.getUniqueId());
+        if (obuService instanceof OBUServiceImpl impl) {
+            impl.updateVehicleScaleCache(boat.getUniqueId(), settings);
+        }
         
         Set<Player> viewers = new HashSet<>(boat.getTrackedBy());
         if (!boat.getPassengers().isEmpty() && boat.getPassengers().getFirst() instanceof Player p) {

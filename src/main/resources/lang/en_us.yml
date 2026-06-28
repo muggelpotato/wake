@@ -11,6 +11,7 @@ commands:
     enabled: "  <primary>+</primary> <neutral>Enabled module:</neutral> <accent><module></accent>"
     disabled: "  <danger>-</danger> <neutral>Disabled module:</neutral> <accent><module></accent>"
     reloaded: "  <secondary><b>⟳</b></secondary> <neutral>Reloaded module:</neutral> <accent><module></accent>"
+    incompatible: "  <danger>!</danger> <neutral>Module enabled in config but incompatible:</neutral> <accent><module></accent>"
     failed: "  <danger>! Failed to sync module:</danger> <accent><module></accent>"
   drydock:
     give: "<prefix><neutral>Gave a <primary><boat></primary> item with variant </neutral><accent><variant></accent>"

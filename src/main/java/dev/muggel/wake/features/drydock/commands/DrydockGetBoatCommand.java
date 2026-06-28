@@ -16,6 +16,7 @@ import org.jetbrains.annotations.Unmodifiable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.List;
+import java.util.Locale;
 
 public class DrydockGetBoatCommand {
     private static final List<String> SUPPORTED_VARIANTS = List.of("parkour");
@@ -25,7 +26,7 @@ public class DrydockGetBoatCommand {
         root.then(WakeCommandBuilder.literal("getboat", "wake.drydock.commands.getboat")
                 .then(Commands.argument("boat_type", StringArgumentType.word())
                         .suggests((ctx, builder) -> {
-                            String remaining = builder.getRemaining().toLowerCase();
+                            String remaining = builder.getRemaining().toLowerCase(Locale.ROOT);
                             getBoatKeys().stream()
                                     .filter(name -> name.startsWith(remaining) || name.contains(remaining))
                                     .forEach(builder::suggest);
@@ -33,7 +34,7 @@ public class DrydockGetBoatCommand {
                         })
                         .then(Commands.argument("variant", StringArgumentType.word())
                                 .suggests((ctx, builder) -> {
-                                    String remaining = builder.getRemaining().toLowerCase();
+                                    String remaining = builder.getRemaining().toLowerCase(Locale.ROOT);
                                     SUPPORTED_VARIANTS.stream()
                                             .filter(v -> v.startsWith(remaining))
                                             .forEach(builder::suggest);
@@ -42,7 +43,7 @@ public class DrydockGetBoatCommand {
                                 .executes(ctx -> executeGive(ctx, plugin, null))
                                 .then(Commands.argument("oars", StringArgumentType.word())
                                         .suggests((ctx, builder) -> {
-                                            String remaining = builder.getRemaining().toLowerCase();
+                                            String remaining = builder.getRemaining().toLowerCase(Locale.ROOT);
                                             SUPPORTED_OARS.stream()
                                                     .filter(v -> v.startsWith(remaining))
                                                     .forEach(builder::suggest);
@@ -70,7 +71,7 @@ public class DrydockGetBoatCommand {
             return 0;
         }
 
-        String boatTypeStr = StringArgumentType.getString(ctx, "boat_type").toLowerCase();
+        String boatTypeStr = StringArgumentType.getString(ctx, "boat_type").toLowerCase(Locale.ROOT);
         if (!getBoatKeys().contains(boatTypeStr)) {
             plugin.getMessageManager().send(p, "commands.drydock.invalid_boat");
             return 0;

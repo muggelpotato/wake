@@ -72,11 +72,14 @@ public class AxiomModule extends AbstractModule {
                     Object builder = createMethod.invoke(apiInstance, axiomKey, model.toLowerCase(), item);
                     registerMethod.invoke(apiInstance, plugin, builder);
                 } catch (Exception e) {
-                    plugin.getLogger().warning("Failed to register Axiom model " + model + ": " + e.getMessage());
+                    plugin.getLogger().severe("Failed to register Axiom model " + model + ": " + e.getMessage());
+                    throw new RuntimeException("Failed to register Axiom model " + model, e);
                 }
             }
         } catch (Exception e) {
-            plugin.getLogger().severe("Failed to initialize Axiom display API integration: " + e.getMessage());
+            if (e instanceof RuntimeException re) throw re;
+            plugin.getLogger().severe("Failed to initialize Axiom API integration: " + e.getMessage());
+            throw new RuntimeException("Failed to initialize Axiom API integration", e);
         }
     }
 
@@ -87,7 +90,10 @@ public class AxiomModule extends AbstractModule {
             Class<?> apiClass = Class.forName("com.moulberry.axiom.paperapi.AxiomCustomDisplayAPI");
             Object apiInstance = apiClass.getMethod("getAPI").invoke(null);
             apiClass.getMethod("unregisterAll", Plugin.class).invoke(apiInstance, plugin);
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            plugin.getLogger().severe("Failed to unregister Axiom displays: " + e.getMessage());
+            throw new RuntimeException("Failed to unregister Axiom displays", e);
+        }
     }
 
     @Override

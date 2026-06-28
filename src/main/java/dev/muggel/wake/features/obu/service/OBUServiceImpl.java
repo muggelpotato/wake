@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class OBUServiceImpl implements OBUService {
     private final Wake plugin;
@@ -25,6 +26,7 @@ public class OBUServiceImpl implements OBUService {
     private final OBUContextManager contextManager;
     private final Map<UUID, String> activeSandboxContexts = new HashMap<>();
     private final Map<UUID, String> activeContexts = new HashMap<>();
+    private final Map<UUID, Double> vehicleScaleCache = new ConcurrentHashMap<>();
     private final OBUSyncManager syncManager;
 
     public OBUServiceImpl(Wake plugin, PacketSender packetSender, OBUContextManager contextManager) {
@@ -44,12 +46,15 @@ public class OBUServiceImpl implements OBUService {
         UUID uuid = player.getUniqueId();
         activeSandboxContexts.remove(uuid);
         activeContexts.remove(uuid);
+        vehicleScaleCache.remove(uuid);
         syncManager.cleanup(uuid);
     }
 
     @Override
     public void cleanupBoat(@NonNull Boat boat) {
-        syncManager.cleanup(boat.getUniqueId());
+        UUID uuid = boat.getUniqueId();
+        vehicleScaleCache.remove(uuid);
+        syncManager.cleanup(uuid);
     }
 
     @Override
@@ -176,12 +181,34 @@ public class OBUServiceImpl implements OBUService {
     @Override
     public double getVehicleScale(UUID uuid) {
         if (uuid == null) return 1.0;
+        Double cached = vehicleScaleCache.get(uuid);
+        if (cached != null) {
+            return cached;
+        }
         List<OBUSetting> truth = syncManager.calculateAbsoluteTruth(uuid);
-        for (OBUSetting setting : truth) {
-            if (setting.definition() == OBUDefinition.setscale && setting.args().length > 0) {
-                try {
-                    return Double.parseDouble(setting.args()[0]);
-                } catch (Exception ignored) {}
+        double scale = parseScaleFromTruth(truth);
+        vehicleScaleCache.put(uuid, scale);
+        return scale;
+    }
+
+    public void updateVehicleScaleCache(UUID uuid, List<OBUSetting> truth) {
+        if (uuid == null) return;
+        double scale = parseScaleFromTruth(truth);
+        if (scale == 1.0) {
+            vehicleScaleCache.remove(uuid);
+        } else {
+            vehicleScaleCache.put(uuid, scale);
+        }
+    }
+
+    private double parseScaleFromTruth(List<OBUSetting> truth) {
+        if (truth != null) {
+            for (OBUSetting setting : truth) {
+                if (setting.definition() == OBUDefinition.setscale && setting.args().length > 0) {
+                    try {
+                        return Double.parseDouble(setting.args()[0]);
+                    } catch (Exception ignored) {}
+                }
             }
         }
         return 1.0;
