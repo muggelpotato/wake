@@ -8,6 +8,7 @@ import dev.muggel.wake.core.registry.ServiceRegistry;
 import dev.muggel.wake.features.drydock.DrydockModule;
 import dev.muggel.wake.features.obu.OBUModule;
 import dev.muggel.wake.features.base.BaseModule;
+import dev.muggel.wake.features.axiom.AxiomModule;
 import dev.muggel.wake.features.base.commands.WakeCommandRegistry;
 import dev.muggel.wake.features.obu.commands.OBUCommandRegistry;
 import dev.muggel.wake.features.drydock.commands.DrydockCommandRegistry;
@@ -52,6 +53,7 @@ public final class Wake extends JavaPlugin {
         moduleManager.registerModule(new BaseModule());
         moduleManager.registerModule(new OBUModule());
         moduleManager.registerModule(new DrydockModule());
+        moduleManager.registerModule(new AxiomModule());
     }
 
     @SuppressWarnings("UnstableApiUsage")

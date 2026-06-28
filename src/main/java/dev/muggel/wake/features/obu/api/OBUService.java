@@ -6,7 +6,9 @@ import dev.muggel.wake.features.obu.service.OBUSyncManager;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+
 import java.util.Set;
+import java.util.UUID;
 
 public interface OBUService {
     void resetPlayer(Player player);
@@ -38,4 +40,8 @@ public interface OBUService {
     void sendBoatContext(Boat boat, Player viewer);
 
     OBUSyncManager getSyncManager();
+
+    double getVehicleScale(UUID uuid);
+
+    void applyRelativeImpulse(Player player, double x, double y, double z);
 }

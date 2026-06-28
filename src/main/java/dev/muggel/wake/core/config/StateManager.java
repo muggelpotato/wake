@@ -10,6 +10,7 @@ import java.io.IOException;
 import org.jspecify.annotations.NonNull;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
@@ -110,6 +111,12 @@ public class StateManager {
             return (T) Long.valueOf(((Number) val).longValue());
         }
         if (defaultValue instanceof String && val instanceof String) {
+            return (T) val;
+        }
+        if (defaultValue instanceof List && val instanceof List) {
+            return (T) val;
+        }
+        if (defaultValue instanceof Map && val instanceof Map) {
             return (T) val;
         }
         if (defaultValue != null && !defaultValue.getClass().isInstance(val)) {

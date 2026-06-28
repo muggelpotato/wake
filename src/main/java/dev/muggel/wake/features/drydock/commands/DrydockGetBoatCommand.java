@@ -5,38 +5,36 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.commands.WakeCommandBuilder;
 import dev.muggel.wake.features.drydock.api.DrydockService;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
-import org.bukkit.NamespacedKey;
+import org.bukkit.Material;
 import org.bukkit.Registry;
-import org.bukkit.entity.Boat;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.jetbrains.annotations.Unmodifiable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.List;
+import java.util.Locale;
 
 public class DrydockGetBoatCommand {
     private static final List<String> SUPPORTED_VARIANTS = List.of("parkour");
     private static final List<String> SUPPORTED_OARS = List.of("oars", "nooars");
 
     public static void register(@NonNull LiteralArgumentBuilder<CommandSourceStack> root, Wake plugin) {
-        root.then(Commands.literal("getboat")
+        root.then(WakeCommandBuilder.literal("getboat", "wake.drydock.commands.getboat")
                 .then(Commands.argument("boat_type", StringArgumentType.word())
                         .suggests((ctx, builder) -> {
-                            String remaining = builder.getRemaining().toLowerCase();
-                            Registry.ENTITY_TYPE.stream()
-                                    .filter(EntityType::isSpawnable)
-                                    .filter(e -> e.getEntityClass() != null && Boat.class.isAssignableFrom(e.getEntityClass()))
-                                    .map(e -> e.getKey().getKey())
+                            String remaining = builder.getRemaining().toLowerCase(Locale.ROOT);
+                            getBoatKeys().stream()
                                     .filter(name -> name.startsWith(remaining) || name.contains(remaining))
                                     .forEach(builder::suggest);
                             return builder.buildFuture();
                         })
                         .then(Commands.argument("variant", StringArgumentType.word())
                                 .suggests((ctx, builder) -> {
-                                    String remaining = builder.getRemaining().toLowerCase();
+                                    String remaining = builder.getRemaining().toLowerCase(Locale.ROOT);
                                     SUPPORTED_VARIANTS.stream()
                                             .filter(v -> v.startsWith(remaining))
                                             .forEach(builder::suggest);
@@ -45,7 +43,7 @@ public class DrydockGetBoatCommand {
                                 .executes(ctx -> executeGive(ctx, plugin, null))
                                 .then(Commands.argument("oars", StringArgumentType.word())
                                         .suggests((ctx, builder) -> {
-                                            String remaining = builder.getRemaining().toLowerCase();
+                                            String remaining = builder.getRemaining().toLowerCase(Locale.ROOT);
                                             SUPPORTED_OARS.stream()
                                                     .filter(v -> v.startsWith(remaining))
                                                     .forEach(builder::suggest);
@@ -68,12 +66,13 @@ public class DrydockGetBoatCommand {
         }
 
         DrydockService service = Wake.getServiceRegistry().get(DrydockService.class);
+        if (service == null) {
+            plugin.getLogger().warning("DrydockService is not registered!");
+            return 0;
+        }
 
-        String boatTypeStr = StringArgumentType.getString(ctx, "boat_type");
-        NamespacedKey key = NamespacedKey.minecraft(boatTypeStr.toLowerCase());
-        EntityType type = Registry.ENTITY_TYPE.get(key);
-
-        if (type == null || type.getEntityClass() == null || !Boat.class.isAssignableFrom(type.getEntityClass())) {
+        String boatTypeStr = StringArgumentType.getString(ctx, "boat_type").toLowerCase(Locale.ROOT);
+        if (!getBoatKeys().contains(boatTypeStr)) {
             plugin.getMessageManager().send(p, "commands.drydock.invalid_boat");
             return 0;
         }
@@ -95,8 +94,16 @@ public class DrydockGetBoatCommand {
 
         int variantId = getVariantId(variantStr, oars);
 
-        service.giveDrydockBoat(p, type, variantId);
+        service.giveDrydockBoat(p, boatTypeStr, variantId);
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static @NonNull @Unmodifiable List<String> getBoatKeys() {
+        return Registry.MATERIAL.stream()
+                .filter(Material::isItem)
+                .map(m -> m.getKey().getKey())
+                .filter(name -> name.endsWith("_boat") || name.endsWith("_raft"))
+                .toList();
     }
 
     private static int getVariantId(@NonNull String variantName, boolean oars) {

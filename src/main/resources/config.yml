@@ -5,6 +5,8 @@ modules:
     enabled: true
   drydock:
     enabled: true
+  axiom:
+    enabled: true
 config:
   show_hints: true
 
@@ -19,6 +21,7 @@ obu:
       - 20
       - 21
   contexts:
+    # the default context that is enforced by the server. Other contexts (excluding sandbox contexts ingame) are layered ontop of the default context
     default:
       setinterpolationten: true
       collisionmode: "NO_ENTITIES"
@@ -87,3 +90,21 @@ obu:
       setblocksetting:
         - "WALLTAP_MULTIPLIER 1 stone, light_blue_concrete, blue_concrete"
         - "JUMPS 2 stone"
+
+axiom:
+  format: "<#33B5FF><bold><!italic>%s"
+  displays:
+    - "muggel:banana"
+    - "muggel:coppermedal"
+    - "muggel:cube1"
+    - "muggel:cube2"
+    - "muggel:cube3"
+    - "muggel:cube4"
+    - "muggel:cube5"
+    - "muggel:cube6"
+    - "muggel:cube7"
+    - "muggel:goldmedal"
+    - "muggel:menu"
+    - "muggel:oakboat"
+    - "muggel:silvermedal"
+    - "muggel:walter"

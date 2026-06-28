@@ -23,6 +23,7 @@ public class DrydockCommandRegistry {
             LiteralArgumentBuilder<CommandSourceStack> root = WakeCommandBuilder.moduleLiteral("drydock", "wake.drydock.commands", plugin, DrydockModule.class);
             
             DrydockGetBoatCommand.register(root, plugin);
+            DrydockBoostpadCommand.register(root, plugin);
             
             commands.register(root.build(), "Drydock utility commands", List.of("dd"));
         });

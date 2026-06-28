@@ -7,4 +7,8 @@ public interface WakeModule {
     void onDisable();
     void reload();
     String getId();
+
+    default boolean isCompatible() {
+        return true;
+    }
 }

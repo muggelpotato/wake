@@ -32,7 +32,9 @@ public final class ModuleManager {
         for (WakeModule module : registeredModules) {
             try {
                 String id = module.getId();
-                boolean shouldBeEnabled = isModuleEnabled(id);
+                boolean configuredEnabled = isModuleEnabled(id);
+                boolean compatible = module.isCompatible();
+                boolean shouldBeEnabled = configuredEnabled && compatible;
                 boolean isCurrentlyEnabled = activeModules.containsKey(id);
 
                 if (shouldBeEnabled && !isCurrentlyEnabled) {
@@ -63,6 +65,9 @@ public final class ModuleManager {
                     }
                     plugin.getLogger().info("Module '" + id + "' has been reloaded");
                     feedback.add(plugin.getMessageManager().getComponent("commands.reload.reloaded", Placeholder.parsed("module", id)));
+                } else if (configuredEnabled) {
+                    plugin.getLogger().warning("Module '" + id + "' is enabled in config but incompatible with this environment");
+                    feedback.add(plugin.getMessageManager().getComponent("commands.reload.incompatible", Placeholder.parsed("module", id)));
                 }
             } catch (Exception e) {
                 plugin.getLogger().log(Level.SEVERE, "Failed to sync module " + module.getId(), e);
