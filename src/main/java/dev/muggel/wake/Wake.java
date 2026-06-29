@@ -1,5 +1,6 @@
 package dev.muggel.wake;
 
+import dev.muggel.wake.core.commands.WakeCommandManager;
 import dev.muggel.wake.core.config.StateManager;
 import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.core.module.ModuleManager;
@@ -9,9 +10,6 @@ import dev.muggel.wake.features.drydock.DrydockModule;
 import dev.muggel.wake.features.obu.OBUModule;
 import dev.muggel.wake.features.base.BaseModule;
 import dev.muggel.wake.features.axiom.AxiomModule;
-import dev.muggel.wake.features.base.commands.WakeCommandRegistry;
-import dev.muggel.wake.features.obu.commands.OBUCommandRegistry;
-import dev.muggel.wake.features.drydock.commands.DrydockCommandRegistry;
 import com.github.retrooper.packetevents.PacketEvents;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bukkit.Bukkit;
@@ -39,9 +37,7 @@ public final class Wake extends JavaPlugin {
         this.messageManager = new MessageManager(this);
         serviceRegistry = new ServiceRegistry();
         
-        new WakeCommandRegistry(this).register();
-        new OBUCommandRegistry(this).register();
-        new DrydockCommandRegistry(this).register();
+        WakeCommandManager.init(this);
         
         this.moduleManager = new ModuleManager(this);
         registerModules();

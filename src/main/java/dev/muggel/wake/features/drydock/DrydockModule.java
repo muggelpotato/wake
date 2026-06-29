@@ -1,8 +1,12 @@
 package dev.muggel.wake.features.drydock;
 
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.commands.WakeCommandManager;
 import dev.muggel.wake.core.module.AbstractModule;
 import dev.muggel.wake.features.drydock.api.DrydockService;
+import dev.muggel.wake.features.drydock.commands.DrydockBoostpadCommand;
+import dev.muggel.wake.features.drydock.commands.DrydockGetBoatCommand;
 import dev.muggel.wake.features.drydock.integration.obu.OBUBoostpadIntegration;
 import dev.muggel.wake.features.drydock.listeners.BoostpadDetectorListener;
 import dev.muggel.wake.features.drydock.service.DrydockServiceImpl;
@@ -21,6 +25,14 @@ public class DrydockModule extends AbstractModule {
         this.detectorListener = new BoostpadDetectorListener(plugin);
         registerListener(detectorListener);
         registerListener(new OBUBoostpadIntegration());
+
+        CommandNode drydockRoot = CommandNode.literal("drydock")
+                .withModule(DrydockModule.class)
+                .withDescription("Commands for the Dyrdock server")
+                .aliases("dd")
+                .addSubcommand(DrydockBoostpadCommand.getNode(plugin))
+                .addSubcommand(DrydockGetBoatCommand.getNode(plugin));
+        WakeCommandManager.register(drydockRoot);
     }
 
     @Override

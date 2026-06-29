@@ -6,22 +6,17 @@ import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
-import dev.muggel.wake.features.obu.commands.arguments.BlockListArgumentType;
-import dev.muggel.wake.features.obu.commands.arguments.EntityListArgumentType;
-import dev.muggel.wake.features.obu.commands.arguments.OBUEnumArgumentType;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import dev.muggel.wake.Wake;
-import dev.muggel.wake.core.commands.WakeCommandBuilder;
-import dev.muggel.wake.features.obu.OBUModule;
+import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.commands.arguments.BlockListArgumentType;
+import dev.muggel.wake.core.commands.arguments.EntityListArgumentType;
+import dev.muggel.wake.core.commands.arguments.WakeEnumArgumentType;
 import dev.muggel.wake.features.obu.OBUDefinition;
+import dev.muggel.wake.features.obu.OBUModule;
 import dev.muggel.wake.features.obu.api.OBUService;
-import dev.muggel.wake.features.obu.commands.util.OBUCommandBuilder;
 import dev.muggel.wake.features.obu.context.OBUSetting;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
-import io.papermc.paper.command.brigadier.Commands;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Boat;
@@ -29,21 +24,26 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class OBUSettingsCommand {
 
-    public static void register(LiteralArgumentBuilder<CommandSourceStack> root, Wake plugin) {
+    public static @NonNull List<CommandNode> getNodes(Wake plugin) {
+        List<CommandNode> nodes = new ArrayList<>();
         for (String settingName : OBUDefinition.getRegisteredNames()) {
             OBUDefinition def = OBUDefinition.get(settingName);
             if (def != null) {
-                registerSettingCommand(root, def, plugin);
+                nodes.add(createSettingNode(def, plugin));
             }
         }
+        return nodes;
     }
 
-    private static void registerSettingCommand(LiteralArgumentBuilder<CommandSourceStack> parentNode, @NonNull OBUDefinition def, Wake plugin) {
-        LiteralArgumentBuilder<CommandSourceStack> settingNode = WakeCommandBuilder.literal(def.name(), def.getPermission());
+    private static @NonNull CommandNode createSettingNode(@NonNull OBUDefinition def, Wake plugin) {
+        CommandNode settingNode = CommandNode.literal(def.name())
+                .withModule(OBUModule.class)
+                .withPermission(def.getPermission());
 
         List<String> types = def.types();
         String[] argNames = new String[types.size()];
@@ -55,39 +55,47 @@ public class OBUSettingsCommand {
         }
 
         if (types.isEmpty()) {
-            settingNode.executes(OBUCommandBuilder.executesEntity(plugin, (ctx, target, service, contextManager) -> 
-                    executeSetting(ctx, def, types, argNames, target, service, plugin)));
+            settingNode.executesEntity((ctx, target) -> {
+                OBUModule obuModule = plugin.getModule(OBUModule.class);
+                if (obuModule == null) return 0;
+                return executeSetting(ctx, def, types, argNames, target, obuModule.getObuService(), plugin);
+            });
         } else {
-            ArgumentBuilder<CommandSourceStack, ?> lastNode = buildArgumentNode(types.getLast(), argNames[types.size() - 1], plugin);
-            lastNode.executes(OBUCommandBuilder.executesEntity(plugin, (ctx, target, service, contextManager) -> 
-                    executeSetting(ctx, def, types, argNames, target, service, plugin)));
-
-            for (int i = types.size() - 2; i >= 0; i--) {
-                RequiredArgumentBuilder<CommandSourceStack, ?> prevNode = buildArgumentNode(types.get(i), argNames[i], plugin);
-                prevNode.then(lastNode);
-                lastNode = prevNode;
+            List<CommandNode> argNodes = new ArrayList<>();
+            for (int i = 0; i < types.size(); i++) {
+                argNodes.add(buildArgumentNode(types.get(i), argNames[i], plugin));
             }
 
-            settingNode.then(lastNode);
+            argNodes.getLast().executesEntity((ctx, target) -> {
+                OBUModule obuModule = plugin.getModule(OBUModule.class);
+                if (obuModule == null) return 0;
+                return executeSetting(ctx, def, types, argNames, target, obuModule.getObuService(), plugin);
+            });
+
+            for (int i = 0; i < argNodes.size() - 1; i++) {
+                argNodes.get(i).addSubcommand(argNodes.get(i + 1));
+            }
+
+            settingNode.addSubcommand(argNodes.getFirst());
         }
 
-        parentNode.then(settingNode);
+        return settingNode;
     }
 
-    private static RequiredArgumentBuilder<CommandSourceStack, ?> buildArgumentNode(@NonNull String type, String name, Wake plugin) {
-        return switch (type.toLowerCase()) {
-            case "boolean" -> Commands.argument(name, BoolArgumentType.bool());
-            case "float" -> Commands.argument(name, FloatArgumentType.floatArg());
-            case "double" -> Commands.argument(name, DoubleArgumentType.doubleArg());
-            case "int" -> Commands.argument(name, IntegerArgumentType.integer());
-            case "byte" -> Commands.argument(name, IntegerArgumentType.integer(0, 255));
-            case "block_list" -> Commands.argument(name, BlockListArgumentType.blockList());
-            case "entity_list" -> Commands.argument(name, EntityListArgumentType.entityList());
+    private static @NonNull CommandNode buildArgumentNode(@NonNull String type, String name, Wake plugin) {
+        CommandNode node = switch (type.toLowerCase()) {
+            case "boolean" -> CommandNode.argument(name, BoolArgumentType.bool());
+            case "float" -> CommandNode.argument(name, FloatArgumentType.floatArg());
+            case "double" -> CommandNode.argument(name, DoubleArgumentType.doubleArg());
+            case "int" -> CommandNode.argument(name, IntegerArgumentType.integer());
+            case "byte" -> CommandNode.argument(name, IntegerArgumentType.integer(0, 255));
+            case "block_list" -> CommandNode.argument(name, BlockListArgumentType.blockList());
+            case "entity_list" -> CommandNode.argument(name, EntityListArgumentType.entityList());
             case "collision_enum" ->
-                    Commands.argument(name, OBUEnumArgumentType.obuEnum(OBUDefinition.CollisionMode.class));
+                    CommandNode.argument(name, WakeEnumArgumentType.wakeEnum(OBUDefinition.CollisionMode.class));
             case "setting_enum" ->
-                    Commands.argument(name, OBUEnumArgumentType.obuEnum(OBUDefinition.PerBlockSetting.class));
-            case "context_id" -> Commands.argument(name, StringArgumentType.string())
+                    CommandNode.argument(name, WakeEnumArgumentType.wakeEnum(OBUDefinition.PerBlockSetting.class));
+            case "context_id" -> CommandNode.argument(name, StringArgumentType.string())
                     .suggests((ctx, builder) -> {
                         String remaining = builder.getRemaining().toLowerCase();
                         OBUModule module = plugin.getModule(OBUModule.class);
@@ -98,8 +106,10 @@ public class OBUSettingsCommand {
                         }
                         return builder.buildFuture();
                     });
-            default -> Commands.argument(name, StringArgumentType.string());
+            default -> CommandNode.argument(name, StringArgumentType.string());
         };
+        node.withModule(OBUModule.class);
+        return node;
     }
 
     private static int executeSetting(CommandContext<CommandSourceStack> ctx, OBUDefinition def, @NonNull List<String> types, String[] argNames, Entity target, OBUService obuService, Wake plugin) {

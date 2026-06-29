@@ -1,13 +1,13 @@
 package dev.muggel.wake.features.obu.commands;
 
 import com.mojang.brigadier.Command;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import dev.muggel.wake.Wake;
-import dev.muggel.wake.core.commands.WakeCommandBuilder;
-import dev.muggel.wake.features.obu.commands.util.OBUCommandBuilder;
+import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.features.obu.OBUModule;
+import dev.muggel.wake.features.obu.api.OBUService;
 import dev.muggel.wake.features.obu.context.OBUContext;
 import dev.muggel.wake.features.obu.context.OBUSetting;
-import io.papermc.paper.command.brigadier.CommandSourceStack;
+import dev.muggel.wake.features.obu.service.OBUContextManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.NamespacedKey;
@@ -17,19 +17,25 @@ import org.bukkit.entity.Player;
 import org.bukkit.persistence.PersistentDataType;
 import org.jspecify.annotations.NonNull;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.List;
-import java.util.ArrayList;
 
 public class OBUStatusCommand {
 
-    public static void register(@NonNull LiteralArgumentBuilder<CommandSourceStack> root, Wake plugin) {
-        root.then(WakeCommandBuilder.literal("-status", "wake.obu.commands.status")
-                .executes(OBUCommandBuilder.executesPlayer(plugin, (ctx, player, service, contextManager) -> {
+    public static CommandNode getNode(Wake plugin) {
+        return CommandNode.literal("-status")
+                .withModule(OBUModule.class)
+                .executesPlayer((ctx, player) -> {
+                    OBUModule obuModule = plugin.getModule(OBUModule.class);
+                    if (obuModule == null) return 0;
+                    OBUService service = obuModule.getObuService();
+                    OBUContextManager contextManager = obuModule.getContextManager();
+
                     String activeSandbox = service.getPlayerActiveSandbox(player);
                     String contextName = service.getActiveContextName(player);
                     boolean inBoat = player.getVehicle() instanceof Boat;
@@ -135,7 +141,7 @@ public class OBUStatusCommand {
                     }
 
                     return Command.SINGLE_SUCCESS;
-                })));
+                });
     }
 
     private static void printSettingsList(Wake plugin, Player player, @NonNull List<OBUSetting> settings, Map<String, OBUSetting> overrides, Set<String> boatOverriddenKeys) {
