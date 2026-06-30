@@ -1,39 +1,44 @@
-package dev.muggel.wake.features.obu.commands.arguments;
+package dev.muggel.wake.core.commands.arguments;
 
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.arguments.ArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import dev.muggel.wake.Wake;
 import io.papermc.paper.command.brigadier.MessageComponentSerializer;
+import io.papermc.paper.command.brigadier.argument.CustomArgumentType;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
-import io.papermc.paper.command.brigadier.argument.CustomArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
 
-public class OBUEnumArgumentType<T extends Enum<T>> implements CustomArgumentType<String, String> {
+public class WakeEnumArgumentType<T extends Enum<T>> implements CustomArgumentType<String, String> {
     private final List<String> validNames;
 
     private static final DynamicCommandExceptionType INVALID_ENUM = new DynamicCommandExceptionType(
-            obj -> MessageComponentSerializer.message().serialize(Component.text("Invalid option: " + obj, TextColor.color(0xFF5555)))
+            obj -> {
+                Component comp = Wake.getPlugin(Wake.class).getMessageManager().getComponent("commands.invalid_option",
+                        Placeholder.unparsed("input", String.valueOf(obj)));
+                return MessageComponentSerializer.message().serialize(comp);
+            }
     );
 
-    private OBUEnumArgumentType(@NonNull Class<T> enumClass) {
+    private WakeEnumArgumentType(@NonNull Class<T> enumClass) {
         this.validNames = Arrays.stream(enumClass.getEnumConstants())
                 .map(Enum::name)
                 .collect(Collectors.toList());
     }
 
-    public static <T extends Enum<T>> OBUEnumArgumentType<T> obuEnum(Class<T> enumClass) {
-        return new OBUEnumArgumentType<>(enumClass);
+    public static <T extends Enum<T>> WakeEnumArgumentType<T> wakeEnum(Class<T> enumClass) {
+        return new WakeEnumArgumentType<>(enumClass);
     }
 
     @Override

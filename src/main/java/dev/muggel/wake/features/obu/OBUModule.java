@@ -1,17 +1,27 @@
 package dev.muggel.wake.features.obu;
 
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.commands.WakeCommandManager;
 import dev.muggel.wake.core.module.AbstractModule;
-import dev.muggel.wake.features.obu.service.OBUContextManager;
+import dev.muggel.wake.features.obu.api.OBUService;
+import dev.muggel.wake.features.obu.commands.OBUClearCommand;
+import dev.muggel.wake.features.obu.commands.OBUContextCommand;
+import dev.muggel.wake.features.obu.commands.OBUDefaultsCommand;
+import dev.muggel.wake.features.obu.commands.OBUHelpCommand;
+import dev.muggel.wake.features.obu.commands.OBUSandboxCommand;
+import dev.muggel.wake.features.obu.commands.OBUSettingsCommand;
+import dev.muggel.wake.features.obu.commands.OBUStatusCommand;
 import dev.muggel.wake.features.obu.networking.HandshakeListener;
 import dev.muggel.wake.features.obu.networking.PacketSender;
 import dev.muggel.wake.features.obu.networking.interceptors.BoatLagInterceptor;
-import dev.muggel.wake.features.obu.api.OBUService;
+import dev.muggel.wake.features.obu.service.OBUContextManager;
 import dev.muggel.wake.features.obu.service.OBUServiceImpl;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import java.util.UUID;
+
 import java.util.Collections;
+import java.util.UUID;
 
 public class OBUModule extends AbstractModule {
     private OBUContextManager contextManager;
@@ -40,6 +50,23 @@ public class OBUModule extends AbstractModule {
         for (Player player : Bukkit.getOnlinePlayers()) {
             obuService.applyDefaultContext(player);
         }
+
+        CommandNode obuRootNode = CommandNode.literal("wakeobu")
+                .withModule(OBUModule.class)
+                .withDescription("OpenBoatUtils settings and configuration")
+                .aliases("wobu")
+                .addSubcommand(OBUHelpCommand.getNode(plugin))
+                .addSubcommand(OBUStatusCommand.getNode(plugin))
+                .addSubcommand(OBUDefaultsCommand.getNode(plugin))
+                .addSubcommand(OBUContextCommand.getNode(plugin))
+                .addSubcommand(OBUSandboxCommand.getNode(plugin))
+                .addSubcommand(OBUClearCommand.getNode(plugin));
+
+        for (CommandNode settingNode : OBUSettingsCommand.getNodes(plugin)) {
+            obuRootNode.addSubcommand(settingNode);
+        }
+
+        WakeCommandManager.register(obuRootNode);
     }
 
     @Override
@@ -77,6 +104,7 @@ public class OBUModule extends AbstractModule {
                 }
             });
         }
+        WakeCommandManager.unregister("wakeobu");
     }
 
     @Override

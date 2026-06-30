@@ -3,16 +3,15 @@ package dev.muggel.wake.features.drydock.commands;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.muggel.wake.Wake;
-import dev.muggel.wake.core.commands.WakeCommandBuilder;
+import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.features.drydock.DrydockModule;
 import dev.muggel.wake.features.drydock.listeners.BoostpadDetectorListener;
 import dev.muggel.wake.features.drydock.listeners.BoostpadDetectorListener.BoostpadConfig;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
-import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
@@ -35,42 +34,53 @@ public class DrydockBoostpadCommand {
 
     private static List<String> cachedBlockKeys;
 
-    public static void register(@NonNull LiteralArgumentBuilder<CommandSourceStack> root, Wake plugin) {
-        root.then(WakeCommandBuilder.literal("boostpad", "wake.drydock.commands.boostpad")
-                .then(WakeCommandBuilder.literal("add", "wake.drydock.commands.boostpad.add")
-                        .then(Commands.argument("block", ArgumentTypes.namespacedKey())
-                                .suggests((ctx, builder) -> suggestBlockKeys(builder))
-                                .then(Commands.argument("x", DoubleArgumentType.doubleArg())
-                                        .then(Commands.argument("y", DoubleArgumentType.doubleArg())
-                                                .then(Commands.argument("z", DoubleArgumentType.doubleArg())
-                                                        .then(Commands.argument("delay_ms", IntegerArgumentType.integer(0))
-                                                                .executes(ctx -> executeAdd(ctx, plugin, 100))
-                                                                .then(Commands.argument("hitbox_percent", IntegerArgumentType.integer(0, 245))
-                                                                        .executes(ctx -> executeAdd(ctx, plugin, IntegerArgumentType.getInteger(ctx, "hitbox_percent")))
-                                                                )
-                                                        )
-                                                )
-                                        )
-                                )
-                        )
-                )
-                .then(WakeCommandBuilder.literal("remove", "wake.drydock.commands.boostpad.remove")
-                        .then(Commands.argument("block", ArgumentTypes.namespacedKey())
-                                .suggests((ctx, builder) -> suggestConfiguredBlocks(plugin, builder))
-                                .executes(ctx -> executeRemove(ctx, plugin))
-                        )
-                )
-                .then(WakeCommandBuilder.literal("list", "wake.drydock.commands.boostpad.list")
-                        .executes(ctx -> executeList(ctx, plugin))
-                )
-                .then(WakeCommandBuilder.literal("toggle", "wake.drydock.commands.boostpad.toggle")
-                        .executes(ctx -> executeToggleGlobal(ctx, plugin))
-                        .then(Commands.argument("block", ArgumentTypes.namespacedKey())
-                                .suggests((ctx, builder) -> suggestConfiguredBlocks(plugin, builder))
-                                .executes(ctx -> executeToggleBlock(ctx, plugin))
-                        )
-                )
-        );
+    public static @NonNull CommandNode getNode(Wake plugin) {
+        CommandNode boostpadNode = CommandNode.literal("boostpad")
+                .withModule(DrydockModule.class);
+
+        // add
+        CommandNode addNode = CommandNode.literal("add").withModule(DrydockModule.class);
+        CommandNode blockArg = CommandNode.argument("block", ArgumentTypes.namespacedKey())
+                .suggests((ctx, builder) -> suggestBlockKeys(builder));
+        CommandNode xArg = CommandNode.argument("x", DoubleArgumentType.doubleArg());
+        CommandNode yArg = CommandNode.argument("y", DoubleArgumentType.doubleArg());
+        CommandNode zArg = CommandNode.argument("z", DoubleArgumentType.doubleArg());
+        CommandNode delayArg = CommandNode.argument("delay_ms", IntegerArgumentType.integer(0))
+                .executesSender((ctx, sender) -> executeAdd(ctx, plugin, 100));
+        CommandNode hitboxArg = CommandNode.argument("hitbox_percent", IntegerArgumentType.integer(0, 245))
+                .executesSender((ctx, sender) -> executeAdd(ctx, plugin, IntegerArgumentType.getInteger(ctx, "hitbox_percent")));
+
+        delayArg.addSubcommand(hitboxArg);
+        zArg.addSubcommand(delayArg);
+        yArg.addSubcommand(zArg);
+        xArg.addSubcommand(yArg);
+        blockArg.addSubcommand(xArg);
+        addNode.addSubcommand(blockArg);
+        boostpadNode.addSubcommand(addNode);
+
+        // remove
+        CommandNode removeNode = CommandNode.literal("remove").withModule(DrydockModule.class);
+        CommandNode removeBlockArg = CommandNode.argument("block", ArgumentTypes.namespacedKey())
+                .suggests((ctx, builder) -> suggestConfiguredBlocks(plugin, builder))
+                .executesSender((ctx, sender) -> executeRemove(ctx, plugin));
+        removeNode.addSubcommand(removeBlockArg);
+        boostpadNode.addSubcommand(removeNode);
+
+        // list
+        CommandNode listNode = CommandNode.literal("list").withModule(DrydockModule.class)
+                .executesSender((ctx, sender) -> executeList(ctx, plugin));
+        boostpadNode.addSubcommand(listNode);
+
+        // toggle
+        CommandNode toggleNode = CommandNode.literal("toggle").withModule(DrydockModule.class)
+                .executesSender((ctx, sender) -> executeToggleGlobal(ctx, plugin));
+        CommandNode toggleBlockArg = CommandNode.argument("block", ArgumentTypes.namespacedKey())
+                .suggests((ctx, builder) -> suggestConfiguredBlocks(plugin, builder))
+                .executesSender((ctx, sender) -> executeToggleBlock(ctx, plugin));
+        toggleNode.addSubcommand(toggleBlockArg);
+        boostpadNode.addSubcommand(toggleNode);
+
+        return boostpadNode;
     }
 
     private static CompletableFuture<Suggestions> suggestBlockKeys(@NonNull SuggestionsBuilder builder) {

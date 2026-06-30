@@ -30,56 +30,56 @@ public class OBUContextManager {
         contexts.clear();
         sandboxes.clear();
         ConfigurationSection section = plugin.getConfig().getConfigurationSection("obu.contexts");
-        if (section == null) return;
-
         Map<String, List<OBUSetting>> tempSettings = new HashMap<>();
 
-        for (String key : section.getKeys(false)) {
-            ConfigurationSection contextSection = section.getConfigurationSection(key);
-            if (contextSection == null) continue;
+        if (section != null) {
+            for (String key : section.getKeys(false)) {
+                ConfigurationSection contextSection = section.getConfigurationSection(key);
+                if (contextSection == null) continue;
 
-            List<OBUSetting> settings = new ArrayList<>();
-            for (String settingKey : contextSection.getKeys(false)) {
-                OBUDefinition def = OBUDefinition.get(settingKey);
-                if (def == null) {
-                    plugin.getLogger().warning("Unknown OBU setting in context '" + key + "': " + settingKey);
-                    continue;
-                }
-                
-                if (def.isActionSetting()) {
-                    plugin.getLogger().warning("Action setting '" + settingKey + "' cannot be saved in a context! Skipping in '" + key + "'.");
-                    continue;
-                }
-
-                if (contextSection.isList(settingKey)) {
-                    List<?> rawList = contextSection.getList(settingKey);
-                    if (rawList != null && !rawList.isEmpty()) {
-                        if (rawList.getFirst() instanceof List) {
-                            for (Object invocationObj : rawList) {
-                                if (invocationObj instanceof List<?> invocationList) {
-                                    settings.add(new OBUSetting(def, buildArgs(def, invocationList)));
-                                }
-                            }
-                        } else if (rawList.getFirst() instanceof String && def.canRepeat() && def.types().size() > 1 && String.valueOf(rawList.getFirst()).contains(" ")) {
-                            for (Object invocationObj : rawList) {
-                                String invocationStr = String.valueOf(invocationObj);
-                                String[] split = invocationStr.split(" ", def.types().size());
-                                settings.add(new OBUSetting(def, buildArgs(def, Arrays.asList(split))));
-                            }
-                        } else {
-                            settings.add(new OBUSetting(def, buildArgs(def, rawList)));
-                        }
-                    }
-                } else {
-                    String value = contextSection.getString(settingKey);
-                    if (value == null) {
-                        plugin.getLogger().warning("Invalid OBU value in context '" + key + "' for setting '" + settingKey + "'.");
+                List<OBUSetting> settings = new ArrayList<>();
+                for (String settingKey : contextSection.getKeys(false)) {
+                    OBUDefinition def = OBUDefinition.get(settingKey);
+                    if (def == null) {
+                        plugin.getLogger().warning("Unknown OBU setting in context '" + key + "': " + settingKey);
                         continue;
                     }
-                    settings.add(new OBUSetting(def, new String[]{value}));
+                    
+                    if (def.isActionSetting()) {
+                        plugin.getLogger().warning("Action setting '" + settingKey + "' cannot be saved in a context! Skipping in '" + key + "'.");
+                        continue;
+                    }
+
+                    if (contextSection.isList(settingKey)) {
+                        List<?> rawList = contextSection.getList(settingKey);
+                        if (rawList != null && !rawList.isEmpty()) {
+                            if (rawList.getFirst() instanceof List) {
+                                for (Object invocationObj : rawList) {
+                                    if (invocationObj instanceof List<?> invocationList) {
+                                        settings.add(new OBUSetting(def, buildArgs(def, invocationList)));
+                                    }
+                                }
+                            } else if (rawList.getFirst() instanceof String && def.canRepeat() && def.types().size() > 1 && String.valueOf(rawList.getFirst()).contains(" ")) {
+                                for (Object invocationObj : rawList) {
+                                    String invocationStr = String.valueOf(invocationObj);
+                                    String[] split = invocationStr.split(" ", def.types().size());
+                                    settings.add(new OBUSetting(def, buildArgs(def, Arrays.asList(split))));
+                                }
+                            } else {
+                                settings.add(new OBUSetting(def, buildArgs(def, rawList)));
+                            }
+                        }
+                    } else {
+                        String value = contextSection.getString(settingKey);
+                        if (value == null) {
+                            plugin.getLogger().warning("Invalid OBU value in context '" + key + "' for setting '" + settingKey + "'.");
+                            continue;
+                        }
+                        settings.add(new OBUSetting(def, new String[]{value}));
+                    }
                 }
+                tempSettings.put(key.toLowerCase(Locale.ROOT), settings);
             }
-            tempSettings.put(key.toLowerCase(Locale.ROOT), settings);
         }
 
         List<OBUSetting> defaultSettings = tempSettings.getOrDefault("default", Collections.emptyList());
@@ -99,6 +99,10 @@ public class OBUContextManager {
 
             mergedSettings.addAll(entry.getValue());
             contexts.put(key, new OBUContext(key, mergedSettings));
+        }
+
+        if (!contexts.containsKey("default")) {
+            contexts.put("default", new OBUContext("default", new ArrayList<>()));
         }
 
         // for memory wipe without triggering RESTORE_DEFAULTS
