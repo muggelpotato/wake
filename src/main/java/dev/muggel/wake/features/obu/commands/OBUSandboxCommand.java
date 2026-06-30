@@ -232,7 +232,7 @@ public class OBUSandboxCommand {
                         return 0;
                     }
 
-                    if (!context.name().startsWith("sandbox_")) {
+                    if (!service.getSandboxNames().contains(lower)) {
                         plugin.getMessageManager().send(player, "commands.obu.sandbox.invalid", Placeholder.parsed("sandbox", name));
                         return 0;
                     }

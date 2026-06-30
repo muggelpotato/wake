@@ -11,7 +11,6 @@ import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.bukkit.Material;
 import org.bukkit.Registry;
 import org.bukkit.entity.Player;
-import org.jetbrains.annotations.Unmodifiable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.List;
@@ -21,6 +20,12 @@ public class DrydockGetBoatCommand {
     private static final List<String> SUPPORTED_VARIANTS = List.of("parkour");
     private static final List<String> SUPPORTED_OARS = List.of("oars", "nooars");
 
+    private static final List<String> BOAT_KEYS = Registry.MATERIAL.stream()
+            .filter(Material::isItem)
+            .map(m -> m.getKey().getKey())
+            .filter(name -> name.endsWith("_boat") || name.endsWith("_raft"))
+            .toList();
+
     public static @NonNull CommandNode getNode(Wake plugin) {
         CommandNode getBoatNode = CommandNode.literal("getboat")
                 .withModule(DrydockModule.class);
@@ -28,7 +33,7 @@ public class DrydockGetBoatCommand {
         CommandNode boatTypeArg = CommandNode.argument("boat_type", StringArgumentType.word())
                 .suggests((ctx, builder) -> {
                     String remaining = builder.getRemaining().toLowerCase(Locale.ROOT);
-                    getBoatKeys().stream()
+                    BOAT_KEYS.stream()
                             .filter(name -> name.startsWith(remaining) || name.contains(remaining))
                             .forEach(builder::suggest);
                     return builder.buildFuture();
@@ -72,7 +77,7 @@ public class DrydockGetBoatCommand {
         }
 
         String boatTypeStr = StringArgumentType.getString(ctx, "boat_type").toLowerCase(Locale.ROOT);
-        if (!getBoatKeys().contains(boatTypeStr)) {
+        if (!BOAT_KEYS.contains(boatTypeStr)) {
             plugin.getMessageManager().send(p, "commands.drydock.invalid_boat");
             return 0;
         }
@@ -96,14 +101,6 @@ public class DrydockGetBoatCommand {
 
         service.giveDrydockBoat(p, boatTypeStr, variantId);
         return Command.SINGLE_SUCCESS;
-    }
-
-    private static @NonNull @Unmodifiable List<String> getBoatKeys() {
-        return Registry.MATERIAL.stream()
-                .filter(Material::isItem)
-                .map(m -> m.getKey().getKey())
-                .filter(name -> name.endsWith("_boat") || name.endsWith("_raft"))
-                .toList();
     }
 
     private static int getVariantId(@NonNull String variantName, boolean oars) {

@@ -32,6 +32,11 @@ public class BaseModule extends AbstractModule {
     }
 
     @Override
+    protected void onModuleDisable() {
+        WakeCommandManager.unregister("wake");
+    }
+
+    @Override
     public void reload() {
         plugin.getStateManager().load();
     }

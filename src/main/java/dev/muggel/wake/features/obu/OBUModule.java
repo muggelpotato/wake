@@ -104,6 +104,7 @@ public class OBUModule extends AbstractModule {
                 }
             });
         }
+        WakeCommandManager.unregister("wakeobu");
     }
 
     @Override

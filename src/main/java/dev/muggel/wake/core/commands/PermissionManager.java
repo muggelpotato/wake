@@ -49,12 +49,12 @@ public class PermissionManager {
         // 1
         String[] parts = permissionNode.split("\\.");
         StringBuilder currentPath = new StringBuilder();
-        for (int i = 0; i < parts.length; i++) {
+        for (int i = 0; i < parts.length - 1; i++) {
             if (i > 0) currentPath.append(".");
             currentPath.append(parts[i]);
             String node = currentPath.toString();
             if (sender.isPermissionSet(node) && !sender.hasPermission(node)) {
-                return false; // Explicitly set to false anywhere in the parent chain
+                return false;
             }
         }
 

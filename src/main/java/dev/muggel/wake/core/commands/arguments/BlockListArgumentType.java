@@ -26,7 +26,7 @@ public class BlockListArgumentType implements CustomArgumentType<String, String>
     private static final DynamicCommandExceptionType INVALID_BLOCK = new DynamicCommandExceptionType(
             obj -> {
                 Component comp = Wake.getPlugin(Wake.class).getMessageManager().getComponent("commands.invalid_block",
-                        Placeholder.parsed("input", String.valueOf(obj)));
+                        Placeholder.unparsed("input", String.valueOf(obj)));
                 return MessageComponentSerializer.message().serialize(comp);
             }
     );

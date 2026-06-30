@@ -27,7 +27,7 @@ public class EntityListArgumentType implements CustomArgumentType<String, String
     private static final DynamicCommandExceptionType INVALID_ENTITY = new DynamicCommandExceptionType(
             obj -> {
                 Component comp = Wake.getPlugin(Wake.class).getMessageManager().getComponent("commands.invalid_entity",
-                        Placeholder.parsed("input", String.valueOf(obj)));
+                        Placeholder.unparsed("input", String.valueOf(obj)));
                 return MessageComponentSerializer.message().serialize(comp);
             }
     );

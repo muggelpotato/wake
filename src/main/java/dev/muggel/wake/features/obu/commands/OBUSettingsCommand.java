@@ -41,7 +41,7 @@ public class OBUSettingsCommand {
     }
 
     private static @NonNull CommandNode createSettingNode(@NonNull OBUDefinition def, Wake plugin) {
-        CommandNode settingNode = CommandNode.literal(def.name())
+        CommandNode settingNode = CommandNode.literal(def.commandName())
                 .withModule(OBUModule.class)
                 .withPermission(def.getPermission());
 
@@ -131,7 +131,7 @@ public class OBUSettingsCommand {
                 obuService.getSyncManager().clearLocalOverrides(b.getUniqueId());
                 obuService.getSyncManager().broadcastSync(b);
                 plugin.getMessageManager().send(sender, "commands.obu.settings.success",
-                        Placeholder.parsed("setting", def.name()),
+                        Placeholder.parsed("setting", def.commandName()),
                         Placeholder.parsed("value", ""),
                         Placeholder.parsed("target", "the boat"));
             }
@@ -150,13 +150,13 @@ public class OBUSettingsCommand {
         }
         if (sandbox != null && def.isContextSetting()) {
             plugin.getMessageManager().send(sender, "commands.obu.settings.sandbox",
-                    Placeholder.parsed("setting", def.name()),
+                    Placeholder.parsed("setting", def.commandName()),
                     Placeholder.parsed("value", valueStr),
                     Placeholder.parsed("sandbox", sandbox));
         } else {
             String targetStr = target instanceof Player p ? (p.equals(sender) ? "you" : p.getName()) : (target instanceof Boat ? "the boat" : target.getName());
             plugin.getMessageManager().send(sender, "commands.obu.settings.success",
-                    Placeholder.parsed("setting", def.name()),
+                    Placeholder.parsed("setting", def.commandName()),
                     Placeholder.parsed("value", valueStr),
                     Placeholder.parsed("target", targetStr));
         }

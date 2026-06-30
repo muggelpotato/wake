@@ -13,24 +13,30 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.jspecify.annotations.NonNull;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class WakeCommandManager {
-    private static final List<CommandNode> REGISTERED_NODES = new ArrayList<>();
+    private static final Map<String, CommandNode> REGISTERED_NODES = new ConcurrentHashMap<>();
 
     public static void register(CommandNode rootNode) {
-        REGISTERED_NODES.add(rootNode);
+        REGISTERED_NODES.put(rootNode.getName().toLowerCase(Locale.ROOT), rootNode);
+    }
+
+    public static void unregister(@NonNull String commandName) {
+        REGISTERED_NODES.remove(commandName.toLowerCase(Locale.ROOT));
     }
 
     public static void init(@NonNull Wake plugin) {
         plugin.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> {
             final Commands commands = event.registrar();
-            for (CommandNode node : REGISTERED_NODES) {
+            for (CommandNode node : REGISTERED_NODES.values()) {
                 compileAndRegister(plugin, commands, node);
             }
         });
@@ -113,7 +119,8 @@ public class WakeCommandManager {
                 CommandSender sender = source.getSender();
 
                 if (effectiveModuleClass != null && plugin.getModule(effectiveModuleClass) == null) {
-                    plugin.getMessageManager().send(sender, "commands.obu.not_loaded");
+                    String moduleName = effectiveModuleClass.getSimpleName().replace("Module", "");
+                    plugin.getMessageManager().send(sender, "commands.module_not_loaded", Placeholder.parsed("module", moduleName));
                     return 0;
                 }
 

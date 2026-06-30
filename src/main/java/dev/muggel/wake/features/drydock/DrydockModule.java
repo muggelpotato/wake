@@ -28,7 +28,7 @@ public class DrydockModule extends AbstractModule {
 
         CommandNode drydockRoot = CommandNode.literal("drydock")
                 .withModule(DrydockModule.class)
-                .withDescription("Commands for the Dyrdock server")
+                .withDescription("Commands for the Drydock server")
                 .aliases("dd")
                 .addSubcommand(DrydockBoostpadCommand.getNode(plugin))
                 .addSubcommand(DrydockGetBoatCommand.getNode(plugin));
@@ -44,5 +44,6 @@ public class DrydockModule extends AbstractModule {
         if (Wake.getServiceRegistry() != null) {
             Wake.getServiceRegistry().unregister(DrydockService.class);
         }
+        WakeCommandManager.unregister("drydock");
     }
 }

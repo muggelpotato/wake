@@ -121,7 +121,7 @@ public class OBUServiceImpl implements OBUService {
         NamespacedKey key = new NamespacedKey(plugin, "obu_context");
         syncManager.clearLocalOverrides(boat.getUniqueId());
         
-        if (contextName == null) {
+        if (contextName == null || contextName.equalsIgnoreCase("default")) {
             boat.getPersistentDataContainer().remove(key);
             syncManager.broadcastSync(boat);
             return;
