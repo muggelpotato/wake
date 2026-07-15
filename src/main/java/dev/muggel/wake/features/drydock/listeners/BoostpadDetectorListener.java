@@ -67,6 +67,7 @@ public class BoostpadDetectorListener implements Listener {
     private volatile double cachedMaxOffsetMultiplier = 0.0;
     private final Map<Material, BoostpadConfig> materialConfigs = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Long>> lastBoostTimes = new ConcurrentHashMap<>();
+    private volatile boolean isRegistered = false;
 
     public BoostpadDetectorListener(@NonNull Wake plugin) {
         this.plugin = plugin;
@@ -98,6 +99,19 @@ public class BoostpadDetectorListener implements Listener {
             }
         }
         this.cachedMaxOffsetMultiplier = (maxPct / 100.0) - 1.0;
+        updateRegistration();
+    }
+
+    private void updateRegistration() {
+        boolean shouldBeRegistered = enabled && !materialConfigs.isEmpty();
+        if (shouldBeRegistered && !isRegistered) {
+            Bukkit.getPluginManager().registerEvents(this, plugin);
+            isRegistered = true;
+        } else if (!shouldBeRegistered && isRegistered) {
+            HandlerList.unregisterAll(this);
+            lastBoostTimes.clear();
+            isRegistered = false;
+        }
     }
 
     public void unregister() {
@@ -105,6 +119,7 @@ public class BoostpadDetectorListener implements Listener {
         INSTANCES.remove(this);
         lastBoostTimes.clear();
         materialConfigs.clear();
+        isRegistered = false;
     }
 
     @EventHandler

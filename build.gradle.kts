@@ -8,11 +8,18 @@ repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.codemc.io/repository/maven-releases/")
+    maven("https://repo.aikar.co/content/groups/aikar/")
 }
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     implementation("com.github.retrooper:packetevents-spigot:2.13.0")
+    
+    // Database Infrastructure
+    implementation("com.zaxxer:HikariCP:5.1.0")
+    implementation("org.xerial:sqlite-jdbc:3.46.0.0")
+    implementation("org.mariadb.jdbc:mariadb-java-client:3.4.0")
+    implementation("co.aikar:idb-core:1.0.0-SNAPSHOT")
 }
 
 java {
@@ -43,6 +50,8 @@ tasks {
         archiveClassifier.set("")
         relocate("com.github.retrooper.packetevents", "dev.muggel.wake.libs.packetevents.api")
         relocate("io.github.retrooper.packetevents", "dev.muggel.wake.libs.packetevents.impl")
+        relocate("com.zaxxer.hikari", "dev.muggel.wake.libs.hikari")
+        relocate("co.aikar.idb", "dev.muggel.wake.libs.idb")
     }
 
     assemble {

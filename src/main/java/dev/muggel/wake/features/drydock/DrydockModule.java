@@ -23,7 +23,6 @@ public class DrydockModule extends AbstractModule {
         DrydockService drydockService = new DrydockServiceImpl(plugin);
         Wake.getServiceRegistry().register(DrydockService.class, drydockService);
         this.detectorListener = new BoostpadDetectorListener(plugin);
-        registerListener(detectorListener);
         registerListener(new OBUBoostpadIntegration());
 
         CommandNode drydockRoot = CommandNode.literal("drydock")
