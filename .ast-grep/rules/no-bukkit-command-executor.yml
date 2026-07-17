@@ -1,0 +1,15 @@
+id: no-bukkit-command-executor
+language: Java
+severity: error
+message: Bukkit CommandExecutor/TabCompleter is prohibited — use a CommandNode tree.
+note: |
+  CLAUDE.md (Commands): declare a `CommandNode` tree and register it via
+  `WakeCommandManager.register(root)`. Permissions are derived from the node path, so a
+  CommandExecutor bypasses permission gating entirely and won't appear in the module's tree.
+rule:
+  any:
+    - all:
+        - kind: super_interfaces
+        - regex: '\b(CommandExecutor|TabCompleter|TabExecutor)\b'
+    - pattern: $P.getCommand($NAME).setExecutor($$$)
+    - pattern: $P.getCommand($NAME).setTabCompleter($$$)

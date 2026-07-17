@@ -1,0 +1,12 @@
+id: no-entity-cache
+language: Java
+severity: error
+message: Player/Entity cached in a field — key by UUID instead.
+note: |
+  CLAUDE.md (Threading & memory): never cache Player/Entity in a persistent collection — it
+  pins the object after logout and leaks. Key by `UUID` and clean up on PlayerQuitEvent,
+  VehicleDestroyEvent and EntityRemoveEvent. Every insertion needs a matching eviction.
+rule:
+  all:
+    - kind: field_declaration
+    - regex: '<[^>]*\b(Player|Entity|Boat|LivingEntity)\s*>|<[^>]*,\s*(Player|Entity|Boat|LivingEntity)\s*>'

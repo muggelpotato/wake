@@ -1,0 +1,15 @@
+id: no-adhoc-minimessage
+language: Java
+severity: warning
+message: Ad-hoc MiniMessage deserialization — route player-facing text through MessageManager.
+note: |
+  CLAUDE.md (Text): never build Components ad hoc. Use
+  `plugin.getMessageManager().send(sender, "dotted.key", ...)` with the string in
+  lang/en_us.yml, so the text stays localized and themeable.
+ignores:
+  # The message manager is the one place allowed to deserialize MiniMessage.
+  - "**/MessageManager.java"
+rule:
+  any:
+    - pattern: MiniMessage.miniMessage().deserialize($$$)
+    - pattern: $MM.deserialize($$$)

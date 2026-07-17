@@ -1,0 +1,17 @@
+id: no-inline-fqcn-type
+language: Java
+severity: error
+message: Inline fully-qualified class name in type position — use a top-level import.
+note: |
+  CLAUDE.md (Style): never inline FQCNs. Add a top-level `import` and refer to the class by
+  its simple name. If two imports collide, import the one used most and qualify the other at
+  a single call site, or alias via a local type.
+rule:
+  all:
+    # A dotted type whose root segment is lowercase is package-qualified (an FQCN); a nested
+    # type like Map.Entry starts uppercase and is left alone. Namespace-independent.
+    - kind: scoped_type_identifier
+    - regex: '^[a-z]'
+    - not:
+        inside:
+          kind: scoped_type_identifier
