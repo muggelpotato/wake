@@ -1,0 +1,17 @@
+id: no-raw-db-in-module
+language: Java
+severity: warning
+message: Raw DB call in a module class — put the query in that module's DAO.
+note: |
+  CLAUDE.md (Data): module data goes through a `WakeDao`; writes use `asyncUpdate(...)` so
+  gameplay never waits on I/O. The one sanctioned exception is bulk import inside
+  `onImportData`, which is deliberately synchronous to avoid cache races — if that's what this
+  is, it belongs in the DAO as an explicit import method (see OBUDao.importContextData).
+ignores:
+  # The data layer is where raw DB calls belong: data-access objects and the connection manager.
+  - "**/*Dao.java"
+  - "**/DatabaseManager.java"
+rule:
+  any:
+    - pattern: DB.$METHOD($$$)
+    - pattern: co.aikar.idb.DB.$METHOD($$$)

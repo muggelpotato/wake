@@ -1,0 +1,14 @@
+id: no-inline-fqcn-expression
+language: Java
+severity: error
+message: Inline fully-qualified class name in expression position — use a top-level import.
+note: |
+  CLAUDE.md (Style): never inline FQCNs. e.g. write `DB.executeUpdate(...)` with
+  `import co.aikar.idb.DB;`, not `co.aikar.idb.DB.executeUpdate(...)`.
+rule:
+  all:
+    - kind: field_access
+    - regex: '^(java|javax|org\.bukkit|com\.google|co\.aikar|com\.github\.retrooper|io\.github\.retrooper|io\.papermc|net\.kyori|com\.mojang|dev\.muggel)\.[a-z0-9_.]*\.[A-Z]'
+    - not:
+        inside:
+          kind: field_access

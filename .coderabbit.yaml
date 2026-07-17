@@ -1,17 +1,94 @@
 language: "en-US"
+tone_instructions: "Senior Minecraft systems engineer. Direct and technical. State the defect and the concrete failure it causes; skip praise and hedging."
 reviews:
   profile: "assertive"
-  auto_review:
-    enabled: false
+  request_changes_workflow: false
+  high_level_summary: true
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  suggested_reviewers: false
   poem: false
   review_status: false
-  path_instructions:
-    - path: "src/main/java/**"
-      instructions: |
-        You are a Senior Minecraft Systems Engineer reviewing a highly modular Paper plugin. Focus on enforcing the following rules:
-        1. Thread Safety & Memory: No Bukkit API in Async tasks. Prevent memory leaks (use UUIDs, clean up maps on PlayerQuit/VehicleDestroy).
-        2. Performance (Event-Driven): Avoid heavy logic in high-frequency events (like Move events). Reject ANY use of `runTaskTimer` polling loops for state/physics enforcement; state should only update reactively on events.
-        3. Modular Monolith Boundaries: Reject cross-module dependencies (e.g., `features.obu` cannot import from `features.races`). Communication must use the `ServiceRegistry` or Bukkit Event Bus.
-        4. Modern API & Commands: Use Adventure API for text. Command registration must use Paper's Brigadier (`WakeCommandBuilder`), NOT Bukkit `CommandExecutor`.
-        5. Robustness & Minimalism: Favor flat configuration lists over deeply nested YAML blocks. When dealing with complex NBT entities (like customized boats), using vanilla `/give` dispatch is often preferred over fragile API NBT modifications to ensure cross-version portability (1.21-1.26+). Reject bloat and over-engineered fallback systems.
-        6. Code Quality: Ensure the codebase/code is compact, robust, scalabale and performant without implicit edge cases, god classes or redundant code. Code should always be reused if possible to avoid redundancy. Suggest architectural changes if another approach could lead to leaner/cleaner and more compact/robust code.
+  in_progress_fortune: false
+  auto_review:
+    enabled: false
+  path_filters:
+    - "!**/build/**"
+    - "!**/.gradle/**"
+    - "!**/.idea/**"
+    - "!**/run/**"
+    - "!**/temp/**"
+    - "!gradle/wrapper/**"
+    - "!**/*.jar"
+    - "!**/*.class"
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    title:
+      mode: "warning"
+    description:
+      mode: "warning"
+    custom_checks:
+      - name: "CLAUDE.md freshness"
+        mode: "warning"
+        instructions: |
+          CLAUDE.md documents this repo's architectural invariants and exact API idioms; agents
+          read it as authoritative and will write code against whatever it claims. Treat a stale
+          CLAUDE.md as a defect.
+
+          Fail only when this PR makes a specific statement in CLAUDE.md untrue — for example: a
+          class, method or package it names is renamed, moved or deleted; the module enable order
+          or lifecycle contract changes; a new cross-module, persistence, command or localization
+          pattern is introduced; a documented layer order or permission derivation changes; a new
+          module is added. Quote the exact line that is now stale and say what it should say.
+
+          Pass silently for ordinary changes that leave every documented invariant intact. Do not
+          ask for CLAUDE.md updates merely because source files changed.
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+  labeling_instructions:
+    - label: "module"
+      instructions: "Changes scoped to a single feature module."
+    - label: "core"
+      instructions: "Changes to shared infrastructure rather than a single feature module."
+    - label: "database"
+      instructions: "Changes to persistence: data-access objects, schemas, or migrations."
+
+  tools:
+    ast-grep:
+      rule_dirs:
+        - ".ast-grep/rules"
+      essential_rules: false
+    fbinfer:
+      enabled: true
+      enable_java: true
+    pmd:
+      enabled: true
+    gitleaks:
+      enabled: true
+    osvScanner:
+      enabled: true
+    semgrep:
+      enabled: false
+    markdownlint:
+      enabled: false
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/CLAUDE.md"
+  learnings:
+    scope: "local"
+  pull_requests:
+    scope: "local"
+chat:
+  auto_reply: true
