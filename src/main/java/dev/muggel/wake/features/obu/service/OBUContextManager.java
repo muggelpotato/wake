@@ -1,170 +1,159 @@
 package dev.muggel.wake.features.obu.service;
 
-import dev.muggel.wake.Wake;
 import dev.muggel.wake.features.obu.OBUDefinition;
 import dev.muggel.wake.features.obu.context.OBUContext;
+import dev.muggel.wake.features.obu.context.OBUContext.ContextType;
 import dev.muggel.wake.features.obu.context.OBUSetting;
-import org.bukkit.configuration.ConfigurationSection;
+import dev.muggel.wake.features.obu.OBUDao;
+import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class OBUContextManager {
-    private final Wake plugin;
-    private final Map<String, OBUContext> contexts = new HashMap<>();
-
-    public OBUContextManager(Wake plugin) {
-        this.plugin = plugin;
+    private final OBUDao dao;
+    private volatile Map<String, OBUContext> contexts = Map.of();
+    private volatile Set<String> sandboxes = Set.of();
+    public OBUContextManager(OBUDao dao) {
+        this.dao = dao;
         loadContexts();
     }
 
     public void loadContexts() {
-        contexts.clear();
-        sandboxes.clear();
-        ConfigurationSection section = plugin.getConfig().getConfigurationSection("obu.contexts");
-        Map<String, List<OBUSetting>> tempSettings = new HashMap<>();
-
-        if (section != null) {
-            for (String key : section.getKeys(false)) {
-                ConfigurationSection contextSection = section.getConfigurationSection(key);
-                if (contextSection == null) continue;
-
-                List<OBUSetting> settings = new ArrayList<>();
-                for (String settingKey : contextSection.getKeys(false)) {
-                    OBUDefinition def = OBUDefinition.get(settingKey);
-                    if (def == null) {
-                        plugin.getLogger().warning("Unknown OBU setting in context '" + key + "': " + settingKey);
-                        continue;
-                    }
-                    
-                    if (def.isActionSetting()) {
-                        plugin.getLogger().warning("Action setting '" + settingKey + "' cannot be saved in a context! Skipping in '" + key + "'.");
-                        continue;
-                    }
-
-                    if (contextSection.isList(settingKey)) {
-                        List<?> rawList = contextSection.getList(settingKey);
-                        if (rawList != null && !rawList.isEmpty()) {
-                            if (rawList.getFirst() instanceof List) {
-                                for (Object invocationObj : rawList) {
-                                    if (invocationObj instanceof List<?> invocationList) {
-                                        settings.add(new OBUSetting(def, buildArgs(def, invocationList)));
-                                    }
-                                }
-                            } else if (rawList.getFirst() instanceof String && def.canRepeat() && def.types().size() > 1 && String.valueOf(rawList.getFirst()).contains(" ")) {
-                                for (Object invocationObj : rawList) {
-                                    String invocationStr = String.valueOf(invocationObj);
-                                    String[] split = invocationStr.split(" ", def.types().size());
-                                    settings.add(new OBUSetting(def, buildArgs(def, Arrays.asList(split))));
-                                }
-                            } else {
-                                settings.add(new OBUSetting(def, buildArgs(def, rawList)));
-                            }
-                        }
-                    } else {
-                        String value = contextSection.getString(settingKey);
-                        if (value == null) {
-                            plugin.getLogger().warning("Invalid OBU value in context '" + key + "' for setting '" + settingKey + "'.");
-                            continue;
-                        }
-                        settings.add(new OBUSetting(def, new String[]{value}));
-                    }
-                }
-                tempSettings.put(key.toLowerCase(Locale.ROOT), settings);
+        Map<String, OBUContext> loaded = new ConcurrentHashMap<>(dao.loadAllContexts());
+        if (!loaded.containsKey("default")) {
+            loaded.put("default", new OBUContext("default", ContextType.SERVER, null, List.of()));
+            dao.saveContext("default", ContextType.SERVER, null);
+        }
+        loaded.put(OBUDefinition.CONTEXT_EMPTY, new OBUContext(OBUDefinition.CONTEXT_EMPTY, ContextType.SERVER, null, List.of()));
+        Set<String> loadedSandboxes = ConcurrentHashMap.newKeySet();
+        for (OBUContext ctx : loaded.values()) {
+            if (ctx.isSandbox()) {
+                loadedSandboxes.add(ctx.name());
             }
         }
-
-        List<OBUSetting> defaultSettings = tempSettings.getOrDefault("default", Collections.emptyList());
-
-        for (Map.Entry<String, List<OBUSetting>> entry : tempSettings.entrySet()) {
-            String key = entry.getKey();
-            List<OBUSetting> mergedSettings = new ArrayList<>();
-
-            if (!key.equals("default")) {
-                for (OBUSetting defSetting : defaultSettings) {
-                    boolean overridden = entry.getValue().stream().anyMatch(s -> s.getUniqueKey().equals(defSetting.getUniqueKey()));
-                    if (!overridden) {
-                        mergedSettings.add(defSetting);
-                    }
-                }
-            }
-
-            mergedSettings.addAll(entry.getValue());
-            contexts.put(key, new OBUContext(key, mergedSettings));
-        }
-
-        if (!contexts.containsKey("default")) {
-            contexts.put("default", new OBUContext("default", new ArrayList<>()));
-        }
-
-        // for memory wipe without triggering RESTORE_DEFAULTS
-        contexts.put("empty", new OBUContext("empty", new ArrayList<>()));
+        this.contexts = loaded;
+        this.sandboxes = loadedSandboxes;
     }
 
     public Set<String> getContextNames() {
         return Collections.unmodifiableSet(contexts.keySet());
     }
 
-    public OBUContext getContext(@NonNull String name) {
+    public @Nullable OBUContext getContext(@NonNull String name) {
         return contexts.get(name.toLowerCase(Locale.ROOT));
     }
 
-    private final Set<String> sandboxes = new HashSet<>();
+    @Contract(pure = true)
+    public static @NonNull String sandboxKey(@NonNull String name, @NonNull UUID owner) {
+        return name.toLowerCase(Locale.ROOT) + "@" + owner;
+    }
 
-    public void createSandbox(@NonNull String name) {
-        String lower = name.toLowerCase(Locale.ROOT);
-        contexts.put(lower, new OBUContext(name, new ArrayList<>()));
+    public static @NonNull String displayName(@NonNull String contextName) {
+        int at = contextName.indexOf('@');
+        return at == -1 ? contextName : contextName.substring(0, at);
+    }
+
+    public boolean createSandbox(@NonNull String key, UUID ownerUuid) {
+        String lower = key.toLowerCase(Locale.ROOT);
+        if (isReserved(displayName(lower)) || contexts.containsKey(lower)) {
+            return false;
+        }
+        contexts.put(lower, new OBUContext(lower, ContextType.SANDBOX, ownerUuid, List.of()));
         sandboxes.add(lower);
+        dao.saveContext(lower, ContextType.SANDBOX, ownerUuid);
+        dao.updateSandboxAccessTime(lower);
+        return true;
     }
 
-    public Set<String> getSandboxNames() {
-        return Collections.unmodifiableSet(sandboxes);
+    public void deleteContext(@NonNull String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        if (isReserved(lower)) return;
+        contexts.remove(lower);
+        sandboxes.remove(lower);
+        dao.deleteContext(lower);
     }
 
-    public void updateSandboxSetting(String name, OBUSetting setting) {
-        OBUContext context = getContext(name);
+    public boolean publishSandbox(@NonNull String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        OBUContext context = contexts.get(lower);
+        if (context == null || !context.isSandbox()) return false;
+        String display = displayName(lower);
+        if (!display.equals(lower) && (isReserved(display) || contexts.containsKey(display))) {
+            return false;
+        }
+
+        contexts.remove(lower);
+        sandboxes.remove(lower);
+        contexts.put(display, new OBUContext(display, ContextType.SERVER, null, context.settings()));
+        dao.deleteContext(lower);
+        dao.saveContext(display, ContextType.SERVER, null);
+        for (OBUSetting setting : context.settings()) {
+            dao.saveSetting(display, setting);
+        }
+        return true;
+    }
+
+    public void updateSandboxSetting(@NonNull String name, OBUSetting setting) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        OBUContext context = contexts.get(lower);
         if (context == null) return;
-        List<OBUSetting> settings = new ArrayList<>(context.getSettings());
+        List<OBUSetting> settings = new ArrayList<>(context.settings());
         settings.removeIf(s -> s.getUniqueKey().equals(setting.getUniqueKey()));
         settings.add(setting);
-        contexts.put(name.toLowerCase(Locale.ROOT), new OBUContext(context.name(), settings));
+        contexts.put(lower, new OBUContext(lower, context.type(), context.ownerUuid(), settings));
+        dao.saveSetting(lower, setting);
+        if (sandboxes.contains(lower)) {
+            dao.updateSandboxAccessTime(lower);
+        }
     }
 
-    public boolean removeContextSetting(String name, int settingId) {
-        OBUContext context = getContext(name);
+    public void addSettings(@NonNull String name, @NonNull List<OBUSetting> newSettings) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        OBUContext context = contexts.get(lower);
+        if (context == null || newSettings.isEmpty()) return;
+        LinkedHashMap<String, OBUSetting> merged = new LinkedHashMap<>();
+        for (OBUSetting s : context.settings()) merged.put(s.getUniqueKey(), s);
+        for (OBUSetting s : newSettings) merged.put(s.getUniqueKey(), s);
+        contexts.put(lower, new OBUContext(lower, context.type(), context.ownerUuid(), new ArrayList<>(merged.values())));
+        for (OBUSetting s : newSettings) {
+            dao.saveSetting(lower, s);
+        }
+        if (sandboxes.contains(lower)) {
+            dao.updateSandboxAccessTime(lower);
+        }
+    }
+
+    public boolean removeContextSetting(@NonNull String name, String uniqueKey) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        OBUContext context = contexts.get(lower);
         if (context == null) return false;
-        List<OBUSetting> settings = new ArrayList<>(context.getSettings());
-        boolean removed = settings.removeIf(s -> s.definition().id() == settingId);
+        List<OBUSetting> settings = new ArrayList<>(context.settings());
+        boolean removed = settings.removeIf(s -> s.getUniqueKey().equals(uniqueKey));
         if (removed) {
-            contexts.put(name.toLowerCase(Locale.ROOT), new OBUContext(context.name(), settings));
+            contexts.put(lower, new OBUContext(lower, context.type(), context.ownerUuid(), settings));
+            dao.deleteSetting(lower, uniqueKey);
             return true;
         }
         return false;
     }
 
-    private String @NonNull [] buildArgs(@NonNull OBUDefinition def, List<?> rawArgs) {
-        int expected = def.types().size();
-        if (expected == 0) return new String[0];
-        if (rawArgs.size() < expected) {
-            return rawArgs.stream().map(Object::toString).toArray(String[]::new);
-        }
-        String[] args = new String[expected];
-        for (int i = 0; i < expected - 1; i++) {
-            args[i] = String.valueOf(rawArgs.get(i));
-        }
-        List<String> lastArgs = new ArrayList<>();
-        for (int i = expected - 1; i < rawArgs.size(); i++) {
-            lastArgs.add(String.valueOf(rawArgs.get(i)));
-        }
-        args[expected - 1] = String.join(",", lastArgs);
-        return args;
+    public static boolean isReserved(@NonNull String lower) {
+        return lower.equals("default") || lower.equals(OBUDefinition.CONTEXT_EMPTY) || lower.equals(OBUDefinition.CONTEXT_PERSONAL);
+    }
+
+    public static boolean inheritsDefault(@NonNull OBUContext context) {
+        return !context.isSandbox()
+                && !context.name().equalsIgnoreCase("default")
+                && !context.name().equals(OBUDefinition.CONTEXT_EMPTY);
     }
 }

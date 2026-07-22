@@ -1,0 +1,16 @@
+boostpads_enabled: false
+boostpads:
+  minecraft:tube_coral_block:
+    enabled: true
+    force_x: 0.0
+    force_y: 1.0
+    force_z: 0.0
+    delay_ms: 500
+    hitbox_percent: 99
+  minecraft:fire_coral_block:
+    enabled: true
+    force_x: 0.0
+    force_y: 0.0
+    force_z: 1.0
+    delay_ms: 500
+    hitbox_percent: 99

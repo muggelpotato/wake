@@ -4,33 +4,36 @@ import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.module.WakeModule;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Boat;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.Player;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
+/**
+ * Compiles registered {@link CommandNode} trees into Paper/Brigadier commands. <br>
+ * 1. Derives a permission from each chain of literals ({@code wake.<module>.commands.<literal>...}) <br>
+ * 2. Hides and blocks commands whose module is disabled <br>
+ * 3. Resolves the executor target ({@link CommandNode.TargetType}) <br>
+ * 4. Wraps every executor with error handling and database actor tracking <br>
+ * Modules only register a root node (everything else is automatic). <br>
+ */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class WakeCommandManager {
     private static final Map<String, CommandNode> REGISTERED_NODES = new ConcurrentHashMap<>();
 
     public static void register(CommandNode rootNode) {
         REGISTERED_NODES.put(rootNode.getName().toLowerCase(Locale.ROOT), rootNode);
-    }
-
-    public static void unregister(@NonNull String commandName) {
-        REGISTERED_NODES.remove(commandName.toLowerCase(Locale.ROOT));
     }
 
     public static void init(@NonNull Wake plugin) {
@@ -46,17 +49,13 @@ public class WakeCommandManager {
         Class<? extends WakeModule> moduleClass = rootNode.getModuleClass();
         String moduleName = "base";
         if (moduleClass != null) {
-            WakeModule module = plugin.getModule(moduleClass);
-            if (module != null) {
-                moduleName = module.getId();
-            } else {
-                moduleName = moduleClass.getSimpleName().toLowerCase().replace("module", "");
+            WakeModule module = plugin.getRegisteredModule(moduleClass);
+            if (module == null) {
+                throw new IllegalStateException("Command '" + rootNode.getName() + "' is bound to unregistered module class " + moduleClass.getSimpleName());
             }
+            moduleName = module.getId();
         }
-
-        String basePermission = rootNode.getCustomPermission() != null ? 
-                rootNode.getCustomPermission() : "wake." + moduleName + ".commands";
-
+        String basePermission = "wake." + moduleName + ".commands";
         if (!rootNode.isArgument()) {
             LiteralArgumentBuilder<CommandSourceStack> literalRoot = compileLiteralNode(plugin, rootNode, basePermission, moduleClass);
             commands.register(literalRoot.build(), rootNode.getDescription(), rootNode.getAliases());
@@ -77,32 +76,27 @@ public class WakeCommandManager {
             String currentPermissionPath,
             Class<? extends WakeModule> parentModuleClass,
             boolean isRoot) {
-
-        Class<? extends WakeModule> effectiveModuleClass = node.getModuleClass() != null ? node.getModuleClass() : parentModuleClass;
-        
+        Class<? extends WakeModule> nodeModuleClass = node.getModuleClass();
+        Class<? extends WakeModule> effectiveModuleClass = nodeModuleClass != null ? nodeModuleClass : parentModuleClass;
         String cleanName = node.getName().startsWith("-") ? node.getName().substring(1) : node.getName();
         String nodePermission;
-        if (node.getCustomPermission() != null) {
-            nodePermission = node.getCustomPermission();
-        } else if (isRoot || node.isArgument()) {
+        if (isRoot || node.isArgument()) {
             nodePermission = currentPermissionPath;
         } else {
             nodePermission = currentPermissionPath + "." + cleanName;
         }
-
         PermissionManager.registerPermission(nodePermission);
-
         ArgumentBuilder builder;
         if (node.isArgument()) {
             RequiredArgumentBuilder<CommandSourceStack, ?> argBuilder = Commands.argument(node.getName(), node.getArgumentType());
-            if (node.getCustomSuggester() != null) {
-                argBuilder.suggests(node.getCustomSuggester());
+            SuggestionProvider<CommandSourceStack> customSuggester = node.getCustomSuggester();
+            if (customSuggester != null) {
+                argBuilder.suggests(customSuggester);
             }
             builder = argBuilder;
         } else {
             builder = Commands.literal(node.getName());
         }
-
         builder.requires(source -> {
             CommandSourceStack css = (CommandSourceStack) source;
             boolean hasPerm = PermissionManager.hasAccess(css.getSender(), nodePermission);
@@ -112,74 +106,38 @@ public class WakeCommandManager {
             }
             return true;
         });
-
-        if (node.getExecutor() != null) {
+        CommandNode.NodeExecutor executor = node.getExecutor();
+        if (executor != null) {
             builder.executes(ctx -> {
                 CommandSourceStack source = (CommandSourceStack) ctx.getSource();
                 CommandSender sender = source.getSender();
-
                 if (effectiveModuleClass != null && plugin.getModule(effectiveModuleClass) == null) {
-                    String moduleName = effectiveModuleClass.getSimpleName().replace("Module", "");
-                    plugin.getMessageManager().send(sender, "commands.module_not_loaded", Placeholder.parsed("module", moduleName));
+                    WakeModule registered = plugin.getRegisteredModule(effectiveModuleClass);
+                    String moduleName = registered != null ? registered.getId() : effectiveModuleClass.getSimpleName();
+                    plugin.getMessageManager().send(sender, "commands.base.module_not_loaded", Placeholder.unparsed("module", moduleName));
                     return 0;
                 }
-
-                Object target = null;
-                switch (node.getTargetType()) {
-                    case SENDER -> target = sender;
-                    case PLAYER -> {
-                        if (!(sender instanceof Player p)) {
-                            plugin.getMessageManager().send(sender, "commands.only_players");
-                            return 0;
-                        }
-                        target = p;
-                    }
-                    case ENTITY -> {
-                        Entity t = source.getExecutor();
-                        if (t == null) {
-                            if (sender instanceof Entity e) {
-                                t = e;
-                            } else {
-                                plugin.getMessageManager().send(sender, "commands.only_entities");
-                                return 0;
-                            }
-                        }
-                        if (t instanceof Player p) {
-                            Entity rayTraceTarget = p.getTargetEntity(16);
-                            if (rayTraceTarget instanceof Boat boat) {
-                                t = boat;
-                            }
-                        }
-                        target = t;
-                    }
-                    case ENTITY_NO_SMART -> {
-                        Entity t = source.getExecutor();
-                        if (t == null) {
-                            if (sender instanceof Entity e) {
-                                t = e;
-                            } else {
-                                plugin.getMessageManager().send(sender, "commands.only_entities");
-                                return 0;
-                            }
-                        }
-                        target = t;
-                    }
+                Object target = node.getTargetType().resolve(source, plugin);
+                if (target == null) {
+                    return 0;
                 }
-
+                UUID previousActor = plugin.getDatabaseManager().currentActor();
                 try {
-                    return node.getExecutor().execute(source, target, (CommandContext<CommandSourceStack>) ctx);
+                    plugin.getDatabaseManager().setActor(sender);
+                    return executor.execute(target, (CommandContext<CommandSourceStack>) ctx);
                 } catch (Exception e) {
                     plugin.getLogger().log(Level.SEVERE, "Error executing command: " + node.getName(), e);
+                    plugin.getMessageManager().send(sender, "commands.error");
                     return 0;
+                } finally {
+                    plugin.getDatabaseManager().restoreActor(previousActor);
                 }
             });
         }
-
         for (CommandNode child : node.getChildren()) {
             ArgumentBuilder childCompiled = compileNode(plugin, child, nodePermission, effectiveModuleClass, false);
             builder.then(childCompiled);
         }
-
         return builder;
     }
 }

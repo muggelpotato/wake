@@ -1,0 +1,47 @@
+package dev.muggel.wake.features.obu.commands;
+
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.commands.CommandHelper;
+import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.features.obu.service.SandboxPurger;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import org.bukkit.command.CommandSender;
+import org.jspecify.annotations.NonNull;
+
+import java.util.Locale;
+
+public class ConfigCommand {
+    public static final String STATE_KEY_PERSISTENT_STATES = "obu.persistent_player_states";
+
+    public static @NonNull CommandNode getNode(Wake plugin) {
+        return CommandNode.literal("-settings")
+                .withDescription("Adjusts server-side OBU module settings")
+                .addSubcommand(CommandHelper.toggleCommand(plugin, "persistence", STATE_KEY_PERSISTENT_STATES, "words.feature.persistent_states"))
+                .addSubcommand(CommandNode.literal("keep-unused-sandboxes")
+                        .arguments(CommandNode.argument("duration", StringArgumentType.string())
+                                .executesSender((ctx, sender) -> executeKeepUnused(ctx, plugin))));
+    }
+
+    private static int executeKeepUnused(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
+        CommandSender sender = ctx.getSource().getSender();
+        String raw = StringArgumentType.getString(ctx, "duration");
+        long millis = SandboxPurger.parseKeepMillis(raw);
+        if (millis < 0) {
+            plugin.getMessageManager().send(sender, "commands.obu.config.invalid_duration", Placeholder.unparsed("input", raw));
+            return 0;
+        }
+        String normalized = raw.trim().toLowerCase(Locale.ROOT);
+        plugin.getStateDao().set(SandboxPurger.STATE_KEY_KEEP_UNUSED, normalized);
+        OBUCommandHelper.module(plugin).schedulePurgerSweep();
+        if (millis == 0) {
+            plugin.getMessageManager().send(sender, "commands.obu.config.purge_disabled");
+        } else {
+            plugin.getMessageManager().send(sender, "commands.obu.config.purge_set", Placeholder.unparsed("duration", normalized));
+        }
+        return Command.SINGLE_SUCCESS;
+    }
+}

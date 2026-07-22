@@ -15,7 +15,6 @@ public class PlayerHitBoostpadEvent extends Event {
     private final double forceX;
     private final double forceY;
     private final double forceZ;
-
     public PlayerHitBoostpadEvent(Player player, Boat boat, Block block, double forceX, double forceY, double forceZ) {
         this.player = player;
         this.boat = boat;
@@ -29,10 +28,12 @@ public class PlayerHitBoostpadEvent extends Event {
         return player;
     }
 
+    @SuppressWarnings("unused")
     public Boat getBoat() {
         return boat;
     }
 
+    @SuppressWarnings("unused")
     public Block getBlock() {
         return block;
     }
@@ -49,6 +50,7 @@ public class PlayerHitBoostpadEvent extends Event {
         return forceZ;
     }
 
+    @SuppressWarnings("unused")
     public static HandlerList getHandlerList() {
         return HANDLERS;
     }

@@ -12,13 +12,20 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.jspecify.annotations.NonNull;
 
 import java.io.File;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Resolves message keys from {@code lang/en_us.yml} into components and sends them. <br>
+ * Understands MiniMessage and Wake's semantic color tags ({@code <primary>}, {@code <danger>}, ...) and the {@code <prefix>} placeholder. <br>
+ * See the package documentation for the text rules.
+ */
 public class MessageManager {
     private final Wake plugin;
     private YamlConfiguration config;
     private final MiniMessage miniMessage;
     private TagResolver cachedPrefixResolver;
-
+    private final Set<String> warnedMissingKeys = ConcurrentHashMap.newKeySet();
     public MessageManager(Wake plugin) {
         this.plugin = plugin;
         TagResolver colorResolver = TagResolver.builder()
@@ -31,14 +38,12 @@ public class MessageManager {
                 .tag("muted_dark", Tag.styling(WakeColors.MUTED_DARK))
                 .tag("overridden", Tag.styling(WakeColors.OVERRIDDEN))
                 .build();
-                
         this.miniMessage = MiniMessage.builder()
                 .tags(TagResolver.builder()
                         .resolver(StandardTags.defaults())
                         .resolver(colorResolver)
                         .build())
                 .build();
-                
         reload();
     }
 
@@ -56,7 +61,6 @@ public class MessageManager {
         } else {
             this.config = new YamlConfiguration();
         }
-        
         String prefixRaw = config.getString("prefix", "<gray>[<blue>Wake</blue>] </gray>");
         this.cachedPrefixResolver = Placeholder.component("prefix", miniMessage.deserialize(prefixRaw));
     }
@@ -64,6 +68,9 @@ public class MessageManager {
     public Component getComponent(String key, TagResolver... resolvers) {
         String raw = config.getString(key);
         if (raw == null) {
+            if (warnedMissingKeys.add(key)) {
+                plugin.getLogger().warning("Missing message key in language file: " + key);
+            }
             return Component.text("Missing message: " + key);
         }
         if (raw.contains("<prefix>") && !key.equals("prefix") && cachedPrefixResolver != null) {
@@ -72,6 +79,10 @@ public class MessageManager {
             System.arraycopy(resolvers, 0, newResolvers, 1, resolvers.length);
             return miniMessage.deserialize(raw, newResolvers);
         }
+        return miniMessage.deserialize(raw, resolvers);
+    }
+
+    public Component deserialize(String raw, TagResolver... resolvers) {
         return miniMessage.deserialize(raw, resolvers);
     }
 

@@ -8,28 +8,25 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
-import dev.muggel.wake.Wake;
-import io.papermc.paper.command.brigadier.MessageComponentSerializer;
+import dev.muggel.wake.core.commands.CommandHelper;
 import io.papermc.paper.command.brigadier.argument.CustomArgumentType;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+/**
+ * Any enum as an argument (case-insensitive input). <br>
+ * Parses to the uppercase name. <br>
+ * Use for closed sets of choices instead of validating a raw word in the executor.
+ */
 public class WakeEnumArgumentType<T extends Enum<T>> implements CustomArgumentType<String, String> {
     private final List<String> validNames;
-
-    private static final DynamicCommandExceptionType INVALID_ENUM = new DynamicCommandExceptionType(
-            obj -> {
-                Component comp = Wake.getPlugin(Wake.class).getMessageManager().getComponent("commands.invalid_option",
-                        Placeholder.unparsed("input", String.valueOf(obj)));
-                return MessageComponentSerializer.message().serialize(comp);
-            }
-    );
+    private static final DynamicCommandExceptionType INVALID_ENUM = ArgumentHelper.localizedException("commands.invalid_option");
 
     private WakeEnumArgumentType(@NonNull Class<T> enumClass) {
         this.validNames = Arrays.stream(enumClass.getEnumConstants())
@@ -37,7 +34,8 @@ public class WakeEnumArgumentType<T extends Enum<T>> implements CustomArgumentTy
                 .collect(Collectors.toList());
     }
 
-    public static <T extends Enum<T>> WakeEnumArgumentType<T> wakeEnum(Class<T> enumClass) {
+    @Contract("_ -> new")
+    public static <T extends Enum<T>> @NonNull WakeEnumArgumentType<T> wakeEnum(Class<T> enumClass) {
         return new WakeEnumArgumentType<>(enumClass);
     }
 
@@ -56,15 +54,11 @@ public class WakeEnumArgumentType<T extends Enum<T>> implements CustomArgumentTy
             throw INVALID_ENUM.createWithContext(reader, input);
         }
 
-        return input.toUpperCase();
+        return input.toUpperCase(Locale.ROOT);
     }
 
     @Override
     public <S> @NonNull CompletableFuture<Suggestions> listSuggestions(@NonNull CommandContext<S> context, @NonNull SuggestionsBuilder builder) {
-        String remaining = builder.getRemaining().toLowerCase();
-        validNames.stream()
-                .filter(s -> s.toLowerCase().startsWith(remaining))
-                .forEach(builder::suggest);
-        return builder.buildFuture();
+        return CommandHelper.suggestMatching(builder, validNames);
     }
 }

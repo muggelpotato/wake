@@ -10,6 +10,15 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Registers the permission nodes. <br>
+ * 1. An explicit {@code false} on a node or any parent denies <br>
+ * 2. The node itself granted allows <br>
+ * 3. A granted child also allows, so permission to a sub-command reveals the path leading to it <br>
+ * 4. All nodes default to OP <br>
+ * Never construct permission strings elsewhere.
+ * This class only ever sees what {@link WakeCommandManager} derives from the command tree.
+ */
 public class PermissionManager {
     private static final Set<String> REGISTERED_PERMISSIONS = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
@@ -20,36 +29,25 @@ public class PermissionManager {
             perm = new Permission(permissionStr, PermissionDefault.OP);
             Bukkit.getPluginManager().addPermission(perm);
         }
-
         int lastDot = permissionStr.lastIndexOf('.');
         if (lastDot > 0) {
             String parentStr = permissionStr.substring(0, lastDot);
             Permission parentPerm = registerPermission(parentStr);
-
             if (!parentPerm.getChildren().containsKey(permissionStr)) {
                 parentPerm.getChildren().put(permissionStr, true);
                 parentPerm.recalculatePermissibles();
             }
         }
-
         return perm;
     }
-
-    /**
-     * 1. any parent node set to false -> access denied
-     * 2. node set to true -> access granted
-     * 3. any child permission of this parent node true -> access granted
-     */
 
     public static boolean hasAccess(CommandSender sender, String permissionNode) {
         if (sender == null || permissionNode == null || permissionNode.isEmpty()) {
             return true;
         }
-
-        // 1
         String[] parts = permissionNode.split("\\.");
         StringBuilder currentPath = new StringBuilder();
-        for (int i = 0; i < parts.length - 1; i++) {
+        for (int i = 0; i < parts.length; i++) {
             if (i > 0) currentPath.append(".");
             currentPath.append(parts[i]);
             String node = currentPath.toString();
@@ -57,13 +55,9 @@ public class PermissionManager {
                 return false;
             }
         }
-
-        // 2
         if (sender.hasPermission(permissionNode)) {
             return true;
         }
-
-        // 3 bottom-up check
         String prefix = permissionNode + ".";
         for (String registered : REGISTERED_PERMISSIONS) {
             if (registered.startsWith(prefix)) {
@@ -72,7 +66,6 @@ public class PermissionManager {
                 }
             }
         }
-
         return false;
     }
 }

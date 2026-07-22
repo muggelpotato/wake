@@ -5,43 +5,53 @@ import dev.muggel.wake.features.obu.OBUDefinition;
 import dev.muggel.wake.features.obu.api.OBUService;
 import dev.muggel.wake.features.obu.context.OBUContext;
 import dev.muggel.wake.features.obu.context.OBUSetting;
+import dev.muggel.wake.features.obu.context.OBUPlayerState;
 import dev.muggel.wake.features.obu.networking.PacketSender;
+import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.persistence.PersistentDataType;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
+import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
+import dev.muggel.wake.features.obu.OBUDao;
 
 public class OBUServiceImpl implements OBUService {
     private final Wake plugin;
     private final PacketSender packetSender;
     private final OBUContextManager contextManager;
-    private final Map<UUID, String> activeSandboxContexts = new HashMap<>();
-    private final Map<UUID, String> activeContexts = new HashMap<>();
+    private final Map<UUID, String> activeSandboxContexts = new ConcurrentHashMap<>();
+    private final Map<UUID, String> activeContexts = new ConcurrentHashMap<>();
     private final Map<UUID, Double> vehicleScaleCache = new ConcurrentHashMap<>();
     private final OBUSyncManager syncManager;
+    private final OBUDao dao;
 
-    public OBUServiceImpl(Wake plugin, PacketSender packetSender, OBUContextManager contextManager) {
+    public OBUServiceImpl(Wake plugin, PacketSender packetSender, OBUContextManager contextManager, OBUDao dao) {
         this.plugin = plugin;
         this.packetSender = packetSender;
         this.contextManager = contextManager;
+        this.dao = dao;
         this.syncManager = new OBUSyncManager(plugin, packetSender, contextManager, this);
     }
 
-    @Override
     public void resetPlayer(@NonNull Player player) {
         syncManager.clearLocalOverrides(player.getUniqueId());
     }
 
-    @Override
+    public boolean isEncodable(@NonNull OBUSetting setting) {
+        return packetSender.isEncodable(setting);
+    }
+
     public void cleanupPlayer(@NonNull Player player) {
         UUID uuid = player.getUniqueId();
         activeSandboxContexts.remove(uuid);
@@ -50,18 +60,14 @@ public class OBUServiceImpl implements OBUService {
         syncManager.cleanup(uuid);
     }
 
-    @Override
-    public void cleanupBoat(@NonNull Boat boat) {
-        UUID uuid = boat.getUniqueId();
+    public void cleanupVehicle(@NonNull UUID uuid) {
         vehicleScaleCache.remove(uuid);
         syncManager.cleanup(uuid);
     }
 
-    @Override
     public void applyDefaultContext(Player player) {
         setPlayerActiveSandbox(player, null);
         syncManager.clearLocalOverrides(player.getUniqueId());
-
         OBUContext defaultContext = contextManager.getContext("default");
         if (defaultContext != null) {
             applyContext(player, defaultContext);
@@ -69,18 +75,42 @@ public class OBUServiceImpl implements OBUService {
         syncManager.syncPlayer(player);
     }
 
-    @Override
     public void applyContext(@NonNull Player player, @NonNull OBUContext context) {
-        activeContexts.put(player.getUniqueId(), context.name());
-        syncManager.clearLocalOverrides(player.getUniqueId());
+        applyContext(player.getUniqueId(), context.name());
     }
 
-    @Override
+    public void resyncActiveSelection(@NonNull Player player) {
+        UUID uuid = player.getUniqueId();
+        String sandbox = getPlayerActiveSandbox(uuid);
+        if (sandbox != null) {
+            OBUContext ctx = contextManager.getContext(sandbox);
+            if (ctx == null || !ctx.isSandbox() || !uuid.equals(ctx.ownerUuid())) {
+                setPlayerActiveSandbox(player, null);
+                sandbox = null;
+            }
+        }
+        if (sandbox == null && contextManager.getContext(getActiveContextName(uuid)) == null) {
+            OBUContext def = contextManager.getContext("default");
+            if (def != null) {
+                applyContext(player, def);
+            }
+        }
+        syncManager.syncPlayer(player);
+    }
+
+    public void applyContext(UUID uuid, String contextName) {
+        activeContexts.put(uuid, contextName);
+        syncManager.clearLocalOverrides(uuid);
+        OBUContext context = contextManager.getContext(contextName);
+        if (context != null && context.isSandbox()) {
+            dao.updateSandboxAccessTime(contextName);
+        }
+    }
+
     public boolean applySetting(Entity target, OBUSetting setting) {
         if (!(target instanceof Player) && !(target instanceof Boat)) {
             return false;
         }
-
         if (setting.definition().isActionSetting()) {
             try {
                 if (target instanceof Player player) {
@@ -92,7 +122,7 @@ public class OBUServiceImpl implements OBUService {
                     }
                 }
             } catch (Exception e) {
-                plugin.getLogger().warning("Failed to send raw action setting: " + e.getMessage());
+                plugin.getLogger().log(Level.WARNING, "Failed to send raw action setting", e);
             }
             return true;
         }
@@ -116,66 +146,111 @@ public class OBUServiceImpl implements OBUService {
         return true;
     }
 
-    @Override
+    public @NonNull NamespacedKey boatContextKey() {
+        return new NamespacedKey(plugin, "obu_context");
+    }
+
+    public @Nullable String getBoatContextName(@NonNull Boat boat) {
+        return boat.getPersistentDataContainer().get(boatContextKey(), PersistentDataType.STRING);
+    }
+
     public void applyEntityContext(@NonNull Boat boat, String contextName) {
-        NamespacedKey key = new NamespacedKey(plugin, "obu_context");
+        NamespacedKey key = boatContextKey();
         syncManager.clearLocalOverrides(boat.getUniqueId());
-        
         if (contextName == null || contextName.equalsIgnoreCase("default")) {
             boat.getPersistentDataContainer().remove(key);
             syncManager.broadcastSync(boat);
             return;
         }
-
         OBUContext context = contextManager.getContext(contextName);
         if (context != null) {
             boat.getPersistentDataContainer().set(key, PersistentDataType.STRING, contextName);
+            if (context.isSandbox()) {
+                dao.updateSandboxAccessTime(contextName);
+            }
             syncManager.broadcastSync(boat);
         }
     }
 
-    @Override
-    public void createSandbox(String name) {
-        contextManager.createSandbox(name);
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
+    public boolean createSandbox(String name, UUID ownerUuid) {
+        return contextManager.createSandbox(name, ownerUuid);
     }
 
-    @Override
-    public void setPlayerActiveSandbox(Player player, String sandboxName) {
+    public @NonNull List<Player> deleteContextAndEvict(@NonNull String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        contextManager.deleteContext(lower);
+        List<Player> evicted = new ArrayList<>();
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (lower.equals(getPlayerActiveSandbox(online)) || lower.equalsIgnoreCase(getActiveContextName(online))) {
+                applyDefaultContext(online);
+                evicted.add(online);
+            }
+        }
+        return evicted;
+    }
+
+    public boolean publishSandbox(@NonNull String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        if (!contextManager.publishSandbox(lower)) {
+            return false;
+        }
+        for (Map.Entry<UUID, String> entry : Map.copyOf(activeSandboxContexts).entrySet()) {
+            if (entry.getValue().equals(lower)) {
+                activeSandboxContexts.remove(entry.getKey());
+                Player player = Bukkit.getPlayer(entry.getKey());
+                if (player != null) {
+                    syncManager.syncPlayer(player);
+                }
+            }
+        }
+        return true;
+    }
+
+    public void setPlayerActiveSandbox(@NonNull Player player, String sandboxName) {
+        setPlayerActiveSandbox(player.getUniqueId(), sandboxName);
+    }
+
+    public void setPlayerActiveSandbox(UUID uuid, String sandboxName) {
         if (sandboxName == null) {
-            activeSandboxContexts.remove(player.getUniqueId());
+            activeSandboxContexts.remove(uuid);
         } else {
-            activeSandboxContexts.put(player.getUniqueId(), sandboxName.toLowerCase());
+            String lower = sandboxName.toLowerCase(Locale.ROOT);
+            activeSandboxContexts.put(uuid, lower);
+            dao.updateSandboxAccessTime(lower);
         }
     }
 
-    @Override
-    public String getPlayerActiveSandbox(@NonNull Player player) {
-        return activeSandboxContexts.get(player.getUniqueId());
+    public @Nullable String getPlayerActiveSandbox(@NonNull Player player) {
+        return getPlayerActiveSandbox(player.getUniqueId());
     }
 
-    @Override
+    public @Nullable String getPlayerActiveSandbox(UUID uuid) {
+        return activeSandboxContexts.get(uuid);
+    }
+
     public String getActiveContextName(@NonNull Player player) {
-        return activeContexts.getOrDefault(player.getUniqueId(), "default");
+        return getActiveContextName(player.getUniqueId());
     }
 
-    @Override
+    public String getActiveContextName(UUID uuid) {
+        return activeContexts.getOrDefault(uuid, "default");
+    }
+
     public void broadcastBoatContext(Boat boat) {
         syncManager.broadcastSync(boat);
     }
 
-    @Override
     public void sendBoatContext(Boat boat, Player viewer) {
         syncManager.syncToViewer(boat, viewer);
     }
 
-    @Override
-    public Set<String> getSandboxNames() {
-        return contextManager.getSandboxNames();
-    }
-
-    @Override
     public OBUSyncManager getSyncManager() {
         return syncManager;
+    }
+
+    public OBUContextManager getContextManager() {
+        return contextManager;
     }
 
     @Override
@@ -187,7 +262,9 @@ public class OBUServiceImpl implements OBUService {
         }
         List<OBUSetting> truth = syncManager.calculateAbsoluteTruth(uuid);
         double scale = parseScaleFromTruth(truth);
-        vehicleScaleCache.put(uuid, scale);
+        if (scale != 1.0 && Bukkit.getEntity(uuid) != null) {
+            vehicleScaleCache.put(uuid, scale);
+        }
         return scale;
     }
 
@@ -201,13 +278,13 @@ public class OBUServiceImpl implements OBUService {
         }
     }
 
-    private double parseScaleFromTruth(List<OBUSetting> truth) {
-        if (truth != null) {
-            for (OBUSetting setting : truth) {
-                if (setting.definition() == OBUDefinition.setscale && setting.args().length > 0) {
+    private double parseScaleFromTruth(List<OBUSetting> absoluteTruth) {
+        if (absoluteTruth != null) {
+            for (OBUSetting setting : absoluteTruth) {
+                if (setting.definition() == OBUDefinition.setscale && !setting.args().isEmpty()) {
                     try {
-                        return Double.parseDouble(setting.args()[0]);
-                    } catch (Exception ignored) {}
+                        return Double.parseDouble(setting.args().getFirst());
+                    } catch (NumberFormatException ignored) {}
                 }
             }
         }
@@ -217,9 +294,17 @@ public class OBUServiceImpl implements OBUService {
     @Override
     public void applyRelativeImpulse(Player player, double x, double y, double z) {
         if (player == null) return;
-        OBUSetting setting = new OBUSetting(OBUDefinition.applyimpulserelative, new String[]{
+        OBUSetting setting = new OBUSetting(OBUDefinition.applyimpulserelative, Arrays.asList(
                 String.valueOf(x), String.valueOf(y), String.valueOf(z)
-        });
+        ));
         applySetting(player, setting);
+    }
+
+    public @Nullable OBUPlayerState getPlayerState(UUID uuid) {
+        return dao.getPlayerState(uuid);
+    }
+
+    public void savePlayerState(UUID uuid, String activeSandbox, String activeContext) {
+        dao.savePlayerState(uuid, activeSandbox, activeContext);
     }
 }

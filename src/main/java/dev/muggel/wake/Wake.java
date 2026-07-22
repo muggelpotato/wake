@@ -1,11 +1,12 @@
 package dev.muggel.wake;
 
 import dev.muggel.wake.core.commands.WakeCommandManager;
-import dev.muggel.wake.core.config.StateManager;
+import dev.muggel.wake.core.database.StateDao;
 import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.core.module.ModuleManager;
 import dev.muggel.wake.core.module.WakeModule;
 import dev.muggel.wake.core.registry.ServiceRegistry;
+import dev.muggel.wake.core.sync.SyncService;
 import dev.muggel.wake.features.drydock.DrydockModule;
 import dev.muggel.wake.features.obu.OBUModule;
 import dev.muggel.wake.features.base.BaseModule;
@@ -19,12 +20,16 @@ import net.kyori.adventure.text.Component;
 import org.jspecify.annotations.Nullable;
 import java.util.List;
 import java.util.Collections;
+import dev.muggel.wake.core.database.DatabaseManager;
+import java.util.logging.Level;
 
 public final class Wake extends JavaPlugin {
-    private static ServiceRegistry serviceRegistry;
+    private static final ServiceRegistry serviceRegistry = new ServiceRegistry();
     private ModuleManager moduleManager;
-    private StateManager stateManager;
+    private DatabaseManager databaseManager;
+    private StateDao stateDao;
     private MessageManager messageManager;
+    private SyncService syncService;
     public static ServiceRegistry getServiceRegistry() {
         return serviceRegistry;
     }
@@ -33,16 +38,22 @@ public final class Wake extends JavaPlugin {
     public void onEnable() {
         initPacketEvents();
         saveDefaultConfig();
-        this.stateManager = new StateManager(this);
+        this.databaseManager = new DatabaseManager(this);
+        try {
+            databaseManager.init();
+        } catch (Exception e) {
+            getLogger().log(Level.SEVERE, "Database initialization failed: disabling Wake", e);
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        this.stateDao = new StateDao(this);
         this.messageManager = new MessageManager(this);
-        serviceRegistry = new ServiceRegistry();
-        
         WakeCommandManager.init(this);
-        
         this.moduleManager = new ModuleManager(this);
         registerModules();
+        moduleManager.buildAllCommands();
         moduleManager.syncModules();
-        getLogger().info("Wake has been enabled");
+        this.syncService = new SyncService(this);
     }
 
     private void registerModules() {
@@ -63,26 +74,26 @@ public final class Wake extends JavaPlugin {
     @Override
     public void onDisable() {
         try {
-            if (stateManager != null) {
-                stateManager.saveSync();
-                stateManager.shutdown();
+            if (syncService != null) {
+                syncService.shutdown();
+                syncService = null;
             }
             if (moduleManager != null) {
                 moduleManager.disableAll();
                 moduleManager = null;
             }
         } finally {
-            try {
-                if (serviceRegistry != null) {
-                    serviceRegistry.unregisterAll();
-                    serviceRegistry = null;
-                }
-            } finally {
-                try {
-                    PacketEvents.getAPI().terminate();
-                } catch (IllegalStateException ignored) {}
-                getLogger().info("Wake has been disabled");
+            serviceRegistry.unregisterAll();
+            if (databaseManager != null) {
+                databaseManager.shutdown();
+                databaseManager = null;
             }
+            try {
+                PacketEvents.getAPI().terminate();
+            } catch (IllegalStateException e) {
+                getLogger().log(Level.WARNING, "Failed to terminate PacketEvents", e);
+            }
+            getLogger().info("Wake has been disabled");
         }
     }
 
@@ -105,11 +116,27 @@ public final class Wake extends JavaPlugin {
         return moduleManager != null ? moduleManager.getModule(clazz) : null;
     }
 
-    public StateManager getStateManager() {
-        return stateManager;
+    public <T extends WakeModule> @Nullable T getRegisteredModule(Class<T> clazz) {
+        return moduleManager != null ? moduleManager.getRegisteredModule(clazz) : null;
+    }
+
+    public List<WakeModule> getLoadedModules() {
+        return moduleManager != null ? moduleManager.getActiveModules() : Collections.emptyList();
+    }
+
+    public DatabaseManager getDatabaseManager() {
+        return databaseManager;
+    }
+
+    public StateDao getStateDao() {
+        return stateDao;
     }
 
     public MessageManager getMessageManager() {
         return messageManager;
+    }
+
+    public @Nullable SyncService getSyncService() {
+        return syncService;
     }
 }

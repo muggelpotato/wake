@@ -1,22 +1,29 @@
 package dev.muggel.wake.core.module;
 
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.commands.WakeCommandManager;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * Owns the module lifecycle. <br>
+ * {@link #syncModules()} compares {@code config.yml} with what is running and enables, disables, or reloads each module to match (at boot and on {@code /wake reload}). <br>
+ * {@link #getModule(Class)} returns an active module or {@code null}. Callers must tolerate {@code null}, because any module can be off.
+ */
 public final class ModuleManager {
     private final Wake plugin;
     private final List<WakeModule> registeredModules = new ArrayList<>();
-    private final Map<String, WakeModule> activeModules = new LinkedHashMap<>();
-
+    private final Map<String, WakeModule> activeModules = new ConcurrentHashMap<>();
     public ModuleManager(Wake plugin) {
         this.plugin = plugin;
     }
@@ -24,6 +31,15 @@ public final class ModuleManager {
     public void registerModule(WakeModule module) {
         if (!registeredModules.contains(module)) {
             registeredModules.add(module);
+        }
+    }
+
+    public void buildAllCommands() {
+        for (WakeModule module : registeredModules) {
+            CommandNode root = module.buildCommands(plugin);
+            if (root != null) {
+                WakeCommandManager.register(root);
+            }
         }
     }
 
@@ -63,7 +79,6 @@ public final class ModuleManager {
                     if (activeInstance != null) {
                         activeInstance.reload();
                     }
-                    plugin.getLogger().info("Module '" + id + "' has been reloaded");
                     feedback.add(plugin.getMessageManager().getComponent("commands.reload.reloaded", Placeholder.parsed("module", id)));
                 } else if (configuredEnabled) {
                     plugin.getLogger().warning("Module '" + id + "' is enabled in config but incompatible with this environment");
@@ -78,9 +93,10 @@ public final class ModuleManager {
     }
 
     public void disableAll() {
-        List<WakeModule> modulesToDisable = new ArrayList<>(activeModules.values());
-        Collections.reverse(modulesToDisable);
-        for (WakeModule module : modulesToDisable) {
+        List<WakeModule> ordered = new ArrayList<>(registeredModules);
+        Collections.reverse(ordered);
+        for (WakeModule module : ordered) {
+            if (!activeModules.containsKey(module.getId())) continue;
             try {
                 module.onDisable();
                 plugin.getLogger().info("Module '" + module.getId() + "' has been disabled");
@@ -99,6 +115,21 @@ public final class ModuleManager {
             }
         }
         return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T extends WakeModule> @Nullable T getRegisteredModule(Class<T> clazz) {
+        for (WakeModule module : registeredModules) {
+            if (clazz.isInstance(module)) {
+                return (T) module;
+            }
+        }
+        return null;
+    }
+
+    @Contract(" -> new")
+    public @NonNull List<WakeModule> getActiveModules() {
+        return new ArrayList<>(activeModules.values());
     }
 
     private boolean isModuleEnabled(String id) {

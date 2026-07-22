@@ -1,0 +1,71 @@
+config:
+  persistent_player_states: true
+  keep_unused_sandboxes: "30d"
+contexts:
+  default:
+    type: SERVER
+    settings:
+      setinterpolationten: "true"
+      collisionmode: "NO_ENTITIES"
+      setresetonworldload: "false"
+      allowaccelstacking: "false"
+      falldamage: "false"
+      stepwhilefalling: "true"
+      setmultistepping: "true"
+      fixdoublewaterelevation: "true"
+      sethoneycompat: "true"
+  harbour:
+    type: SERVER
+    settings:
+      defaultslipperiness: "0.98"
+      aircontrol: "true"
+      stepsize: "1"
+      jumpforce: "0.75"
+      setforwardaccel: "0.04"
+      setbackwardaccel: "0.03"
+      setturnforwardaccel: "0"
+      stepwhilefalling: "true"
+  parkour1:
+    type: SERVER
+    settings:
+      defaultslipperiness: "0.98"
+      aircontrol: "true"
+      stepsize: "1"
+      jumpforce: "0.75"
+      setforwardaccel: "0.04"
+      setbackwardaccel: "0.03"
+      setturnforwardaccel: "0"
+      stepwhilefalling: "true"
+      waterjumping: "true"
+  city:
+    type: SERVER
+    settings:
+      defaultslipperiness: "0.98"
+      aircontrol: "true"
+      stepsize: "1"
+      jumpforce: ".56"
+      setforwardaccel: "0.04"
+      setbackwardaccel: "0.03"
+      setturnforwardaccel: "0"
+      stepwhilefalling: "true"
+  mazewave:
+    type: SERVER
+    settings:
+      defaultslipperiness: ".98"
+      aircontrol: "true"
+      stepsize: "1"
+      jumpforce: "0.7"
+      setforwardaccel: "0.04"
+      setbackwardaccel: "0.03"
+      setturnforwardaccel: "0"
+      stepwhilefalling: "true"
+  example:
+    type: SERVER
+    settings:
+      jumpforce: "1"
+      aircontrol: "true"
+      blockslipperiness:
+        - "0.98 create:crushing_wheel, create:cogwheel, ice, packed_ice, blue_ice, avaritia:block_infinity"
+      setblocksetting:
+        - "WALLTAP_MULTIPLIER 1 stone, light_blue_concrete, blue_concrete"
+        - "JUMPS 2 stone"

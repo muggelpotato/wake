@@ -8,3 +8,9 @@ load: POSTWORLD
 authors: [muggel]
 website: https://muggel.dev
 softdepend: [AxiomPaper]
+
+libraries:
+  - com.zaxxer:HikariCP:5.1.0
+  - org.xerial:sqlite-jdbc:3.46.0.0
+  - org.mariadb.jdbc:mariadb-java-client:3.4.0
+  - redis.clients:jedis:5.1.5

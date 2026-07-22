@@ -1,6 +1,9 @@
 package dev.muggel.wake.features.obu.networking;
 
 import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.protocol.ConnectionState;
+import com.github.retrooper.packetevents.protocol.player.User;
+import com.github.retrooper.packetevents.wrapper.configuration.server.WrapperConfigServerPluginMessage;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPluginMessage;
 import dev.muggel.wake.features.obu.context.OBUSetting;
 import dev.muggel.wake.features.obu.OBUDefinition;
@@ -10,6 +13,7 @@ import org.jspecify.annotations.NonNull;
 import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.UUID;
 
 public class PacketSender {
@@ -18,14 +22,22 @@ public class PacketSender {
         writeSettingArgs(buf, setting.definition().types(), setting.args());
     }
 
-    private void writeSettingArgs(PacketByteBuf buf, @NonNull List<String> semanticTypes, String @NonNull [] rawArgs) throws IOException {
-        if (rawArgs.length < semanticTypes.size()) {
-            throw new IllegalArgumentException("Not enough arguments for setting. Expected: " + semanticTypes.size() + ", Got: " + rawArgs.length);
+    public boolean isEncodable(@NonNull OBUSetting setting) {
+        try {
+            writeSetting(new PacketByteBuf(), setting);
+            return true;
+        } catch (Exception e) {
+            return false;
         }
-        for (int i = 0; i < semanticTypes.size(); i++) {
-            String arg = rawArgs[i];
-            String type = semanticTypes.get(i).toLowerCase();
+    }
 
+    private void writeSettingArgs(PacketByteBuf buf, @NonNull List<String> types, @NonNull List<String> args) throws IOException {
+        if (args.size() < types.size()) {
+            throw new IllegalArgumentException("Not enough arguments for setting. Expected: " + types.size() + ", Got: " + args.size());
+        }
+        for (int i = 0; i < types.size(); i++) {
+            String arg = args.get(i);
+            String type = types.get(i).toLowerCase(Locale.ROOT);
             switch (type) {
                 case "float" -> buf.writeFloat(Float.parseFloat(arg));
                 case "boolean"-> {
@@ -35,14 +47,27 @@ public class PacketSender {
                     buf.writeBoolean(Boolean.parseBoolean(arg));
                 }
                 case "double" -> buf.writeDouble(Double.parseDouble(arg));
-                case "short" -> buf.writeShort(Short.parseShort(arg));
                 case "int" -> buf.writeInt(Integer.parseInt(arg));
-                case "byte" -> buf.writeByte(Byte.parseByte(arg));
+                case "byte" -> {
+                    int value = Integer.parseInt(arg);
+                    if (value < 0 || value > 255) {
+                        throw new IllegalArgumentException("Byte argument out of range: " + arg);
+                    }
+                    buf.writeByte((byte) value);
+                }
                 case "string", "context_id" -> buf.writeString(arg);
                 case "block_list" -> buf.writeString(formatBlockList(arg));
                 case "entity_list" -> buf.writeString(formatEntityList(arg));
-                case "setting_enum" -> buf.writeShort(OBUDefinition.PerBlockSetting.parse(arg));
-                case "collision_enum" -> buf.writeShort(OBUDefinition.CollisionMode.parse(arg));
+                case "setting_enum" -> {
+                    short id = OBUDefinition.PerBlockSetting.parse(arg);
+                    if (id < 0) throw new IllegalArgumentException("Unknown per-block setting: " + arg);
+                    buf.writeShort(id);
+                }
+                case "collision_enum" -> {
+                    short id = OBUDefinition.CollisionMode.parse(arg);
+                    if (id < 0) throw new IllegalArgumentException("Unknown collision mode: " + arg);
+                    buf.writeShort(id);
+                }
                 default -> throw new IllegalArgumentException("Unknown semantic type: " + type);
             }
         }
@@ -55,7 +80,7 @@ public class PacketSender {
             if (b.isEmpty()) continue;
             String trimmed = b.trim();
             if (!trimmed.contains(":")) {
-                trimmed = "minecraft:" + trimmed.toLowerCase();
+                trimmed = "minecraft:" + trimmed.toLowerCase(Locale.ROOT);
             }
             validBlocks.add(trimmed);
         }
@@ -76,7 +101,7 @@ public class PacketSender {
             } catch (IllegalArgumentException ignored) {}
 
             if (!isUuid && !trimmed.contains(":")) {
-                trimmed = "minecraft:" + trimmed.toLowerCase();
+                trimmed = "minecraft:" + trimmed.toLowerCase(Locale.ROOT);
             }
             validEntities.add(trimmed);
         }
@@ -104,7 +129,7 @@ public class PacketSender {
     public void sendRawSetting(Player player, OBUSetting setting) throws IOException {
         PacketByteBuf buf = new PacketByteBuf();
         writeSetting(buf, setting);
-        sendPrecompiledPacket(player, new WrapperPlayServerPluginMessage(OBUDefinition.CHANNEL_SETTINGS, buf.toBytes()));
+        sendPluginMessage(player, OBUDefinition.CHANNEL_SETTINGS, buf.toBytes());
     }
 
     public void sendSwitchContext(Player player, @NonNull String contextId) throws IOException {
@@ -144,7 +169,21 @@ public class PacketSender {
         PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet);
     }
 
+    public void sendPluginMessage(Player player, String channel, byte[] data) {
+        var user = PacketEvents.getAPI().getPlayerManager().getUser(player);
+        if (user == null) return;
+        sendPluginMessage(user, channel, data);
+    }
+
+    public void sendPluginMessage(@NonNull User user, String channel, byte[] data) {
+        if (user.getConnectionState() == ConnectionState.CONFIGURATION) {
+            user.sendPacket(new WrapperConfigServerPluginMessage(channel, data));
+        } else {
+            user.sendPacket(new WrapperPlayServerPluginMessage(channel, data));
+        }
+    }
+
     private void sendContextPacket(Player player, @NonNull PacketByteBuf buf) {
-        sendPrecompiledPacket(player, new WrapperPlayServerPluginMessage(OBUDefinition.CHANNEL_CONTEXT, buf.toBytes()));
+        sendPluginMessage(player, OBUDefinition.CHANNEL_CONTEXT, buf.toBytes());
     }
 }

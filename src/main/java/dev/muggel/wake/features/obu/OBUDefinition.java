@@ -1,12 +1,16 @@
 package dev.muggel.wake.features.obu;
 
+import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.Unmodifiable;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Collections;
 
 public enum OBUDefinition {
     reset(0, "settings", List.of(), (String[]) null),
@@ -45,27 +49,36 @@ public enum OBUDefinition {
     fixdoublewaterelevation(39, "settings", List.of("boolean"), "false"),
     setlateralslipperiness(40, "settings", List.of("float"), "1.0"),
     setbrakeslipperiness(41, "settings", List.of("float"), "1.0"),
-    applyimpulse(42, "settings", List.of("double", "double", "double"), (String[]) null),
-    applyimpulserelative(43, "settings", List.of("double", "double", "double"), (String[]) null),
+    applyimpulse(42, "settings", List.of("double", "double", "double"), List.of("x", "y", "z")),
+    applyimpulserelative(43, "settings", List.of("double", "double", "double"), List.of("x", "y", "z")),
     setmultistepping(44, "settings", List.of("boolean"), "false"),
     setmaxspeed(45, "settings", List.of("float"), "-1.0"),
     setmaxspeedresistance(46, "settings", List.of("float"), "0.0"),
     sethoneycompat(47, "settings", List.of("boolean"), "false");
 
+    public static final String CONTEXT_PERSONAL = "wake:personal";
+    public static final String CONTEXT_EMPTY = "wake:empty";
     public static final String CHANNEL_SETTINGS = "openboatutils:settings";
     public static final String CHANNEL_CONTEXT = "openboatutils:context";
     public static final String CHANNEL_CONFIGURATION = "openboatutils:configuration";
     public static final String CHANNEL_HANDSHAKE = "openboatutils:handshake";
-
+    public static final int LATEST_SUPPORTED_VERSION = 22;
+    public static final List<Integer> REJECTED_VERSIONS = List.of(8, 12, 15, 20, 21);
     private final int id;
     private final String channel;
     private final List<String> types;
+    private final List<String> argNames;
     private final String[] defaultValues;
 
     OBUDefinition(int id, String channel, List<String> types, String... defaultValues) {
+        this(id, channel, types, null, defaultValues);
+    }
+
+    OBUDefinition(int id, String channel, List<String> types, List<String> argNames, String... defaultValues) {
         this.id = id;
         this.channel = channel;
         this.types = types;
+        this.argNames = argNames;
         this.defaultValues = (defaultValues == null || defaultValues.length == 0 || defaultValues[0] == null) ? null : defaultValues;
     }
 
@@ -81,17 +94,26 @@ public enum OBUDefinition {
         return types;
     }
 
-    public String[] defaultValues() {
+    public @Nullable List<String> argNames() {
+        return argNames;
+    }
+
+    public String @Nullable [] defaultValues() {
         return defaultValues;
     }
 
-    public String commandName() {
+    @Contract(pure = true)
+    public @NonNull String commandName() {
         return name();
     }
 
-    public String getPermission() {
-        return "wake.obu.commands." + commandName();
+    public @NonNull @Unmodifiable List<String> splitInvocation(String raw) {
+        if (types.size() <= 1) {
+            return List.of(raw.trim());
+        }
+        return List.of(raw.trim().split("\\s+", types.size()));
     }
+
 
     public boolean isContextSetting() {
         return !isActionSetting();
@@ -109,21 +131,44 @@ public enum OBUDefinition {
         return this == blockslipperiness || this == removeblockslipperiness || this == setblocksetting || this == addcollisionfilter;
     }
 
-    public static OBUDefinition get(String commandName) {
-        if (commandName == null) return null;
-        String clean = commandName.toLowerCase(Locale.ROOT);
+    private static final Map<Integer, OBUDefinition> BY_ID = new HashMap<>();
+    private static final Map<String, OBUDefinition> BY_NAME = new HashMap<>();
+    private static final Set<String> REGISTERED_NAMES;
+
+    static {
         for (OBUDefinition def : values()) {
-            if (def.commandName().equals(clean)) {
-                return def;
-            }
+            BY_ID.put(def.id(), def);
+            BY_NAME.put(def.commandName(), def);
         }
-        return null;
+        REGISTERED_NAMES = Collections.unmodifiableSet(BY_NAME.keySet());
+    }
+
+    public static @Nullable OBUDefinition getById(int id) {
+        return BY_ID.get(id);
+    }
+
+    public static @Nullable OBUDefinition get(@Nullable String commandName) {
+        if (commandName == null) return null;
+        return BY_NAME.get(commandName.toLowerCase(Locale.ROOT));
     }
 
     public static Set<String> getRegisteredNames() {
-        return Arrays.stream(values())
-                .map(OBUDefinition::commandName)
-                .collect(Collectors.toSet());
+        return REGISTERED_NAMES;
+    }
+
+    public @NonNull String generateUniqueKey(List<String> args) {
+        if (canRepeat() && args != null && !args.isEmpty()) {
+            if (this == blockslipperiness) {
+                return id + ":" + (args.size() > 1 ? args.get(1) : "");
+            } else if (this == removeblockslipperiness) {
+                return id + ":" + args.getFirst();
+            } else if (this == setblocksetting) {
+                return id + ":" + args.get(0) + ":" + (args.size() > 2 ? args.get(2) : "");
+            } else if (this == addcollisionfilter) {
+                return id + ":" + args.getFirst();
+            }
+        }
+        return String.valueOf(id);
     }
 
     public enum PerBlockSetting {
@@ -140,13 +185,15 @@ public enum OBUDefinition {
         BRAKE_SLIPPERINESS(10),
         MAX_SPEED(11),
         MAX_SPEED_RESISTANCE(12);
-
-        private final int id;
-        PerBlockSetting(int id) { this.id = id; }
-        public int getId() { return id; }
+        private final short id;
+        PerBlockSetting(int id) { this.id = (short) id; }
 
         public static short parse(@NonNull String arg) {
-            return (short) valueOf(arg.toUpperCase(Locale.ROOT)).id;
+            try {
+                return valueOf(arg.toUpperCase(Locale.ROOT)).id;
+            } catch (IllegalArgumentException e) {
+                return -1;
+            }
         }
     }
 
@@ -156,13 +203,15 @@ public enum OBUDefinition {
         NO_ENTITIES(2),
         ENTITYTYPE_FILTER(3),
         NO_BOATS_OR_PLAYERS_PLUS_FILTER(4);
-
-        private final int id;
-        CollisionMode(int id) { this.id = id; }
-        public int getId() { return id; }
+        private final short id;
+        CollisionMode(int id) { this.id = (short) id; }
 
         public static short parse(@NonNull String arg) {
-            return (short) valueOf(arg.toUpperCase(Locale.ROOT)).id;
+            try {
+                return valueOf(arg.toUpperCase(Locale.ROOT)).id;
+            } catch (IllegalArgumentException e) {
+                return -1;
+            }
         }
     }
 
@@ -173,9 +222,9 @@ public enum OBUDefinition {
         STORE_CONTEXT(3),
         ENTITY_CONTEXT(4),
         COMPOUND(5);
-
         private final int id;
         ContextPacket(int id) { this.id = id; }
+
         public int getId() { return id; }
     }
 }

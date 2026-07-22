@@ -1,0 +1,177 @@
+package dev.muggel.wake.core.database;
+
+import co.aikar.idb.DB;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import dev.muggel.wake.Wake;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.util.logging.Level;
+
+/**
+ * Write-ahead journal used while the database is unreachable. <br>
+ * Replayed in order on recovery.
+ */
+public class OutageJournal {
+    private static final Gson GSON = new Gson();
+    private final Wake plugin;
+    private final File file;
+    private BufferedWriter writer;
+    public OutageJournal(@NonNull Wake plugin) {
+        this.plugin = plugin;
+        this.file = new File(plugin.getDataFolder(), "outage-journal.jsonl");
+    }
+
+    public boolean hasEntries() {
+        return file.isFile() && file.length() > 0;
+    }
+
+    public void append(String query, Object @NonNull ... params) {
+        JsonObject entry = new JsonObject();
+        entry.addProperty("q", query);
+        JsonArray encoded = new JsonArray();
+        for (Object param : params) {
+            encoded.add(encode(param));
+        }
+        entry.add("p", encoded);
+        try {
+            if (writer == null) {
+                writer = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8,
+                        StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            }
+            writer.write(GSON.toJson(entry));
+            writer.newLine();
+            writer.flush();
+        } catch (IOException e) {
+            plugin.getLogger().log(Level.SEVERE, "Failed to journal write for recovery (change will be lost): " + query, e);
+        }
+    }
+
+    public int replay() {
+        closeWriter();
+        if (!hasEntries()) {
+            return 0;
+        }
+        int replayed = 0;
+        long lineIndex = 0;
+        try (BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lineIndex++;
+                if (line.isBlank()) {
+                    continue;
+                }
+                try {
+                    JsonObject entry = JsonParser.parseString(line).getAsJsonObject();
+                    String query = entry.get("q").getAsString();
+                    JsonArray encoded = entry.getAsJsonArray("p");
+                    Object[] params = new Object[encoded.size()];
+                    for (int p = 0; p < params.length; p++) {
+                        params[p] = decode(encoded.get(p).getAsJsonObject());
+                    }
+                    DB.executeUpdate(query, params);
+                    replayed++;
+                } catch (Exception e) {
+                    if (DatabaseManager.isRetryableFailure(e)) {
+                        keepRemainderFrom(lineIndex - 1);
+                        plugin.getLogger().warning("Database dropped out during journal replay (remaining entries kept for next attempt)");
+                        return -1;
+                    }
+                    plugin.getLogger().log(Level.SEVERE, "Dropped unreplayable journal entry: " + line, e);
+                }
+            }
+        } catch (IOException e) {
+            // report failure so callers stay degraded and retry
+            plugin.getLogger().log(Level.SEVERE, "Failed to read outage journal (will retry)", e);
+            return -1;
+        }
+        deleteFile();
+        return replayed;
+    }
+
+    private void keepRemainderFrom(long fromLine) {
+        Path temp = file.toPath().resolveSibling(file.getName() + ".tmp");
+        try (BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8);
+             BufferedWriter remainder = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
+            String line;
+            long index = 0;
+            while ((line = reader.readLine()) != null) {
+                if (index++ >= fromLine) {
+                    remainder.write(line);
+                    remainder.newLine();
+                }
+            }
+        } catch (IOException e) {
+            plugin.getLogger().log(Level.SEVERE, "Failed to rewrite outage journal", e);
+            return;
+        }
+        try {
+            Files.move(temp, file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            plugin.getLogger().log(Level.SEVERE, "Failed to swap in rewritten outage journal", e);
+        }
+    }
+
+    private void deleteFile() {
+        try {
+            Files.deleteIfExists(file.toPath());
+        } catch (IOException e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to delete replayed outage journal", e);
+        }
+    }
+
+    public void closeWriter() {
+        if (writer != null) {
+            try {
+                writer.close();
+            } catch (IOException ignored) {
+            }
+            writer = null;
+        }
+    }
+
+    private @NonNull JsonObject encode(@Nullable Object param) {
+        JsonObject out = new JsonObject();
+        switch (param) {
+            case null -> out.addProperty("t", "n");
+            case Boolean b -> { out.addProperty("t", "b"); out.addProperty("v", b); }
+            case Integer i -> { out.addProperty("t", "i"); out.addProperty("v", i); }
+            case Long l -> { out.addProperty("t", "l"); out.addProperty("v", l); }
+            case Number d -> { out.addProperty("t", "d"); out.addProperty("v", d.doubleValue()); }
+            default -> {
+                if (!(param instanceof String)) {
+                    plugin.getLogger().warning("Journaling non-string parameter as text " + param.getClass().getSimpleName());
+                }
+                out.addProperty("t", "s");
+                out.addProperty("v", param.toString());
+            }
+        }
+        return out;
+    }
+
+    private static @Nullable Object decode(@NonNull JsonObject encoded) {
+        String type = encoded.get("t").getAsString();
+        JsonElement value = encoded.get("v");
+        return switch (type) {
+            case "n" -> null;
+            case "b" -> value.getAsBoolean();
+            case "i" -> value.getAsInt();
+            case "l" -> value.getAsLong();
+            case "d" -> value.getAsDouble();
+            default -> value.getAsString();
+        };
+    }
+}
