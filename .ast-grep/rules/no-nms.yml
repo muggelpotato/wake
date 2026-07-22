@@ -1,0 +1,14 @@
+id: no-nms
+language: Java
+severity: error
+message: NMS / server-internals import — Wake is Paper-API-only; go through PacketEvents for packets.
+note: |
+  CLAUDE.md (Architecture 4): No NMS. Paper API only; manipulate packets exclusively through
+  PacketEvents. `net.minecraft.*` (Mojang-mapped server) and `org.bukkit.craftbukkit.*`
+  (CraftBukkit internals) are version-locked and break across 1.21→1.26+. There is no sanctioned
+  exception — for packet access use `com.github.retrooper.packetevents`, and prefer a robust,
+  version-portable Paper API over a clever internal one.
+rule:
+  all:
+    - kind: import_declaration
+    - regex: '\b(net\.minecraft|org\.bukkit\.craftbukkit)\b'

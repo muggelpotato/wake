@@ -12,4 +12,8 @@ ignores:
 rule:
   any:
     - pattern: MiniMessage.miniMessage().deserialize($$$)
-    - pattern: $MM.deserialize($$$)
+    - all:
+        - pattern: $MM.deserialize($$$)
+        # getMessageManager().deserialize(...) is the sanctioned route — palette tags resolve there.
+        - not:
+            pattern: $P.getMessageManager().deserialize($$$)
