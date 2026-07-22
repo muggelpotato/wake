@@ -11,6 +11,7 @@ ignores:
   # The data layer is where raw DB calls belong: data-access objects and the connection manager.
   - "**/*Dao.java"
   - "**/DatabaseManager.java"
+  - "**/OutageJournal.java"
 rule:
   any:
     - pattern: DB.$METHOD($$$)

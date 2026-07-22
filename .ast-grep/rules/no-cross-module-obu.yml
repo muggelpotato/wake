@@ -1,0 +1,20 @@
+id: no-cross-module-obu
+language: Java
+severity: error
+message: Cross-module reach into obu internals — depend only on its published api/ package.
+note: |
+  CLAUDE.md (Architecture 1): a module never reaches into another module's internals. obu
+  publishes its surface in `features/obu/api/`; consume that (resolved defensively via the service
+  registry, tolerating absence — never cached), and nothing deeper. Only the composition root
+  (Wake.java) may name the concrete OBUModule to register it.
+ignores:
+  # Intra-module imports are unrestricted — a module owns its own internals.
+  - "**/features/obu/**"
+  # The composition root wires modules by concrete class.
+  - "**/Wake.java"
+rule:
+  all:
+    - kind: import_declaration
+    - regex: 'dev\.muggel\.wake\.features\.obu\.'
+    - not:
+        regex: 'dev\.muggel\.wake\.features\.obu\.api\.'

@@ -1,0 +1,20 @@
+id: no-cross-module-drydock
+language: Java
+severity: error
+message: Cross-module reach into drydock internals — depend only on its published api/ package.
+note: |
+  CLAUDE.md (Architecture 1): a module never reaches into another module's internals. drydock
+  publishes its surface in `features/drydock/api/`; consume that (resolved defensively via the
+  service registry, tolerating absence — never cached), and nothing deeper. Only the composition
+  root (Wake.java) may name the concrete DrydockModule to register it.
+ignores:
+  # Intra-module imports are unrestricted — a module owns its own internals.
+  - "**/features/drydock/**"
+  # The composition root wires modules by concrete class.
+  - "**/Wake.java"
+rule:
+  all:
+    - kind: import_declaration
+    - regex: 'dev\.muggel\.wake\.features\.drydock\.'
+    - not:
+        regex: 'dev\.muggel\.wake\.features\.drydock\.api\.'

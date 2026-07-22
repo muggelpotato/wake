@@ -53,6 +53,11 @@ Permissions are derived from command structure automatically — don't declare t
 or hand-write permission strings. Command handlers report failure to the user as a localized
 message, never an exception.
 
+File layout and helper conventions live in `core/commands/package-info.java` and are non-negotiable:
+one class per command node (`getNode` builds the tree, private methods hold the logic); sub-commands
+that would form a god-class grouped in their own package; shared helpers factored into `CommandHelper`
+(core), `<Module>CommandHelper` (module-wide), and `<Group>CommandHelper` (group-only).
+
 ## Player-facing text — always localized
 
 All text shown to a player goes through the message system with a key in the language file — never
