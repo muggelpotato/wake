@@ -5,6 +5,8 @@ import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.text.MessageManager;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
 import org.jspecify.annotations.NonNull;
@@ -69,5 +71,15 @@ public final class CommandHelper {
     public static void toggle(@NonNull Wake plugin, CommandSender sender, String featureKey, boolean enabled) {
         plugin.getMessageManager().send(sender, enabled ? "commands.base.toggle_enabled" : "commands.base.toggle_disabled",
                 Placeholder.component("name", plugin.getMessageManager().getComponent(featureKey)));
+    }
+
+    public static @NonNull String displayKey(@NonNull String key) {
+        return key.startsWith("minecraft:") ? key.substring("minecraft:".length()) : key;
+    }
+
+    public static @NonNull Component moduleDescription(@NonNull Wake plugin, @NonNull String moduleId, @NonNull CommandNode root) {
+        String key = "commands.help.module." + moduleId;
+        MessageManager mm = plugin.getMessageManager();
+        return mm.hasKey(key) ? mm.getComponent(key) : Component.text(root.getDescription());
     }
 }

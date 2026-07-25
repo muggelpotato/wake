@@ -11,6 +11,7 @@ Fully automatic prod test env: when `run/plugins/wake/config.yml` has `database.
 Switch backends in-game with `/server backend2` and `/server primary`
 
 ## Headless testing
+- **`python testenv/drills.py`** operational drills against primary. Add `--sync` for the cross-server drill (needs mariadb mode)
 - Primary has RCON enabled (`localhost:25575`, password `wake-dev`) so console commands
   can be driven from scripts; 
 - Paper2 answers to `docker exec wake-testenv-paper2-1 rcon-cli <cmd>`

@@ -12,6 +12,7 @@ ignores:
   - "**/*Dao.java"
   - "**/DatabaseManager.java"
   - "**/OutageJournal.java"
+  - "**/SchemaMigrator.java"
 rule:
   any:
     - pattern: DB.$METHOD($$$)

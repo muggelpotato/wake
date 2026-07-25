@@ -67,8 +67,8 @@ public class StatusCommand {
                 OBUContext defaultContext = contextManager.getContext("default");
                 List<OBUSetting> customSettings = new ArrayList<>(playerBase.settings());
                 List<OBUSetting> inheritedDefaultSettings = new ArrayList<>();
-                boolean isSandbox = activeSandbox != null;
-                if (!isSandbox && !playerBaseName.equalsIgnoreCase("default") && defaultContext != null) {
+                boolean blankSlate = activeSandbox != null;
+                if (!blankSlate && OBUContextManager.inheritsDefault(playerBase) && defaultContext != null) {
                     Set<String> customKeys = new HashSet<>();
                     for (OBUSetting s : customSettings) {
                         customKeys.add(s.getUniqueKey());

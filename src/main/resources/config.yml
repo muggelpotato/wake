@@ -1,4 +1,5 @@
 # whatever floats your boat
+language: en_us
 modules:
   base:
     enabled: true

@@ -186,9 +186,7 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
                 if (Wake.getServiceRegistry().get(OBUService.class) != obuService) {
                     return;
                 }
-                if (plugin.getDatabaseManager().isDegraded()) {
-                    plugin.getMessageManager().send(player, "database.degraded");
-                }
+                plugin.getDatabaseManager().notifyIfDegraded(player.getUniqueId());
                 String unstableTag = isUnstable ? " [UNSTABLE BUILD]" : "";
                 plugin.getLogger().info(player.getName() + " connected with OBU Version ID: " + versionId + unstableTag);
                 List<Integer> rejectedVersions = OBUDefinition.REJECTED_VERSIONS;

@@ -8,6 +8,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.plugin.Plugin;
 import org.jspecify.annotations.NonNull;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -19,7 +20,6 @@ import java.util.Locale;
 import java.util.logging.Level;
 
 public class AxiomModule extends AbstractModule {
-    private static final String DEFAULT_NAME_FORMAT = "<accent><bold><!italic>%s";
     private AxiomDao dao;
     public AxiomModule() {
         super("axiom");
@@ -37,15 +37,14 @@ public class AxiomModule extends AbstractModule {
         registerDao(dao);
         List<String> models = dao.loadDisplays();
         boolean wasEmpty = models.isEmpty();
-        String nameFormat = getPlugin().getStateDao().get("axiom.format", DEFAULT_NAME_FORMAT);
         if (!models.isEmpty()) {
-            registerDisplays(nameFormat, models);
+            registerDisplays(models);
         }
-        seedDataIfEmpty(wasEmpty, "axiom_default.yml", "Axiom Displays");
+        seedDataIfEmpty(wasEmpty, "defaults/axiom_default.yml", "Axiom Displays");
     }
 
     @SuppressWarnings("PatternValidation")
-    private void registerDisplays(String nameFormat, List<String> models) {
+    private void registerDisplays(List<String> models) {
         try {
             Class<?> apiClass = Class.forName("com.moulberry.axiom.paperapi.AxiomCustomDisplayAPI");
             Object apiInstance = apiClass.getMethod("getAPI").invoke(null);
@@ -61,8 +60,7 @@ public class AxiomModule extends AbstractModule {
                     String namespace = modelKey.getNamespace();
                     String itemId = modelKey.getKey();
                     String displayName = formatDisplayName(itemId);
-                    String formattedName = String.format(nameFormat, displayName);
-                    Component nameComponent = getPlugin().getMessageManager().deserialize(formattedName);
+                    Component nameComponent = getPlugin().getMessageManager().getComponent("axiom.display_name", Placeholder.unparsed("name", displayName));
                     ItemStack item = new ItemStack(Material.PAPER);
                     ItemMeta meta = item.getItemMeta();
                     if (meta != null) {
@@ -109,10 +107,9 @@ public class AxiomModule extends AbstractModule {
         if (currentDao == null || !Bukkit.getPluginManager().isPluginEnabled("AxiomPaper")) return;
         if (getPlugin().getDatabaseManager().isDegraded()) return;
         unregisterDisplays();
-        String nameFormat = getPlugin().getStateDao().get("axiom.format", DEFAULT_NAME_FORMAT);
         List<String> models = currentDao.loadDisplays();
         if (!models.isEmpty()) {
-            registerDisplays(nameFormat, models);
+            registerDisplays(models);
         }
     }
 

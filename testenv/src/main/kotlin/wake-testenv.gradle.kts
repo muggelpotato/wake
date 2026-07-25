@@ -18,7 +18,7 @@ fun composeRunner(composePath: String): (Array<out String>, (String) -> Unit) ->
             val p = ProcessBuilder(candidate, "--version").redirectErrorStream(true).start()
             p.inputStream.readAllBytes()
             p.waitFor() == 0
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     } ?: throw GradleException("Docker not found: it is required for the MariaDB test environment (testenv/)")
@@ -26,7 +26,7 @@ fun composeRunner(composePath: String): (Array<out String>, (String) -> Unit) ->
         val probe = ProcessBuilder(docker, "info", "--format", "{{.ServerVersion}}").redirectErrorStream(true).start()
         probe.inputStream.readAllBytes()
         probe.waitFor() == 0
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         false
     }
     if (!daemonReachable) {

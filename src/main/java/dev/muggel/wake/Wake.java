@@ -41,12 +41,12 @@ public final class Wake extends JavaPlugin {
         this.databaseManager = new DatabaseManager(this);
         try {
             databaseManager.init();
+            this.stateDao = new StateDao(this);
         } catch (Exception e) {
             getLogger().log(Level.SEVERE, "Database initialization failed: disabling Wake", e);
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
-        this.stateDao = new StateDao(this);
         this.messageManager = new MessageManager(this);
         WakeCommandManager.init(this);
         this.moduleManager = new ModuleManager(this);

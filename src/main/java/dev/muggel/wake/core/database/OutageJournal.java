@@ -13,12 +13,13 @@ import org.jspecify.annotations.Nullable;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.util.logging.Level;
 
 /**
@@ -29,7 +30,7 @@ public class OutageJournal {
     private static final Gson GSON = new Gson();
     private final Wake plugin;
     private final File file;
-    private BufferedWriter writer;
+    private FileOutputStream writer;
     public OutageJournal(@NonNull Wake plugin) {
         this.plugin = plugin;
         this.file = new File(plugin.getDataFolder(), "outage-journal.jsonl");
@@ -49,12 +50,10 @@ public class OutageJournal {
         entry.add("p", encoded);
         try {
             if (writer == null) {
-                writer = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8,
-                        StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                writer = new FileOutputStream(file, true);
             }
-            writer.write(GSON.toJson(entry));
-            writer.newLine();
-            writer.flush();
+            writer.write((GSON.toJson(entry) + "\n").getBytes(StandardCharsets.UTF_8));
+            writer.getFD().sync();
         } catch (IOException e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to journal write for recovery (change will be lost): " + query, e);
         }
@@ -105,7 +104,8 @@ public class OutageJournal {
     private void keepRemainderFrom(long fromLine) {
         Path temp = file.toPath().resolveSibling(file.getName() + ".tmp");
         try (BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8);
-             BufferedWriter remainder = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
+            FileOutputStream out = new FileOutputStream(temp.toFile())) {
+            BufferedWriter remainder = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
             String line;
             long index = 0;
             while ((line = reader.readLine()) != null) {
@@ -114,6 +114,8 @@ public class OutageJournal {
                     remainder.newLine();
                 }
             }
+            remainder.flush();
+            out.getFD().sync();
         } catch (IOException e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to rewrite outage journal", e);
             return;

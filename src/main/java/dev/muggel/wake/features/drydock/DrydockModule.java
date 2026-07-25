@@ -34,7 +34,7 @@ public class DrydockModule extends AbstractModule {
         this.detectorListener = new BoostpadDetectorListener(getPlugin(), drydockService);
         drydockService.setOnReloadCallback(this.detectorListener::updateRegistration);
         registerListener(new OBUBoostpadIntegration());
-        seedDataIfEmpty(wasEmpty, "drydock_default.yml", "Drydock");
+        seedDataIfEmpty(wasEmpty, "defaults/drydock_default.yml", "Drydock");
     }
 
     @Override

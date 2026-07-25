@@ -125,6 +125,7 @@ public abstract class AbstractModule implements WakeModule {
         plugin.getDatabaseManager().awaitWrites();
         File outFile = new File(exportDir, getExportFileName());
         YamlConfiguration yaml = new YamlConfiguration();
+        yaml.set("version", 1);
         int count = onExportData(yaml);
         yaml.save(outFile);
         return count;
@@ -182,6 +183,6 @@ public abstract class AbstractModule implements WakeModule {
     }
 
     protected String getDefaultDataFileName() {
-        return getId() + "_default.yml";
+        return "defaults/" + getId() + "_default.yml";
     }
 }

@@ -256,16 +256,7 @@ public class OBUServiceImpl implements OBUService {
     @Override
     public double getVehicleScale(UUID uuid) {
         if (uuid == null) return 1.0;
-        Double cached = vehicleScaleCache.get(uuid);
-        if (cached != null) {
-            return cached;
-        }
-        List<OBUSetting> truth = syncManager.calculateAbsoluteTruth(uuid);
-        double scale = parseScaleFromTruth(truth);
-        if (scale != 1.0 && Bukkit.getEntity(uuid) != null) {
-            vehicleScaleCache.put(uuid, scale);
-        }
-        return scale;
+        return vehicleScaleCache.getOrDefault(uuid, 1.0);
     }
 
     public void updateVehicleScaleCache(UUID uuid, List<OBUSetting> truth) {

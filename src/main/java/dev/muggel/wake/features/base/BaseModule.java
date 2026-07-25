@@ -4,6 +4,7 @@ import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.module.AbstractModule;
+import dev.muggel.wake.features.base.commands.HelpCommand;
 import dev.muggel.wake.features.base.commands.KillEmptyBoatsCommand;
 import dev.muggel.wake.features.base.commands.ReloadCommand;
 import dev.muggel.wake.features.base.listeners.BoatListener;
@@ -25,7 +26,7 @@ public class BaseModule extends AbstractModule {
     protected void onModuleEnable() {
         registerListener(new BoatListener(this));
         boolean wasEmpty = getPlugin().getStateDao().snapshot("base.").isEmpty();
-        seedDataIfEmpty(wasEmpty, "base_default.yml", "Base Configs");
+        seedDataIfEmpty(wasEmpty, "defaults/base_default.yml", "Base Configs");
     }
 
     @Override
@@ -34,6 +35,7 @@ public class BaseModule extends AbstractModule {
                 .withModule(BaseModule.class)
                 .withDescription("Main command for Wake")
                 .aliases("wa")
+                .addSubcommand(HelpCommand.getNode(plugin))
                 .addSubcommand(ReloadCommand.getNode(plugin))
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "killboatonexit", STATE_KEY_KILL_BOAT_ON_EXIT, "words.feature.auto_kill"))
                 .addSubcommand(KillEmptyBoatsCommand.getNode(plugin))

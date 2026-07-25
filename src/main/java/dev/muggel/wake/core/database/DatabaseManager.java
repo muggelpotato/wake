@@ -20,6 +20,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Locale;
@@ -29,7 +30,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -43,6 +46,7 @@ import java.util.logging.Level;
  */
 public class DatabaseManager {
     private static final long PROBE_INTERVAL_TICKS = 100;
+    private static final long WATCHDOG_DELAY_TICKS = 20;
     private final Wake plugin;
     private final ExecutorService writeExecutor;
     private final OutageJournal journal;
@@ -51,6 +55,12 @@ public class DatabaseManager {
     private final Set<UUID> notifiedActors = ConcurrentHashMap.newKeySet();
     private final Set<String> dirtyScopes = ConcurrentHashMap.newKeySet();
     private final AtomicInteger pendingWrites = new AtomicInteger();
+    private final AtomicLong completedWrites = new AtomicLong();
+    private final AtomicBoolean watchdogActive = new AtomicBoolean();
+    private volatile @Nullable UUID lastPendingActor;
+    private @Nullable HikariDataSource hikari;
+    private Dialect dialect = Dialect.SQLITE;
+    private SchemaMigrator schemaMigrator;
     public DatabaseManager(Wake plugin) {
         this.plugin = plugin;
         this.writeExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, plugin.getName() + "-DB-Writer"));
@@ -65,6 +75,7 @@ public class DatabaseManager {
         } else {
             String type = dbConfig.getString("type", "sqlite").toLowerCase(Locale.ROOT);
             if ("mariadb".equals(type) || "mysql".equals(type)) {
+                dialect = Dialect.MARIADB;
                 initMariaDB(dbConfig);
             } else {
                 initSQLite();
@@ -76,6 +87,7 @@ public class DatabaseManager {
         } catch (Exception e) {
             throw new IllegalStateException("Database connection test failed", e);
         }
+        this.schemaMigrator = new SchemaMigrator(plugin, dialect);
         if (journal.hasEntries()) {
             int replayed = journal.replay();
             if (replayed >= 0) {
@@ -91,9 +103,10 @@ public class DatabaseManager {
         try {
             Field field = BaseDatabase.class.getDeclaredField("dataSource");
             field.setAccessible(true);
-            if (field.get(DB.getGlobalDatabase()) instanceof HikariDataSource hikari) {
-                hikari.setConnectionTimeout(5000);
-                hikari.setValidationTimeout(2500);
+            if (field.get(DB.getGlobalDatabase()) instanceof HikariDataSource dataSource) {
+                dataSource.setConnectionTimeout(5000);
+                dataSource.setValidationTimeout(2500);
+                this.hikari = dataSource;
             }
         } catch (ReflectiveOperationException e) {
             plugin.getLogger().log(Level.WARNING, "Could not tighten pool timeouts", e);
@@ -126,7 +139,7 @@ public class DatabaseManager {
                         database,
                         host + ":" + port
                 )
-                .dsn("mariadb://" + host + ":" + port + "/" + database + "?socketTimeout=10000")
+                .dsn("mariadb://" + host + ":" + port + "/" + database + "?socketTimeout=3000")
                 .build();
         PooledDatabaseOptions poolOptions = PooledDatabaseOptions.builder()
                 .options(options)
@@ -137,7 +150,11 @@ public class DatabaseManager {
 
     public void queueWrite(String errorMessage, @Nullable String syncScope, @Nullable UUID actor, String query, Object... params) {
         notifyIfDegraded(actor);
+        if (actor != null) {
+            lastPendingActor = actor;
+        }
         pendingWrites.incrementAndGet();
+        armWatchdog();
         writeExecutor.execute(() -> {
             try {
                 if (degraded) {
@@ -157,11 +174,64 @@ public class DatabaseManager {
                     }
                 }
             } finally {
+                completedWrites.incrementAndGet();
                 if (pendingWrites.decrementAndGet() == 0) {
                     publishDirtyScopes();
                 }
             }
         });
+    }
+
+    // no write completes for 1s = independent probe connection (driver-enforced 1s hard cap) decides "backlogged but alive" or "outage"
+    private void armWatchdog() {
+        if (degraded || !watchdogActive.compareAndSet(false, true)) {
+            return;
+        }
+        scheduleWatchdog(completedWrites.get());
+    }
+
+    private void scheduleWatchdog(long lastCompleted) {
+        if (!plugin.isEnabled()) {
+            watchdogActive.set(false);
+            return;
+        }
+        try {
+            Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> watchdogCheck(lastCompleted), WATCHDOG_DELAY_TICKS);
+        } catch (IllegalPluginAccessException e) {
+            watchdogActive.set(false);
+        }
+    }
+
+    private void watchdogCheck(long lastCompleted) {
+        if (degraded || pendingWrites.get() == 0) {
+            watchdogActive.set(false);
+            return;
+        }
+        long completed = completedWrites.get();
+        if (completed != lastCompleted || probeConnectionAlive()) {
+            scheduleWatchdog(completed);
+            return;
+        }
+        watchdogActive.set(false);
+        plugin.getLogger().warning("Database unresponsive: entering degraded mode before the hung write times out");
+        enterDegraded(lastPendingActor);
+    }
+
+    private boolean probeConnectionAlive() {
+        HikariDataSource dataSource = this.hikari;
+        if (dataSource == null) {
+            try {
+                DB.getFirstColumn("SELECT 1");
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            return connection.isValid(1);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     public void setActor(CommandSender sender) {
@@ -180,6 +250,10 @@ public class DatabaseManager {
         return degraded;
     }
 
+    public SchemaMigrator getSchemaMigrator() {
+        return schemaMigrator;
+    }
+
     public void publishScope(String scope) {
         writeExecutor.execute(() -> {
             SyncService sync = plugin.getSyncService();
@@ -189,7 +263,7 @@ public class DatabaseManager {
         });
     }
 
-    private void notifyIfDegraded(@Nullable UUID actor) {
+    public void notifyIfDegraded(@Nullable UUID actor) {
         if (degraded && actor != null && notifiedActors.add(actor)) {
             sendLater(actor, "database.degraded");
         }
@@ -255,7 +329,6 @@ public class DatabaseManager {
         plugin.getLogger().info("Database recovered: replayed " + replayed + " journaled writes");
         SyncService syncService = plugin.getSyncService();
         if (syncService != null) {
-            // invalidations from other servers were dropped while degraded. reload local caches
             syncService.resyncAfterRecovery();
         }
         List<UUID> warned = List.copyOf(notifiedActors);
@@ -334,7 +407,7 @@ public class DatabaseManager {
     public void shutdown() {
         writeExecutor.shutdown();
         try {
-            // outlasts the 10s socket timeout
+            // outlasts the 3s socket timeout with margin
             // a write hung on a dead connection needs to fail to journal itself, and flip degraded to prevent writes from being dropped before shutdownNow
             if (!writeExecutor.awaitTermination(15, TimeUnit.SECONDS)) {
                 plugin.getLogger().warning("Timed out flushing pending database writes");

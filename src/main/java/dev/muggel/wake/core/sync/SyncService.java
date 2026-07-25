@@ -2,30 +2,40 @@ package dev.muggel.wake.core.sync;
 
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.module.WakeModule;
+import io.lettuce.core.ClientOptions;
+import io.lettuce.core.RedisClient;
+import io.lettuce.core.RedisURI;
+import io.lettuce.core.SocketOptions;
+import io.lettuce.core.api.StatefulRedisConnection;
+import io.lettuce.core.pubsub.RedisPubSubAdapter;
+import io.lettuce.core.pubsub.StatefulRedisPubSubConnection;
+import io.lettuce.core.resource.ClientResources;
+import io.lettuce.core.resource.DefaultClientResources;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.IllegalPluginAccessException;
+import org.bukkit.scheduler.BukkitTask;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
-import redis.clients.jedis.DefaultJedisClientConfig;
-import redis.clients.jedis.HostAndPort;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisClientConfig;
-import redis.clients.jedis.JedisPooled;
-import redis.clients.jedis.JedisPubSub;
 
+import java.time.Duration;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
 /**
  * Cross-server cache invalidation via Valkey/Redis pub-sub. <br>
  * After database writes, the dirty scope (usually a module id) is published and other servers reload just that scope. <br>
- * Only active when configured with a shared MariaDB database. Without it, publishing is a no-op.
+ * Only active when configured with a shared MariaDB database. <br>
+ * Lettuce owns reconnection and re-subscribes the channel by itself. <br>
+ * Every re-subscribe triggers a full local resync because invalidations may have been missed while disconnected.
  */
 public class SyncService {
     private static final String CHANNEL = "wake:sync";
-    private static final int TIMEOUT_MILLIS = 2000;
+    private static final int CONNECT_TIMEOUT_MILLIS = 2000;
+    private static final int COMMAND_TIMEOUT_MILLIS = 5000;
+    private static final long CONNECT_RETRY_TICKS = 100;
     public static final String SCOPE_STATE = "state";
     public static final String SCOPE_FULL = "full";
     private final Wake plugin;
@@ -34,10 +44,12 @@ public class SyncService {
     private volatile boolean running = false;
     private volatile boolean publishFailed = false;
     private volatile long lastFailedPublishMillis = 0;
-    private volatile boolean missedWhileDegraded = false;
-    private @Nullable JedisPooled publisher;
-    private volatile @Nullable Jedis subscriberConnection;
-    private @Nullable Thread subscriberThread;
+    private volatile @Nullable ClientResources resources;
+    private volatile @Nullable RedisClient client;
+    private volatile @Nullable StatefulRedisConnection<String, String> pubConnection;
+    private volatile boolean subscribedOnce = false;
+    private volatile boolean everFailedConnect = false;
+    private volatile @Nullable BukkitTask connectRetryTask;
     public SyncService(@NonNull Wake plugin) {
         this.plugin = plugin;
         ConfigurationSection config = plugin.getConfig().getConfigurationSection("sync");
@@ -53,17 +65,23 @@ public class SyncService {
         String host = config.getString("redis.host", "localhost");
         int port = config.getInt("redis.port", 6379);
         String password = config.getString("redis.password", "");
-        DefaultJedisClientConfig.Builder clientConfig = DefaultJedisClientConfig.builder()
-                .connectionTimeoutMillis(TIMEOUT_MILLIS)
-                .socketTimeoutMillis(TIMEOUT_MILLIS);
+        RedisURI.Builder uri = RedisURI.Builder.redis(host, port).withTimeout(Duration.ofMillis(COMMAND_TIMEOUT_MILLIS));
         if (!password.isEmpty()) {
-            clientConfig.password(password);
+            uri.withPassword(password.toCharArray());
         }
-        this.publisher = new JedisPooled(new HostAndPort(host, port), clientConfig.build());
+        ClientResources clientResources = DefaultClientResources.builder().ioThreadPoolSize(2).computationThreadPoolSize(2).build();
+        this.resources = clientResources;
+        RedisClient redisClient = RedisClient.create(clientResources, uri.build());
+        redisClient.setOptions(ClientOptions.builder()
+                .autoReconnect(true)
+                .disconnectedBehavior(ClientOptions.DisconnectedBehavior.REJECT_COMMANDS)
+                .socketOptions(SocketOptions.builder()
+                        .connectTimeout(Duration.ofMillis(CONNECT_TIMEOUT_MILLIS))
+                        .build())
+                .build());
+        this.client = redisClient;
         this.running = true;
-        this.subscriberThread = new Thread(() -> subscribeLoop(host, port, clientConfig.build()), plugin.getName() + "-Sync-Subscriber");
-        subscriberThread.setDaemon(true);
-        subscriberThread.start();
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, this::tryConnect);
         plugin.getLogger().info("Cross-server sync enabled (redis " + host + ":" + port + ")");
     }
 
@@ -72,71 +90,90 @@ public class SyncService {
         return "mariadb".equals(type) || "mysql".equals(type);
     }
 
+    private void tryConnect() {
+        RedisClient redisClient = this.client;
+        if (!running || redisClient == null) {
+            return;
+        }
+        StatefulRedisConnection<String, String> pub = null;
+        StatefulRedisPubSubConnection<String, String> sub = null;
+        try {
+            pub = redisClient.connect();
+            sub = redisClient.connectPubSub();
+            sub.addListener(new RedisPubSubAdapter<>() {
+                @Override
+                public void message(String channel, String message) {
+                    handleMessage(message);
+                }
+
+                @Override
+                public void subscribed(String channel, long count) {
+                    if (subscribedOnce) {
+                        plugin.getLogger().info("Sync subscriber reconnected: running a full resync");
+                        dispatch(SCOPE_FULL);
+                    }
+                    subscribedOnce = true;
+                }
+            });
+            if (everFailedConnect) {
+                subscribedOnce = true;
+            }
+            sub.async().subscribe(CHANNEL);
+            this.pubConnection = pub;
+        } catch (Exception e) {
+            if (sub != null) {
+                sub.close();
+            }
+            if (pub != null) {
+                pub.close();
+            }
+            if (!everFailedConnect) {
+                everFailedConnect = true;
+                plugin.getLogger().log(Level.WARNING, "Sync bus unreachable, retrying every 5s: " + e.getMessage());
+            }
+            scheduleConnectRetry();
+        }
+    }
+
+    private void scheduleConnectRetry() {
+        if (!running || !plugin.isEnabled()) {
+            return;
+        }
+        try {
+            connectRetryTask = Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, this::tryConnect, CONNECT_RETRY_TICKS);
+        } catch (IllegalPluginAccessException e) {
+            // nothing left to sync
+        }
+    }
+
+    private void handleMessage(@NonNull String message) {
+        int separator = message.indexOf('|');
+        if (separator < 0 || message.substring(0, separator).equals(serverId)) {
+            return;
+        }
+        dispatch(message.substring(separator + 1));
+    }
+
     public void publish(String scope) {
-        if (!enabled || publisher == null) {
+        if (!enabled) {
             return;
         }
         if (publishFailed && System.currentTimeMillis() - lastFailedPublishMillis < 5000) {
             return;
         }
         try {
+            StatefulRedisConnection<String, String> connection = pubConnection;
+            if (connection == null) {
+                throw new IllegalStateException("sync bus connection not established yet");
+            }
             String effectiveScope = publishFailed ? SCOPE_FULL : scope;
-            publisher.publish(CHANNEL, serverId + "|" + effectiveScope);
+            connection.sync().publish(CHANNEL, serverId + "|" + effectiveScope);
             publishFailed = false;
         } catch (Exception e) {
             lastFailedPublishMillis = System.currentTimeMillis();
             if (!publishFailed) {
                 publishFailed = true;
                 plugin.getLogger().log(Level.WARNING, "Sync publish failed: other servers resync when it recovers", e);
-            }
-        }
-    }
-
-    @SuppressWarnings("BusyWait")
-    private void subscribeLoop(String host, int port, JedisClientConfig clientConfig) {
-        boolean needResync = false;
-        int failures = 0;
-        long backoffMillis = 2000;
-        while (running) {
-            JedisPubSub subscription = new JedisPubSub() {
-                @Override
-                public void onMessage(String channel, @NonNull String message) {
-                    int separator = message.indexOf('|');
-                    if (separator < 0 || message.substring(0, separator).equals(serverId)) {
-                        return;
-                    }
-                    dispatch(message.substring(separator + 1));
-                }
-            };
-            try (Jedis jedis = new Jedis(new HostAndPort(host, port), clientConfig)) {
-                subscriberConnection = jedis;
-                if (!running) {
-                    return;
-                }
-                jedis.ping();
-                if (needResync) {
-                    dispatch(SCOPE_FULL);
-                    needResync = false;
-                }
-                failures = 0;
-                backoffMillis = 2000;
-                jedis.subscribe(subscription, CHANNEL);
-            } catch (Exception e) {
-                needResync = true;
-                if (running && (backoffMillis < 30000 || ++failures % 10 == 0)) {
-                    plugin.getLogger().warning("Sync subscriber disconnected (retrying): " + e.getMessage());
-                }
-            } finally {
-                subscriberConnection = null;
-            }
-            if (running) {
-                try {
-                    Thread.sleep(backoffMillis);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-                backoffMillis = Math.min(backoffMillis * 2, 30000);
             }
         }
     }
@@ -148,7 +185,6 @@ public class SyncService {
         try {
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (plugin.getDatabaseManager().isDegraded()) {
-                    missedWhileDegraded = true;
                     return;
                 }
                 if (SCOPE_STATE.equals(scope) || SCOPE_FULL.equals(scope)) {
@@ -171,12 +207,9 @@ public class SyncService {
         }
     }
 
-    /** Called after database recovery: replays any invalidation dropped while degraded as a full local resync */
+    /** Called after database recovery: local caches may predate the replayed journal and invalidations from other servers were dropped -> full local resync */
     public void resyncAfterRecovery() {
-        if (missedWhileDegraded) {
-            missedWhileDegraded = false;
-            dispatch(SCOPE_FULL);
-        }
+        dispatch(SCOPE_FULL);
     }
 
     private void reloadQuietly(WakeModule module) {
@@ -192,30 +225,25 @@ public class SyncService {
 
     public void shutdown() {
         running = false;
-        closeSubscriberConnection();
-        Thread thread = this.subscriberThread;
-        if (thread != null) {
-            thread.interrupt();
+        BukkitTask retryTask = this.connectRetryTask;
+        if (retryTask != null) {
+            retryTask.cancel();
+            this.connectRetryTask = null;
+        }
+        this.pubConnection = null;
+        RedisClient redisClient = this.client;
+        if (redisClient != null) {
+            redisClient.shutdown(0, 2, TimeUnit.SECONDS);
+            this.client = null;
+        }
+        ClientResources clientResources = this.resources;
+        if (clientResources != null) {
             try {
-                thread.join(3000);
+                clientResources.shutdown(0, 1, TimeUnit.SECONDS).await(1500, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            closeSubscriberConnection();
-        }
-        if (publisher != null) {
-            publisher.close();
-            publisher = null;
-        }
-    }
-
-    private void closeSubscriberConnection() {
-        Jedis connection = subscriberConnection;
-        if (connection != null) {
-            try {
-                connection.close();
-            } catch (Exception ignored) {
-            }
+            this.resources = null;
         }
     }
 }

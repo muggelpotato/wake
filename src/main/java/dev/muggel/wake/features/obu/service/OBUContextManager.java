@@ -152,8 +152,7 @@ public class OBUContextManager {
     }
 
     public static boolean inheritsDefault(@NonNull OBUContext context) {
-        return !context.isSandbox()
-                && !context.name().equalsIgnoreCase("default")
+        return !context.name().equalsIgnoreCase("default")
                 && !context.name().equals(OBUDefinition.CONTEXT_EMPTY);
     }
 }

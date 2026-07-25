@@ -13,7 +13,11 @@ import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bukkit.command.CommandSender;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -45,15 +49,26 @@ public class WakeCommandManager {
         });
     }
 
+    public static @NonNull List<CommandNode> getRegisteredRoots() {
+        List<CommandNode> roots = new ArrayList<>(REGISTERED_NODES.values());
+        roots.sort(Comparator.comparing(CommandNode::getName));
+        return roots;
+    }
+
+    public static @Nullable String moduleIdOf(Wake plugin, @NonNull CommandNode rootNode) {
+        Class<? extends WakeModule> moduleClass = rootNode.getModuleClass();
+        if (moduleClass == null) {
+            return "base";
+        }
+        WakeModule module = plugin.getRegisteredModule(moduleClass);
+        return module != null ? module.getId() : null;
+    }
+
     private static void compileAndRegister(Wake plugin, Commands commands, @NonNull CommandNode rootNode) {
         Class<? extends WakeModule> moduleClass = rootNode.getModuleClass();
-        String moduleName = "base";
-        if (moduleClass != null) {
-            WakeModule module = plugin.getRegisteredModule(moduleClass);
-            if (module == null) {
-                throw new IllegalStateException("Command '" + rootNode.getName() + "' is bound to unregistered module class " + moduleClass.getSimpleName());
-            }
-            moduleName = module.getId();
+        String moduleName = moduleIdOf(plugin, rootNode);
+        if (moduleName == null) {
+            throw new IllegalStateException("Command '" + rootNode.getName() + "' is bound to unregistered module class " + (moduleClass != null ? moduleClass.getSimpleName() : "?"));
         }
         String basePermission = "wake." + moduleName + ".commands";
         if (!rootNode.isArgument()) {
@@ -70,6 +85,7 @@ public class WakeCommandManager {
         return (LiteralArgumentBuilder<CommandSourceStack>) compileNode(plugin, node, currentPermissionPath, parentModuleClass, true);
     }
 
+    @SuppressWarnings("ExtractMethodRecommender")
     private static @NonNull ArgumentBuilder<CommandSourceStack, ?> compileNode(
             Wake plugin,
             @NonNull CommandNode node,

@@ -3,6 +3,11 @@
 -- source so injected SQL resolves without a live database connection. Keep in sync by hand when a
 -- DAO's getTableSchemas() changes.
 
+CREATE TABLE IF NOT EXISTS wake_schema_version (
+    module VARCHAR(64) PRIMARY KEY,
+    version INT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS wake_state (
     state_key VARCHAR(255) PRIMARY KEY,
     state_value TEXT

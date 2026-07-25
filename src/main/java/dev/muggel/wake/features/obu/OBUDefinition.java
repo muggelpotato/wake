@@ -104,7 +104,7 @@ public enum OBUDefinition {
 
     @Contract(pure = true)
     public @NonNull String commandName() {
-        return name();
+        return this == reset ? "-reset" : name();
     }
 
     public @NonNull @Unmodifiable List<String> splitInvocation(String raw) {

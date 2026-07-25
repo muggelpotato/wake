@@ -66,19 +66,23 @@ public class OBUSyncManager {
     }
 
     public List<OBUSetting> calculateAbsoluteTruth(UUID uuid) {
+        boolean blankSlate = false;
         String contextName = obuService.getPlayerActiveSandbox(uuid);
-        if (contextName == null) {
+        if (contextName != null) {
+            blankSlate = true;
+        } else {
             contextName = obuService.getActiveContextName(uuid);
         }
         Entity entity = Bukkit.getEntity(uuid);
         if (entity instanceof Boat boat) {
             contextName = obuService.getBoatContextName(boat);
+            blankSlate = false;
         }
         Map<String, OBUSetting> absoluteTruth = new HashMap<>();
         if (contextName != null) {
             OBUContext context = contextManager.getContext(contextName);
             if (context != null) {
-                if (OBUContextManager.inheritsDefault(context)) {
+                if (!blankSlate && OBUContextManager.inheritsDefault(context)) {
                     OBUContext defaults = contextManager.getContext("default");
                     if (defaults != null) {
                         for (OBUSetting setting : defaults.settings()) {

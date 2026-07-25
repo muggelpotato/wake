@@ -3,6 +3,7 @@ package dev.muggel.wake.features.drydock.commands.boostpad;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.features.drydock.api.BoostpadConfig;
 import dev.muggel.wake.features.drydock.api.DrydockService;
@@ -39,7 +40,7 @@ public class BoostpadListCommand {
                 first = false;
                 String key = config.enabled() ? "commands.drydock.boostpad.item_enabled" : "commands.drydock.boostpad.item_disabled";
                 Component itemComp = plugin.getMessageManager().getComponent(key,
-                        Placeholder.unparsed("block", config.blockKey()),
+                        Placeholder.unparsed("block", CommandHelper.displayKey(config.blockKey())),
                         Placeholder.unparsed("x", String.format("%.2f", config.forceX())),
                         Placeholder.unparsed("y", String.format("%.2f", config.forceY())),
                         Placeholder.unparsed("z", String.format("%.2f", config.forceZ())),

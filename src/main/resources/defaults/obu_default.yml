@@ -65,7 +65,7 @@ contexts:
       jumpforce: "1"
       aircontrol: "true"
       blockslipperiness:
-        - "0.98 create:crushing_wheel, create:cogwheel, ice, packed_ice, blue_ice, avaritia:block_infinity"
+        - "0.98 create:crushing_wheel, create:cogwheel, minecraft:ice, packed_ice, blue_ice, avaritia:block_infinity"
       setblocksetting:
         - "WALLTAP_MULTIPLIER 1 stone, light_blue_concrete, blue_concrete"
         - "JUMPS 2 stone"

@@ -83,7 +83,7 @@ public class OBUModule extends AbstractModule {
                 }
             }
         });
-        seedDataIfEmpty(wasEmpty, "obu_default.yml", "OBU");
+        seedDataIfEmpty(wasEmpty, "defaults/obu_default.yml", "OBU");
     }
 
     @Override
@@ -91,7 +91,7 @@ public class OBUModule extends AbstractModule {
         CommandNode obuRootNode = CommandNode.literal("wakeobu")
                 .withModule(OBUModule.class)
                 .withDescription("OpenBoatUtils settings and configuration")
-                .aliases("wobu")
+                .aliases("wobu", "wo")
                 .addSubcommand(HelpCommand.getNode(plugin))
                 .addSubcommand(StatusCommand.getNode(plugin))
                 .addSubcommand(DefaultsCommand.getNode(plugin))

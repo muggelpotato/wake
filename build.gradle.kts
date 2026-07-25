@@ -1,3 +1,4 @@
+@file:Suppress("VulnerableLibrariesLocal")
 plugins {
     id("java-library")
     id("xyz.jpenilla.run-paper") version "3.0.2"
@@ -19,7 +20,7 @@ dependencies {
     compileOnly("com.zaxxer:HikariCP:5.1.0")
     compileOnly("org.xerial:sqlite-jdbc:3.46.0.0")
     compileOnly("org.mariadb.jdbc:mariadb-java-client:3.4.0")
-    compileOnly("redis.clients:jedis:5.1.5")
+    compileOnly("io.lettuce:lettuce-core:6.8.2.RELEASE")
     implementation("co.aikar:idb-core:1.0.0-SNAPSHOT")
     implementation("co.aikar:idb-bukkit:1.0.0-SNAPSHOT")
 }
