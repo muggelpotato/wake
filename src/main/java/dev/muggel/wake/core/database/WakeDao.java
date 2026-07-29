@@ -1,23 +1,32 @@
 package dev.muggel.wake.core.database;
 
 import co.aikar.idb.DB;
+import co.aikar.idb.DbRow;
 import co.aikar.idb.DbStatement;
 import dev.muggel.wake.Wake;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * The base class for a module's data access. <br>
- * 1. Declare tables in {@code getTableSchemas()}, keep an in-memory cache in your fields, and write through {@code asyncUpdate(...)} <br>
- * 2. Update the cache first, the SQL runs later on the writer thread <br>
- * 3. Keep SQL parameterized and portable across SQLite and MariaDB <br>
- * 4. Register instances via the module's {@code registerDao(...)} so database reset covers them
+ * 1. Declare tables in {@code getTableSchemas()} <br>
+ * 2. Mirror one with {@code mirror(table, loader)} and read/write to it only through {@link CachedStore} (it caches, persists and announces) <br>
+ * 3. Unmirrored tables go through {@code asyncUpdate(...)}, or {@code asyncUpdateLocal(...)} if no other server cares <br>
+ * 4. Keep SQL parameterized and portable across SQLite and MariaDB <br>
+ * 5. Register instances via the module's {@code registerDao(...)} so database reset covers them
  */
 public abstract class WakeDao {
+    private static final int KEY_CHUNK = 500;
     protected final Wake plugin;
+    private final List<CachedStore<?>> mirrors = new ArrayList<>();
     protected WakeDao(Wake plugin) {
         this.plugin = plugin;
     }
@@ -85,11 +94,15 @@ public abstract class WakeDao {
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to reset tables for " + schemaId(), e);
         }
+        for (CachedStore<?> store : mirrors) {
+            store.clearLocal();
+            store.announceWholeScope("Failed to announce a reset of " + schemaId(), List.of());
+        }
     }
 
     protected void asyncUpdate(String errorMessage, String query, Object... params) {
         DatabaseManager db = plugin.getDatabaseManager();
-        db.queueWrite(errorMessage, syncScope(), db.currentActor(), query, params);
+        db.queueWrite(errorMessage, syncScope(), db.currentActor(), List.of(new SqlStatement(query, params)));
     }
 
     protected void asyncUpdateFor(UUID subject, String errorMessage, String query, Object... params) {
@@ -100,5 +113,41 @@ public abstract class WakeDao {
     protected void asyncUpdateLocal(String errorMessage, String query, Object... params) {
         DatabaseManager db = plugin.getDatabaseManager();
         db.queueWrite(errorMessage, null, db.currentActor(), query, params);
+    }
+
+    /** The in-memory mirror of one of this DAO's tables */
+    protected <V> @NonNull CachedStore<V> mirror(@NonNull String table, CachedStore.@NonNull Loader<V> loader) {
+        CachedStore<V> store = new CachedStore<>(plugin, syncScope(), table, loader);
+        mirrors.add(store);
+        return store;
+    }
+
+    public final void releaseMirrors() {
+        for (CachedStore<?> store : mirrors) {
+            plugin.getDatabaseManager().releaseMirror(store);
+        }
+        mirrors.clear();
+    }
+
+    protected static void selectByKeys(@NonNull String query, @NonNull String keyColumn, @Nullable Set<String> keys, @NonNull RowConsumer consumer) throws SQLException {
+        if (keys == null) {
+            for (DbRow row : DB.getResults(query)) {
+                consumer.accept(row);
+            }
+            return;
+        }
+        List<String> all = List.copyOf(keys);
+        for (int from = 0; from < all.size(); from += KEY_CHUNK) {
+            List<String> chunk = all.subList(from, Math.min(from + KEY_CHUNK, all.size()));
+            String filter = " WHERE " + keyColumn + " IN (" + String.join(",", Collections.nCopies(chunk.size(), "?")) + ")";
+            for (DbRow row : DB.getResults(query + filter, chunk.toArray())) {
+                consumer.accept(row);
+            }
+        }
+    }
+
+    @FunctionalInterface
+    protected interface RowConsumer {
+        void accept(@NonNull DbRow row) throws SQLException;
     }
 }

@@ -1,0 +1,18 @@
+id: no-default-locale-format
+language: Java
+severity: error
+message: Locale-dependent formatting — pass Locale.ROOT so the output does not follow the host's locale.
+note: |
+  CLAUDE.md (Data & persistence / Player-facing text): a value Wake prints is also a value Wake parses
+  back. String.format without a Locale follows the JVM default, so a comma-decimal host renders a
+  boostpad force as "1,00" — which /dd boostpad add then refuses. The same applies to case folding:
+  toLowerCase() on a Turkish host maps 'I' to a dotless 'i', silently breaking context and setting
+  name lookups. Always pass Locale.ROOT.
+rule:
+  any:
+    - all:
+        - pattern: String.format($FMT, $$$ARGS)
+        - not:
+            pattern: String.format(Locale.$LOCALE, $$$REST)
+    - pattern: $STR.toLowerCase()
+    - pattern: $STR.toUpperCase()

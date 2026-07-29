@@ -74,57 +74,43 @@ public class BoostpadDetectorListener implements Listener {
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onVehicleMove(@NonNull VehicleMoveEvent event) {
         Map<Material, BoostpadConfig> materialConfigs = drydockService.getBoostpadConfigs();
-        if (materialConfigs.isEmpty()) {
-            return;
-        }
-        if (!(event.getVehicle() instanceof Boat boat)) {
+        if (materialConfigs.isEmpty() || !(event.getVehicle() instanceof Boat boat)) {
             return;
         }
         var passengers = boat.getPassengers();
         if (passengers.isEmpty() || !(passengers.getFirst() instanceof Player player)) {
             return;
         }
-        BoundingBox box = boat.getBoundingBox();
-        double halfWidth = (box.getMaxX() - box.getMinX()) / 2.0;
-        double halfLength = (box.getMaxZ() - box.getMinZ()) / 2.0;
-        UUID boatId = boat.getUniqueId();
-        double scale = OBUBoostpadIntegration.getVehicleScale(boatId);
-        if (scale != 1.0 && scale > 0) {
-            halfWidth *= scale;
-            halfLength *= scale;
+        List<PadHit> hits = findHits(boat, event, materialConfigs);
+        if (!hits.isEmpty()) {
+            fireBoosts(boat, player, hits);
         }
+    }
+
+    private @NonNull List<PadHit> findHits(@NonNull Boat boat, @NonNull VehicleMoveEvent event, @NonNull Map<Material, BoostpadConfig> materialConfigs) {
+        BoundingBox box = boat.getBoundingBox();
+        double scale = OBUBoostpadIntegration.getVehicleScale(boat.getUniqueId());
+        double sizing = scale != 1.0 && scale > 0 ? scale : 1.0;
+        double halfWidth = (box.getMaxX() - box.getMinX()) / 2.0 * sizing;
+        double halfLength = (box.getMaxZ() - box.getMinZ()) / 2.0 * sizing;
         World world = boat.getWorld();
-        Location to = event.getTo();
         Location from = event.getFrom();
-        Vector toVec = to.toVector();
+        Vector toVec = event.getTo().toVector();
         Vector fromVec = from.getWorld() == world ? from.toVector() : toVec;
-        double maxOffsetMultiplier = Math.max(0.0, drydockService.getMaxOffsetMultiplier());
-        double reachX = halfWidth * (1.0 + maxOffsetMultiplier);
-        double reachZ = halfLength * (1.0 + maxOffsetMultiplier);
-        int minX = (int) Math.floor(Math.min(fromVec.getX(), toVec.getX()) - reachX);
-        int maxX = (int) Math.floor(Math.max(fromVec.getX(), toVec.getX()) + reachX);
-        int minZ = (int) Math.floor(Math.min(fromVec.getZ(), toVec.getZ()) - reachZ);
-        int maxZ = (int) Math.floor(Math.max(fromVec.getZ(), toVec.getZ()) + reachZ);
-        int yMin = (int) Math.floor(Math.min(fromVec.getY(), toVec.getY()) - 0.85);
-        int yMax = (int) Math.floor(Math.max(fromVec.getY(), toVec.getY()) - 0.85);
-        if ((long) (maxX - minX + 1) * (maxZ - minZ + 1) * (yMax - yMin + 1) > MAX_SCAN_BLOCKS) {
+        double reach = 1.0 + Math.max(0.0, drydockService.getMaxOffsetMultiplier());
+        ScanBox scan = scanBox(fromVec, toVec, halfWidth * reach, halfLength * reach);
+        if (scan.blocks() > MAX_SCAN_BLOCKS) {
             fromVec = toVec;
-            minX = (int) Math.floor(toVec.getX() - reachX);
-            maxX = (int) Math.floor(toVec.getX() + reachX);
-            minZ = (int) Math.floor(toVec.getZ() - reachZ);
-            maxZ = (int) Math.floor(toVec.getZ() + reachZ);
-            yMin = (int) Math.floor(toVec.getY() - 0.85);
-            yMax = yMin;
+            scan = scanBox(toVec, toVec, halfWidth * reach, halfLength * reach);
         }
         List<PadHit> hits = null;
-        for (int y = yMin; y <= yMax; y++) {
-            for (int x = minX; x <= maxX; x++) {
-                for (int z = minZ; z <= maxZ; z++) {
+        for (int y = scan.minY(); y <= scan.maxY(); y++) {
+            for (int x = scan.minX(); x <= scan.maxX(); x++) {
+                for (int z = scan.minZ(); z <= scan.maxZ(); z++) {
                     if (!world.isChunkLoaded(x >> 4, z >> 4)) {
                         continue;
                     }
-                    Material mat = world.getType(x, y, z);
-                    BoostpadConfig config = materialConfigs.get(mat);
+                    BoostpadConfig config = materialConfigs.get(world.getType(x, y, z));
                     if (config == null) {
                         continue;
                     }
@@ -144,19 +130,29 @@ public class BoostpadDetectorListener implements Listener {
                 }
             }
         }
-        if (hits == null) {
-            return;
-        }
+        return hits == null ? List.of() : hits;
+    }
+
+    private static @NonNull ScanBox scanBox(@NonNull Vector from, @NonNull Vector to, double reachX, double reachZ) {
+        return new ScanBox(
+                (int) Math.floor(Math.min(from.getX(), to.getX()) - reachX),
+                (int) Math.floor(Math.max(from.getX(), to.getX()) + reachX),
+                (int) Math.floor(Math.min(from.getZ(), to.getZ()) - reachZ),
+                (int) Math.floor(Math.max(from.getZ(), to.getZ()) + reachZ),
+                (int) Math.floor(Math.min(from.getY(), to.getY()) - 0.85),
+                (int) Math.floor(Math.max(from.getY(), to.getY()) - 0.85));
+    }
+
+    private void fireBoosts(@NonNull Boat boat, @NonNull Player player, @NonNull List<PadHit> hits) {
         hits.sort(Comparator.comparingDouble(PadHit::fraction));
+        World world = boat.getWorld();
         long now = System.currentTimeMillis();
-        Map<String, Long> boatCooldowns = lastBoostTimes.computeIfAbsent(boatId, k -> new HashMap<>());
+        Map<String, Long> boatCooldowns = lastBoostTimes.computeIfAbsent(boat.getUniqueId(), k -> new HashMap<>());
         boolean firedJumpPad = false;
         for (PadHit hit : hits) {
             BoostpadConfig config = hit.config();
-            if (config.forceY() > 0) {
-                if (firedJumpPad || !boat.isOnGround() || boat.getVelocity().getY() < -0.1) {
-                    continue;
-                }
+            if (config.forceY() > 0 && (firedJumpPad || !boat.isOnGround() || boat.getVelocity().getY() < -0.1)) {
+                continue;
             }
             Long lastBoost = boatCooldowns.get(config.blockKey());
             if (lastBoost != null && (now - lastBoost) < config.delayMs()) {
@@ -173,4 +169,10 @@ public class BoostpadDetectorListener implements Listener {
     }
 
     private record PadHit(double fraction, BoostpadConfig config, int x, int y, int z) {}
+
+    private record ScanBox(int minX, int maxX, int minZ, int maxZ, int minY, int maxY) {
+        long blocks() {
+            return (long) (maxX - minX + 1) * (maxZ - minZ + 1) * (maxY - minY + 1);
+        }
+    }
 }

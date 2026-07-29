@@ -1,5 +1,7 @@
 package dev.muggel.wake.features.obu.service;
 
+import dev.muggel.wake.core.database.CachedStore;
+import dev.muggel.wake.core.database.SqlStatement;
 import dev.muggel.wake.features.obu.OBUDefinition;
 import dev.muggel.wake.features.obu.context.OBUContext;
 import dev.muggel.wake.features.obu.context.OBUContext.ContextType;
@@ -10,43 +12,70 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 public class OBUContextManager {
+    public static final String DEFAULT_CONTEXT = "default";
     private final OBUDao dao;
-    private volatile Map<String, OBUContext> contexts = Map.of();
-    private volatile Set<String> sandboxes = Set.of();
+    private final CachedStore<OBUContext> contexts;
     public OBUContextManager(OBUDao dao) {
         this.dao = dao;
+        this.contexts = dao.contexts();
         loadContexts();
     }
 
     public void loadContexts() {
-        Map<String, OBUContext> loaded = new ConcurrentHashMap<>(dao.loadAllContexts());
-        if (!loaded.containsKey("default")) {
-            loaded.put("default", new OBUContext("default", ContextType.SERVER, null, List.of()));
-            dao.saveContext("default", ContextType.SERVER, null);
-        }
-        loaded.put(OBUDefinition.CONTEXT_EMPTY, new OBUContext(OBUDefinition.CONTEXT_EMPTY, ContextType.SERVER, null, List.of()));
-        Set<String> loadedSandboxes = ConcurrentHashMap.newKeySet();
-        for (OBUContext ctx : loaded.values()) {
-            if (ctx.isSandbox()) {
-                loadedSandboxes.add(ctx.name());
+        contexts.load();
+        ensureDefault();
+    }
+
+    public void reloadAsync(@Nullable Consumer<Set<String>> afterApply) {
+        contexts.reloadAsync(changed -> {
+            ensureDefault();
+            if (afterApply != null) {
+                afterApply.accept(changed);
             }
+        });
+    }
+
+    private void ensureDefault() {
+        if (contexts.isLoaded() && !contexts.containsKey(DEFAULT_CONTEXT)) {
+            dao.saveContext(new OBUContext(DEFAULT_CONTEXT, ContextType.SERVER, null, List.of()), List.of());
         }
-        this.contexts = loaded;
-        this.sandboxes = loadedSandboxes;
     }
 
     public Set<String> getContextNames() {
-        return Collections.unmodifiableSet(contexts.keySet());
+        return contexts.keys();
+    }
+
+    public record ContextCounts(int serverContexts, int sandboxes) {
+        public int total() {
+            return serverContexts + sandboxes;
+        }
+    }
+
+    public @Nullable ContextCounts countContexts() {
+        if (!contexts.isLoaded()) {
+            return null;
+        }
+        int serverContexts = 0;
+        int sandboxes = 0;
+        for (OBUContext context : contexts.view().values()) {
+            if (isInternal(context.name())) {
+                continue;
+            }
+            if (context.isSandbox()) {
+                sandboxes++;
+            } else {
+                serverContexts++;
+            }
+        }
+        return new ContextCounts(serverContexts, sandboxes);
     }
 
     public @Nullable OBUContext getContext(@NonNull String name) {
@@ -68,18 +97,13 @@ public class OBUContextManager {
         if (isReserved(displayName(lower)) || contexts.containsKey(lower)) {
             return false;
         }
-        contexts.put(lower, new OBUContext(lower, ContextType.SANDBOX, ownerUuid, List.of()));
-        sandboxes.add(lower);
-        dao.saveContext(lower, ContextType.SANDBOX, ownerUuid);
-        dao.updateSandboxAccessTime(lower);
+        dao.saveContext(new OBUContext(lower, ContextType.SANDBOX, ownerUuid, List.of()), List.of());
         return true;
     }
 
     public void deleteContext(@NonNull String name) {
         String lower = name.toLowerCase(Locale.ROOT);
         if (isReserved(lower)) return;
-        contexts.remove(lower);
-        sandboxes.remove(lower);
         dao.deleteContext(lower);
     }
 
@@ -91,15 +115,7 @@ public class OBUContextManager {
         if (!display.equals(lower) && (isReserved(display) || contexts.containsKey(display))) {
             return false;
         }
-
-        contexts.remove(lower);
-        sandboxes.remove(lower);
-        contexts.put(display, new OBUContext(display, ContextType.SERVER, null, context.settings()));
-        dao.deleteContext(lower);
-        dao.saveContext(display, ContextType.SERVER, null);
-        for (OBUSetting setting : context.settings()) {
-            dao.saveSetting(display, setting);
-        }
+        dao.renameContext(lower, new OBUContext(display, ContextType.SERVER, null, context.settings()));
         return true;
     }
 
@@ -110,11 +126,7 @@ public class OBUContextManager {
         List<OBUSetting> settings = new ArrayList<>(context.settings());
         settings.removeIf(s -> s.getUniqueKey().equals(setting.getUniqueKey()));
         settings.add(setting);
-        contexts.put(lower, new OBUContext(lower, context.type(), context.ownerUuid(), settings));
-        dao.saveSetting(lower, setting);
-        if (sandboxes.contains(lower)) {
-            dao.updateSandboxAccessTime(lower);
-        }
+        dao.saveContext(new OBUContext(lower, context.type(), context.ownerUuid(), settings), List.of(dao.settingUpsert(lower, setting)));
     }
 
     public void addSettings(@NonNull String name, @NonNull List<OBUSetting> newSettings) {
@@ -124,13 +136,11 @@ public class OBUContextManager {
         LinkedHashMap<String, OBUSetting> merged = new LinkedHashMap<>();
         for (OBUSetting s : context.settings()) merged.put(s.getUniqueKey(), s);
         for (OBUSetting s : newSettings) merged.put(s.getUniqueKey(), s);
-        contexts.put(lower, new OBUContext(lower, context.type(), context.ownerUuid(), new ArrayList<>(merged.values())));
+        List<SqlStatement> settingWrites = new ArrayList<>();
         for (OBUSetting s : newSettings) {
-            dao.saveSetting(lower, s);
+            settingWrites.add(dao.settingUpsert(lower, s));
         }
-        if (sandboxes.contains(lower)) {
-            dao.updateSandboxAccessTime(lower);
-        }
+        dao.saveContext(new OBUContext(lower, context.type(), context.ownerUuid(), new ArrayList<>(merged.values())), settingWrites);
     }
 
     public boolean removeContextSetting(@NonNull String name, String uniqueKey) {
@@ -138,21 +148,27 @@ public class OBUContextManager {
         OBUContext context = contexts.get(lower);
         if (context == null) return false;
         List<OBUSetting> settings = new ArrayList<>(context.settings());
-        boolean removed = settings.removeIf(s -> s.getUniqueKey().equals(uniqueKey));
-        if (removed) {
-            contexts.put(lower, new OBUContext(lower, context.type(), context.ownerUuid(), settings));
-            dao.deleteSetting(lower, uniqueKey);
-            return true;
+        if (!settings.removeIf(s -> s.getUniqueKey().equals(uniqueKey))) {
+            return false;
         }
-        return false;
+        dao.saveContext(new OBUContext(lower, context.type(), context.ownerUuid(), settings),
+                List.of(dao.settingDelete(lower, uniqueKey)));
+        return true;
     }
 
     public static boolean isReserved(@NonNull String lower) {
-        return lower.equals("default") || lower.equals(OBUDefinition.CONTEXT_EMPTY) || lower.equals(OBUDefinition.CONTEXT_PERSONAL);
+        return lower.equals(DEFAULT_CONTEXT) || isInternal(lower);
+    }
+
+    public static boolean isInternal(@NonNull String name) {
+        return name.equals(OBUDefinition.CONTEXT_EMPTY) || name.equals(OBUDefinition.CONTEXT_PERSONAL);
+    }
+
+    public static boolean inheritsDefault(@NonNull String name) {
+        return !name.equalsIgnoreCase(DEFAULT_CONTEXT) && !name.equals(OBUDefinition.CONTEXT_EMPTY);
     }
 
     public static boolean inheritsDefault(@NonNull OBUContext context) {
-        return !context.name().equalsIgnoreCase("default")
-                && !context.name().equals(OBUDefinition.CONTEXT_EMPTY);
+        return inheritsDefault(context.name());
     }
 }

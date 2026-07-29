@@ -8,6 +8,7 @@ import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.commands.arguments.NameArgumentType;
 import dev.muggel.wake.features.obu.OBUDefinition;
 import dev.muggel.wake.features.obu.context.OBUContext;
 import dev.muggel.wake.features.obu.context.OBUSetting;
@@ -30,13 +31,13 @@ import java.util.function.Predicate;
 public class ClearCommand {
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("-clear")
-                .arguments(CommandNode.argument("setting", StringArgumentType.string())
+                .arguments(CommandNode.argument("setting", NameArgumentType.greedy())
                         .suggests((ctx, builder) -> suggestSetting(ctx, builder, plugin))
                         .executesEntityOrAimedBoat((ctx, target) -> execute(ctx, target, plugin)));
     }
 
     private static CompletableFuture<Suggestions> suggestSetting(@NonNull CommandContext<CommandSourceStack> ctx, @NonNull SuggestionsBuilder builder, Wake plugin) {
-        if (!(ctx.getSource().getSender() instanceof Player player)) {
+        if (!(CommandHelper.actingSender(ctx.getSource()) instanceof Player player)) {
             return builder.buildFuture();
         }
         OBUServiceImpl service = OBUCommandHelper.service(plugin);
@@ -99,8 +100,8 @@ public class ClearCommand {
                 if (base != null) {
                     isBase = base.settings().stream().anyMatch(matches);
                 }
-                if (!isBase && !baseName.equalsIgnoreCase("default") && !baseName.equals(OBUDefinition.CONTEXT_EMPTY)) {
-                    OBUContext defaults = contextManager.getContext("default");
+                if (!isBase && OBUContextManager.inheritsDefault(baseName)) {
+                    OBUContext defaults = contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT);
                     if (defaults != null) {
                         isBase = defaults.settings().stream().anyMatch(matches);
                     }

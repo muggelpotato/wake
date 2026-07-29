@@ -2,9 +2,11 @@ package dev.muggel.wake.features.obu;
 
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.core.module.AbstractModule;
 import dev.muggel.wake.features.obu.api.OBUService;
 import dev.muggel.wake.features.obu.commands.ClearCommand;
+import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
 import dev.muggel.wake.features.obu.commands.ConfigCommand;
 import dev.muggel.wake.features.obu.commands.ContextCommand;
 import dev.muggel.wake.features.obu.commands.DefaultsCommand;
@@ -15,6 +17,7 @@ import dev.muggel.wake.features.obu.commands.sandbox.SandboxCommand;
 import dev.muggel.wake.features.obu.networking.HandshakeListener;
 import dev.muggel.wake.features.obu.networking.PacketSender;
 import dev.muggel.wake.features.obu.networking.interceptors.BoatLagInterceptor;
+import dev.muggel.wake.features.obu.service.ClientRegistry;
 import dev.muggel.wake.features.obu.service.OBUContextManager;
 import dev.muggel.wake.features.obu.service.OBUServiceImpl;
 import dev.muggel.wake.features.obu.service.SandboxPurger;
@@ -24,7 +27,6 @@ import org.bukkit.entity.Boat;
 import org.bukkit.event.Listener;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityRemoveEvent;
-import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.Collections;
@@ -39,7 +41,10 @@ import dev.muggel.wake.features.obu.context.OBUContext;
 import dev.muggel.wake.features.obu.context.OBUSetting;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.configuration.ConfigurationSection;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+
+import java.sql.SQLException;
 
 public class OBUModule extends AbstractModule {
     private OBUDao obuDao;
@@ -52,16 +57,14 @@ public class OBUModule extends AbstractModule {
 
     @Override
     protected void onModuleEnable() {
-        Bukkit.getMessenger().registerOutgoingPluginChannel(getPlugin(), OBUDefinition.CHANNEL_SETTINGS);
-        Bukkit.getMessenger().registerOutgoingPluginChannel(getPlugin(), OBUDefinition.CHANNEL_CONTEXT);
-        Bukkit.getMessenger().registerOutgoingPluginChannel(getPlugin(), OBUDefinition.CHANNEL_CONFIGURATION);
         this.obuDao = new OBUDao(getPlugin());
         obuDao.initTables();
         registerDao(obuDao);
-        boolean wasEmpty = !obuDao.hasAnyContexts();
-        PacketSender packetSender = new PacketSender();
+        Boolean hasContexts = obuDao.hasAnyContexts();
+        ClientRegistry clients = new ClientRegistry();
+        PacketSender packetSender = new PacketSender(clients);
         this.contextManager = new OBUContextManager(obuDao);
-        this.obuService = new OBUServiceImpl(getPlugin(), packetSender, contextManager, obuDao);
+        this.obuService = new OBUServiceImpl(getPlugin(), packetSender, contextManager, obuDao, clients);
         Wake.getServiceRegistry().register(OBUService.class, obuService);
         HandshakeListener handshakeListener = new HandshakeListener(getPlugin(), obuService);
         registerListener(handshakeListener);
@@ -70,7 +73,7 @@ public class OBUModule extends AbstractModule {
         registerListener(boatLagInterceptor);
         registerPacketListener(boatLagInterceptor);
         for (Player player : Bukkit.getOnlinePlayers()) {
-            obuService.applyDefaultContext(player);
+            obuService.requestClientVersion(player);
         }
         this.sandboxPurger = new SandboxPurger(getPlugin(), obuDao, obuService);
         schedulePurgerSweep();
@@ -83,13 +86,15 @@ public class OBUModule extends AbstractModule {
                 }
             }
         });
-        seedDataIfEmpty(wasEmpty, "defaults/obu_default.yml", "OBU");
+        seedDataIfEmpty(hasContexts == null ? null : !hasContexts, "defaults/obu_default.yml", "OBU");
     }
 
     @Override
     public CommandNode buildCommands(Wake plugin) {
         CommandNode obuRootNode = CommandNode.literal("wakeobu")
                 .withModule(OBUModule.class)
+                .withPresetBranch(PermissionPreset.ADMIN)
+                .withGate((source, target) -> OBUCommandHelper.requireClient(plugin, source, target))
                 .withDescription("OpenBoatUtils settings and configuration")
                 .aliases("wobu", "wo")
                 .addSubcommand(HelpCommand.getNode(plugin))
@@ -109,36 +114,30 @@ public class OBUModule extends AbstractModule {
     protected void onModuleDisable() {
         sandboxPurger = null;
         if (obuService != null) {
-            PacketSender packetSender = new PacketSender();
+            PacketSender packetSender = obuService.packetSender();
             for (Player player : Bukkit.getOnlinePlayers()) {
-                obuService.cleanupPlayer(player);
+                obuService.saveSelection(player);
                 try {
                     packetSender.sendWipePlayer(player, OBUDefinition.CONTEXT_PERSONAL);
                 } catch (Exception e) {
                     getPlugin().getLogger().log(Level.WARNING, "Failed to send wipe packet", e);
                 }
             }
-            try {
-                for (UUID boatId : obuService.getSyncManager().getKnownBoatContexts()) {
+            for (UUID boatId : obuService.getSyncManager().getKnownBoatContexts()) {
+                try {
                     var emptyPacket = packetSender.createEntityContextPacket(boatId, Collections.emptyList());
                     for (Player player : Bukkit.getOnlinePlayers()) {
                         packetSender.sendPrecompiledPacket(player, emptyPacket);
                     }
+                } catch (Exception e) {
+                    getPlugin().getLogger().log(Level.WARNING, "Failed to wipe context for boat " + boatId, e);
                 }
-            } catch (Exception e) {
-                getPlugin().getLogger().log(Level.WARNING, "Failed to wipe boat contexts", e);
+            }
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                obuService.cleanupPlayer(player);
             }
         }
         Wake.getServiceRegistry().unregister(OBUService.class);
-        if (getPlugin().isEnabled()) {
-            Bukkit.getScheduler().runTask(getPlugin(), () -> {
-                if (Wake.getServiceRegistry().get(OBUService.class) == null) {
-                    Bukkit.getMessenger().unregisterOutgoingPluginChannel(getPlugin(), OBUDefinition.CHANNEL_SETTINGS);
-                    Bukkit.getMessenger().unregisterOutgoingPluginChannel(getPlugin(), OBUDefinition.CHANNEL_CONTEXT);
-                    Bukkit.getMessenger().unregisterOutgoingPluginChannel(getPlugin(), OBUDefinition.CHANNEL_CONFIGURATION);
-                }
-            });
-        }
         obuService = null;
         contextManager = null;
         obuDao = null;
@@ -151,19 +150,12 @@ public class OBUModule extends AbstractModule {
         if (manager == null || service == null) return;
         schedulePurgerSweep();
         if (getPlugin().getDatabaseManager().isDegraded()) return;
-        Bukkit.getScheduler().runTaskAsynchronously(getPlugin(), () -> {
-            getPlugin().getDatabaseManager().awaitWrites();
-            manager.loadContexts();
-            if (!getPlugin().isEnabled()) return;
-            try {
-                Bukkit.getScheduler().runTask(getPlugin(), () -> {
-                    if (Wake.getServiceRegistry().get(OBUService.class) != service) return;
-                    for (Player player : Bukkit.getOnlinePlayers()) {
-                        service.resyncActiveSelection(player);
-                    }
-                });
-            } catch (IllegalPluginAccessException ignored) {
-                // nothing left to resync
+        manager.reloadAsync(changedContexts -> {
+            if (Wake.getServiceRegistry().get(OBUService.class) != service) return;
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (service.isAffectedBy(changedContexts, player)) {
+                    service.resyncActiveSelection(player);
+                }
             }
         });
     }
@@ -185,13 +177,17 @@ public class OBUModule extends AbstractModule {
     @Override
     @SuppressWarnings("RedundantThrows")
     protected int onExportData(YamlConfiguration yaml) throws Exception {
+        OBUContextManager manager = this.contextManager;
+        if (manager == null) {
+            return 0;
+        }
         int count = 0;
-        for (String name : contextManager.getContextNames()) {
-            if (name.equals(OBUDefinition.CONTEXT_EMPTY) || name.equals(OBUDefinition.CONTEXT_PERSONAL)) continue;
-            OBUContext context = contextManager.getContext(name);
+        for (String name : manager.getContextNames()) {
+            if (OBUContextManager.isInternal(name)) continue;
+            OBUContext context = manager.getContext(name);
             if (context == null) continue;
-            String path = "contexts." + name;
-            yaml.set(path + ".type", context.type().name());
+            String path = sectionOf(context.type()) + "." + name;
+            yaml.createSection(path);
             if (context.ownerUuid() != null) {
                 yaml.set(path + ".owner_uuid", context.ownerUuid().toString());
             }
@@ -206,7 +202,7 @@ public class OBUModule extends AbstractModule {
             count++;
         }
 
-        boolean persistentStates = getPlugin().getStateDao().get(ConfigCommand.STATE_KEY_PERSISTENT_STATES, true);
+        boolean persistentStates = getPlugin().getStateDao().get(OBUServiceImpl.STATE_KEY_PERSISTENT_STATES, true);
         yaml.set("config.persistent_player_states", persistentStates);
         count++;
         String keepUnused = getPlugin().getStateDao().get(SandboxPurger.STATE_KEY_KEEP_UNUSED, SandboxPurger.DEFAULT_KEEP);
@@ -217,44 +213,9 @@ public class OBUModule extends AbstractModule {
 
     @Override
     protected int onImportData(YamlConfiguration yaml) throws Exception {
-        ConfigurationSection contextsSec = yaml.getConfigurationSection("contexts");
         int count = 0;
-        if (contextsSec != null) {
-            for (String name : contextsSec.getKeys(false)) {
-                String typeStr = contextsSec.getString(name + ".type", "SERVER");
-                OBUContext.ContextType type;
-                try {
-                    type = OBUContext.ContextType.valueOf(typeStr.toUpperCase(Locale.ROOT));
-                } catch (IllegalArgumentException e) {
-                    getPlugin().getLogger().warning("Skipped OBU context '" + name + "': invalid type '" + typeStr + "'");
-                    continue;
-                }
-                String ownerStr = contextsSec.getString(name + ".owner_uuid");
-                if (ownerStr != null) {
-                    try {
-                        UUID.fromString(ownerStr);
-                    } catch (IllegalArgumentException e) {
-                        getPlugin().getLogger().warning("Skipped OBU context '" + name + "': invalid owner_uuid '" + ownerStr + "'");
-                        continue;
-                    }
-                }
-                List<OBUSetting> settingsToImport = new ArrayList<>();
-                ConfigurationSection settingsSec = contextsSec.getConfigurationSection(name + ".settings");
-                if (settingsSec != null) {
-                    for (String settingName : settingsSec.getKeys(false)) {
-                        OBUDefinition def = OBUDefinition.get(settingName);
-                        if (def == null) continue;
-                        List<String> invocations = settingsSec.isList(settingName)
-                                ? settingsSec.getStringList(settingName)
-                                : List.of(String.valueOf(settingsSec.get(settingName)));
-                        for (String invocation : invocations) {
-                            settingsToImport.add(new OBUSetting(def, def.splitInvocation(invocation)));
-                        }
-                    }
-                }
-                obuDao.importContextData(name, type, ownerStr, settingsToImport);
-                count++;
-            }
+        for (OBUContext.ContextType type : OBUContext.ContextType.values()) {
+            count += importContexts(yaml.getConfigurationSection(sectionOf(type)), type);
         }
         ConfigurationSection configSec = yaml.getConfigurationSection("config");
         if (configSec != null) {
@@ -273,6 +234,45 @@ public class OBUModule extends AbstractModule {
         contextManager.loadContexts();
         for (Player player : Bukkit.getOnlinePlayers()) {
             obuService.getSyncManager().syncPlayer(player);
+        }
+        return count;
+    }
+
+    private static @NonNull String sectionOf(OBUContext.@NonNull ContextType type) {
+        return type.name().toLowerCase(Locale.ROOT);
+    }
+
+    private int importContexts(@Nullable ConfigurationSection section, OBUContext.ContextType type) throws SQLException {
+        if (section == null) {
+            return 0;
+        }
+        int count = 0;
+        for (String name : section.getKeys(false)) {
+            String ownerStr = section.getString(name + ".owner_uuid");
+            if (ownerStr != null) {
+                try {
+                    UUID.fromString(ownerStr);
+                } catch (IllegalArgumentException e) {
+                    getPlugin().getLogger().warning("Skipped OBU context '" + name + "': invalid owner_uuid '" + ownerStr + "'");
+                    continue;
+                }
+            }
+            List<OBUSetting> settingsToImport = new ArrayList<>();
+            ConfigurationSection settingsSec = section.getConfigurationSection(name + ".settings");
+            if (settingsSec != null) {
+                for (String settingName : settingsSec.getKeys(false)) {
+                    OBUDefinition def = OBUDefinition.get(settingName);
+                    if (def == null) continue;
+                    List<String> invocations = settingsSec.isList(settingName)
+                            ? settingsSec.getStringList(settingName)
+                            : List.of(String.valueOf(settingsSec.get(settingName)));
+                    for (String invocation : invocations) {
+                        settingsToImport.add(new OBUSetting(def, def.splitInvocation(invocation)));
+                    }
+                }
+            }
+            obuDao.importContextData(name, type, ownerStr, settingsToImport);
+            count++;
         }
         return count;
     }

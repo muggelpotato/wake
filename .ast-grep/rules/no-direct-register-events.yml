@@ -12,5 +12,8 @@ ignores:
   - "**/AbstractModule.java"
   # Conditional self-registration for a hot event; owns its own unregister().
   - "**/BoostpadDetectorListener.java"
+  # Core plumbing that outlives every module: the outage notice must reach players with base disabled.
+  # Unregisters itself in shutdown().
+  - "**/DatabaseManager.java"
 rule:
   pattern: $P.getPluginManager().registerEvents($$$)

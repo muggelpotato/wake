@@ -223,9 +223,16 @@ def drill_sync(rcon: Rcon, log: Log, backend: str):
     """A change on this server must reach the other backend over the pub-sub bus."""
     print("\ncross-server sync")
     try:
-        docker("exec", backend, "rcon-cli", "wake help")
+        # rcon-cli exits 0 even for a command the server does not have, so the reply is what has to be read:
+        # a backend whose Wake failed to enable would otherwise be reported as a broken sync bus
+        probe = CODES.sub("", docker("exec", backend, "rcon-cli", "wake help"))
     except RuntimeError as error:
         bad(str(error))
+        return
+    if "Unknown or incomplete" in probe or not probe.strip():
+        bad(f"{backend} has no Wake command tree, so there is nothing to sync to. Its plugin did not enable "
+            f"-- `docker logs {backend}` will say why (a database that was not accepting connections when the "
+            f"container started is the usual cause; `docker restart {backend}` fixes that one)")
         return
 
     def switch(text):
@@ -235,18 +242,31 @@ def drill_sync(rcon: Rcon, log: Log, backend: str):
     def remote_switch():
         return switch(docker("exec", backend, "rcon-cli", "dd boostpad list"))
 
+    def await_remote(expected, timeout=30):
+        """Polls rather than sleeping a fixed span: propagation is normally under a second, but the drill that runs
+        before this one restarts the database container, and the first write afterwards waits on a fresh pool
+        connection. A fixed sleep turns that into a false failure."""
+        deadline = time.monotonic() + timeout
+        seen = remote_switch()
+        while seen != expected and time.monotonic() < deadline:
+            time.sleep(1)
+            seen = remote_switch()
+        return seen
+
     # compare against what the switch was, not an assumed starting position
     before = remote_switch()
     step(f"toggling a setting on the primary (both backends read {before})")
     log.reset()
     rcon.run("dd boostpad toggle")
-    time.sleep(3)
-    local, remote = switch(rcon.run("dd boostpad list")), remote_switch()
+    local = switch(rcon.run("dd boostpad list"))
+    remote = await_remote(local)
     if local and local != before and remote == local:
         ok(f"the other backend observed the change ({before} -> {remote})")
     else:
         bad(f"the other backend reports {remote!r}, the primary reports {local!r} (was {before!r})")
     rcon.run("dd boostpad toggle")
+    # settle before the next step, so a run of this drill always starts from an agreed position
+    await_remote(switch(rcon.run("dd boostpad list")))
 
     step("stopping the sync bus")
     docker("stop", "wake-testenv-valkey-1")

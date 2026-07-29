@@ -3,6 +3,7 @@ package dev.muggel.wake.features.axiom;
 import co.aikar.idb.DB;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.database.WakeDao;
+import org.jspecify.annotations.Nullable;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -29,7 +30,7 @@ public class AxiomDao extends WakeDao {
                 """);
     }
 
-    public List<String> loadDisplays() {
+    public @Nullable List<String> loadDisplays() {
         List<String> models = new ArrayList<>();
         try {
             var results = DB.getResults("SELECT model_key FROM wake_axiom_displays");
@@ -38,6 +39,7 @@ public class AxiomDao extends WakeDao {
             }
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to load axiom displays from database", e);
+            return null;
         }
         return models;
     }

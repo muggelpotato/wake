@@ -16,3 +16,5 @@ run/
 
 # Test environment
 testenv/paper2/
+*PLAN*.md
+OBUSOURCE

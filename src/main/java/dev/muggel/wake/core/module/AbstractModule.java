@@ -8,6 +8,7 @@ import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.jspecify.annotations.Nullable;
 import dev.muggel.wake.core.database.WakeDao;
 
 import java.util.ArrayList;
@@ -64,6 +65,9 @@ public abstract class AbstractModule implements WakeModule {
                 PacketEvents.getAPI().getEventManager().unregisterListener(listener);
             }
             packetListeners.clear();
+            for (WakeDao dao : daos) {
+                dao.releaseMirrors();
+            }
             daos.clear();
         }
     }
@@ -110,8 +114,8 @@ public abstract class AbstractModule implements WakeModule {
         }
     }
 
-    protected final void seedDataIfEmpty(boolean wasEmpty, String defaultFileName, String logNoun) {
-        if (!wasEmpty) return;
+    protected final void seedDataIfEmpty(@Nullable Boolean wasEmpty, String defaultFileName, String logNoun) {
+        if (wasEmpty == null || !wasEmpty) return;
         try {
             int count = seedData(defaultFileName, logNoun);
             plugin.getLogger().info("Auto-seeded " + count + " " + logNoun + " items from jar");

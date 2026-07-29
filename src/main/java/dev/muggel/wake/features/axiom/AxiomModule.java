@@ -17,9 +17,12 @@ import java.lang.reflect.Method;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 
 public class AxiomModule extends AbstractModule {
+    private final AtomicLong reads = new AtomicLong();
+    private long appliedRead;
     private AxiomDao dao;
     public AxiomModule() {
         super("axiom");
@@ -36,11 +39,10 @@ public class AxiomModule extends AbstractModule {
         dao.initTables();
         registerDao(dao);
         List<String> models = dao.loadDisplays();
-        boolean wasEmpty = models.isEmpty();
-        if (!models.isEmpty()) {
+        if (models != null && !models.isEmpty()) {
             registerDisplays(models);
         }
-        seedDataIfEmpty(wasEmpty, "defaults/axiom_default.yml", "Axiom Displays");
+        seedDataIfEmpty(models == null ? null : models.isEmpty(), "defaults/axiom_default.yml", "Axiom Displays");
     }
 
     @SuppressWarnings("PatternValidation")
@@ -106,11 +108,15 @@ public class AxiomModule extends AbstractModule {
         AxiomDao currentDao = this.dao;
         if (currentDao == null || !Bukkit.getPluginManager().isPluginEnabled("AxiomPaper")) return;
         if (getPlugin().getDatabaseManager().isDegraded()) return;
-        unregisterDisplays();
-        List<String> models = currentDao.loadDisplays();
-        if (!models.isEmpty()) {
-            registerDisplays(models);
-        }
+        long ticket = reads.incrementAndGet();
+        getPlugin().getDatabaseManager().readAsync(currentDao::loadDisplays, models -> {
+            if (models == null || this.dao != currentDao || ticket <= appliedRead) return;
+            appliedRead = ticket;
+            unregisterDisplays();
+            if (!models.isEmpty()) {
+                registerDisplays(models);
+            }
+        });
     }
 
     private @NonNull String formatDisplayName(@NonNull String itemId) {
@@ -129,9 +135,12 @@ public class AxiomModule extends AbstractModule {
     }
 
     @Override
-    protected int onExportData(YamlConfiguration yaml) {
+    protected int onExportData(YamlConfiguration yaml) throws SQLException {
         if (dao == null) return 0;
         List<String> models = dao.loadDisplays();
+        if (models == null) {
+            throw new SQLException("Axiom displays could not be read");
+        }
         yaml.set("displays", models);
         return models.size();
     }

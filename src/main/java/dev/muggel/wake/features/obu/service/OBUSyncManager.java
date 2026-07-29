@@ -65,7 +65,7 @@ public class OBUSyncManager {
         return Collections.unmodifiableMap(overrides);
     }
 
-    public List<OBUSetting> calculateAbsoluteTruth(UUID uuid) {
+    private @NonNull List<OBUSetting> calculateAbsoluteTruth(@NonNull UUID uuid) {
         boolean blankSlate = false;
         String contextName = obuService.getPlayerActiveSandbox(uuid);
         if (contextName != null) {
@@ -83,7 +83,7 @@ public class OBUSyncManager {
             OBUContext context = contextManager.getContext(contextName);
             if (context != null) {
                 if (!blankSlate && OBUContextManager.inheritsDefault(context)) {
-                    OBUContext defaults = contextManager.getContext("default");
+                    OBUContext defaults = contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT);
                     if (defaults != null) {
                         for (OBUSetting setting : defaults.settings()) {
                             absoluteTruth.put(setting.getUniqueKey(), setting);
@@ -127,11 +127,14 @@ public class OBUSyncManager {
         }
     }
 
-    public void syncToViewer(@NonNull Boat boat, Player viewer) {
+    public void syncToViewer(@NonNull Boat boat, @NonNull Player viewer) {
         List<OBUSetting> settings = calculateAbsoluteTruth(boat.getUniqueId());
         obuService.updateVehicleScaleCache(boat.getUniqueId(), settings);
+        knownBoatContexts.add(boat.getUniqueId());
+        if (!obuService.clients().isDriven(viewer.getUniqueId())) {
+            return;
+        }
         try {
-            knownBoatContexts.add(boat.getUniqueId());
             var packet = packetSender.createEntityContextPacket(boat.getUniqueId(), settings);
             packetSender.sendPrecompiledPacket(viewer, packet);
         } catch (Exception e) {
@@ -139,15 +142,27 @@ public class OBUSyncManager {
         }
     }
 
+    public void syncTrackedBoats(@NonNull Player viewer) {
+        for (Boat boat : viewer.getWorld().getEntitiesByClass(Boat.class)) {
+            if (boat.isTrackedBy(viewer)) {
+                syncToViewer(boat, viewer);
+            }
+        }
+    }
+
     public void broadcastSync(@NonNull Boat boat) {
         List<OBUSetting> settings = calculateAbsoluteTruth(boat.getUniqueId());
         obuService.updateVehicleScaleCache(boat.getUniqueId(), settings);
+        knownBoatContexts.add(boat.getUniqueId());
         Set<Player> viewers = new HashSet<>(boat.getTrackedBy());
         if (!boat.getPassengers().isEmpty() && boat.getPassengers().getFirst() instanceof Player p) {
             viewers.add(p);
         }
+        viewers.removeIf(viewer -> !obuService.clients().isDriven(viewer.getUniqueId()));
+        if (viewers.isEmpty()) {
+            return;
+        }
         try {
-            knownBoatContexts.add(boat.getUniqueId());
             var packet = packetSender.createEntityContextPacket(boat.getUniqueId(), settings);
             for (Player viewer : viewers) {
                 packetSender.sendPrecompiledPacket(viewer, packet);
@@ -158,6 +173,6 @@ public class OBUSyncManager {
     }
 
     public Set<UUID> getKnownBoatContexts() {
-        return knownBoatContexts;
+        return Collections.unmodifiableSet(knownBoatContexts);
     }
 }

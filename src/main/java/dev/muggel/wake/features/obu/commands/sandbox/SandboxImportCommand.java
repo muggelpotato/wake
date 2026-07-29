@@ -8,6 +8,7 @@ import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.features.obu.OBUDefinition;
 import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
 import dev.muggel.wake.features.obu.context.OBUSetting;
+import dev.muggel.wake.features.obu.networking.PacketWriter;
 import dev.muggel.wake.features.obu.service.OBUContextManager;
 import dev.muggel.wake.features.obu.service.OBUServiceImpl;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -19,7 +20,6 @@ import org.jspecify.annotations.NonNull;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 import java.util.logging.Level;
 
 public class SandboxImportCommand {
@@ -29,21 +29,17 @@ public class SandboxImportCommand {
         return CommandNode.literal("import")
                 .arguments(
                         CommandNode.argument("shareCode", StringArgumentType.string()),
-                        CommandNode.argument("name", StringArgumentType.string())
-                                .executesSender((ctx, sender) -> execute(ctx, plugin)));
+                        SandboxCommandHelper.nameArgument("name")
+                                .executesSender((ctx, subject) -> execute(ctx, subject, plugin)));
     }
 
-    private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
+    private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, CommandSender subject, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
         OBUServiceImpl service = OBUCommandHelper.service(plugin);
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
-        String name = StringArgumentType.getString(ctx, "name").toLowerCase(Locale.ROOT);
+        String name = StringArgumentType.getString(ctx, "name");
         String code = StringArgumentType.getString(ctx, "shareCode");
-        if (!SandboxCommandHelper.isValidSandboxName(name)) {
-            plugin.getMessageManager().send(sender, "commands.obu.sandbox.invalid_name", Placeholder.unparsed("sandbox", name));
-            return 0;
-        }
-        String key = SandboxCommandHelper.sandboxKeyFor(sender, name);
+        String key = SandboxCommandHelper.sandboxKeyFor(subject, name);
         if (contextManager.getContext(key) != null) {
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.exists", Placeholder.unparsed("sandbox", name));
             return 0;
@@ -57,7 +53,7 @@ public class SandboxImportCommand {
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.import_fail", Placeholder.unparsed("error", reason));
             return 0;
         }
-        if (!service.createSandbox(key, (sender instanceof Player p) ? p.getUniqueId() : null)) {
+        if (!service.createSandbox(key, SandboxCommandHelper.ownerOf(subject))) {
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.exists", Placeholder.unparsed("sandbox", name));
             return 0;
         }
@@ -65,11 +61,11 @@ public class SandboxImportCommand {
             int skipped = 0;
             List<OBUSetting> toImport = new ArrayList<>();
             for (String part : decodedStr.split(";")) {
-                int colonIdx = part.indexOf(':');
-                if (colonIdx == -1) {
+                if (part.isBlank()) {
                     continue;
                 }
-                if (toImport.size() >= MAX_IMPORT_SETTINGS) {
+                int colonIdx = part.indexOf(':');
+                if (colonIdx == -1 || toImport.size() >= MAX_IMPORT_SETTINGS) {
                     skipped++;
                     continue;
                 }
@@ -83,7 +79,7 @@ public class SandboxImportCommand {
                         continue;
                     }
                     OBUSetting setting = new OBUSetting(def, Arrays.asList(args));
-                    if (!service.isEncodable(setting)) {
+                    if (!PacketWriter.isEncodable(setting)) {
                         skipped++;
                         continue;
                     }
@@ -99,7 +95,7 @@ public class SandboxImportCommand {
             }
         }
         plugin.getMessageManager().send(sender, "commands.obu.sandbox.imported", Placeholder.unparsed("sandbox", name));
-        if (sender instanceof Player p) {
+        if (subject instanceof Player p) {
             SandboxCommandHelper.enterSandbox(p, key, service);
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.switched", Placeholder.unparsed("sandbox", name));
             SandboxCommandHelper.sendHintIfEnabled(plugin, sender);

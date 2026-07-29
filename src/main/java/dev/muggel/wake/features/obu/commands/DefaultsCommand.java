@@ -8,6 +8,7 @@ import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.commands.arguments.NameArgumentType;
 import dev.muggel.wake.features.obu.OBUDefinition;
 import dev.muggel.wake.features.obu.context.OBUContext;
 import dev.muggel.wake.features.obu.context.OBUSetting;
@@ -27,9 +28,9 @@ import java.util.concurrent.CompletableFuture;
 public class DefaultsCommand {
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("-defaults")
-                .arguments(CommandNode.argument("setting", StringArgumentType.string())
+                .arguments(CommandNode.argument("setting", NameArgumentType.greedy())
                         .suggests(DefaultsCommand::suggestSetting)
-                        .executesSender((ctx, sender) -> execute(ctx, plugin)));
+                        .executesSender((ctx, subject) -> execute(ctx, subject, plugin)));
     }
 
     private static @NonNull CompletableFuture<Suggestions> suggestSetting(CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
@@ -37,7 +38,7 @@ public class DefaultsCommand {
                 Arrays.stream(OBUDefinition.values()).map(OBUDefinition::commandName).toList());
     }
 
-    private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
+    private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, CommandSender subject, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
         String settingName = StringArgumentType.getString(ctx, "setting");
         OBUDefinition def = OBUDefinition.get(settingName);
@@ -49,7 +50,7 @@ public class DefaultsCommand {
         plugin.getMessageManager().send(sender, "commands.obu.defaults.vanilla",
                 Placeholder.parsed("setting", def.commandName()),
                 Placeholder.parsed("value", defValueStr));
-        if (!(sender instanceof Player player)) {
+        if (!(subject instanceof Player player)) {
             return Command.SINGLE_SUCCESS;
         }
         OBUServiceImpl service = OBUCommandHelper.service(plugin);
@@ -72,7 +73,7 @@ public class DefaultsCommand {
                 }
             }
         }
-        if (effectiveSetting == null && baseName != null) {
+        if (effectiveSetting == null) {
             OBUContext base = contextManager.getContext(baseName);
             if (base != null) {
                 for (OBUSetting s : base.settings()) {
@@ -84,9 +85,8 @@ public class DefaultsCommand {
                 }
             }
         }
-        if (effectiveSetting == null && sandboxName == null && baseName != null
-                && !baseName.equalsIgnoreCase("default") && !baseName.equals(OBUDefinition.CONTEXT_EMPTY)) {
-            OBUContext defaults = contextManager.getContext("default");
+        if (effectiveSetting == null && sandboxName == null && OBUContextManager.inheritsDefault(baseName)) {
+            OBUContext defaults = contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT);
             if (defaults != null) {
                 for (OBUSetting s : defaults.settings()) {
                     if (s.definition().id() == id) {
@@ -98,7 +98,7 @@ public class DefaultsCommand {
             }
         }
         if (effectiveSetting != null) {
-            String activeValue = String.join(", ", effectiveSetting.args());
+            String activeValue = String.join(", ", OBUCommandHelper.displayArgs(effectiveSetting));
             Component button;
             if (isServerDefault && sandboxName == null) {
                 button = plugin.getMessageManager().getComponent("commands.obu.defaults.blocked_btn");

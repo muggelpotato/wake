@@ -1,24 +1,26 @@
 package dev.muggel.wake.features.drydock.api;
 
 import org.bukkit.Material;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.jspecify.annotations.NonNull;
 
 import java.util.Map;
 
 public interface DrydockService {
-    void giveDrydockBoat(Player player, String boatType, int variant);
-    
+    void giveDrydockBoat(@NonNull Player player, @NonNull CommandSender audience, @NonNull String boatType, int variant);
+
     void reloadBoostpads();
-    
-    Map<Material, BoostpadConfig> getBoostpadConfigs();
-    
+
+    @NonNull Map<Material, BoostpadConfig> getBoostpadConfigs();
+
     double getMaxOffsetMultiplier();
 
-    void saveBoostpadConfig(BoostpadConfig config);
+    void saveBoostpadConfig(@NonNull BoostpadConfig config);
 
-    void deleteBoostpadConfig(String blockKey);
+    void deleteBoostpadConfig(@NonNull String blockKey);
 
-    Map<String, BoostpadConfig> cachedBoostpads();
+    @NonNull Map<String, BoostpadConfig> cachedBoostpads();
 
     void refreshRegistration();
 

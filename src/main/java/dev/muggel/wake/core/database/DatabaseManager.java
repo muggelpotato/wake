@@ -1,36 +1,24 @@
 package dev.muggel.wake.core.database;
 
-import co.aikar.idb.BaseDatabase;
-import co.aikar.idb.BukkitDB;
 import co.aikar.idb.DB;
-import co.aikar.idb.DatabaseOptions;
-import co.aikar.idb.PooledDatabaseOptions;
-import com.zaxxer.hikari.HikariDataSource;
+import co.aikar.idb.DbStatement;
+import dev.muggel.wake.core.Scheduling;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.sync.SyncService;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.IllegalPluginAccessException;
+import org.bukkit.event.HandlerList;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.io.File;
-import java.lang.reflect.Field;
-import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
@@ -38,202 +26,172 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 
 /**
- * Owns the database connection (SQLite or MariaDB) and the single writer thread all async writes run on. <br>
- * When the database is unreachable it degrades gracefully: <br>
- * &rarr; Writes are journaled to disk and replayed on recovery, and the acting player is told in-game. <br>
- * Also tracks which command sender caused a write (the "actor") and publishes cross-server sync scopes once the write queue drains. <br>
- * Feature code never calls this directly &rarr; it writes through a {@link WakeDao}.
+ * The single writer thread every async write runs on. <br>
+ * It owns {@link DatabasePool} (opens the connection), {@link OutageMonitor} (decides what happens when it stops answering) and {@link MirrorRegistry} (routes invalidations) <br>
+ * This class is what puts a write through all three. <br>
+ * Feature code never calls it directly, it writes through a {@link WakeDao}.
  */
 public class DatabaseManager {
-    private static final long PROBE_INTERVAL_TICKS = 100;
-    private static final long WATCHDOG_DELAY_TICKS = 20;
+    private static final long PUBLISH_INTERVAL_MILLIS = 200;
     private final Wake plugin;
     private final ExecutorService writeExecutor;
-    private final OutageJournal journal;
-    private volatile UUID currentActor;
-    private volatile boolean degraded = false;
-    private final Set<UUID> notifiedActors = ConcurrentHashMap.newKeySet();
-    private final Set<String> dirtyScopes = ConcurrentHashMap.newKeySet();
+    private final OutageMonitor outage;
+    private final MirrorRegistry mirrors;
     private final AtomicInteger pendingWrites = new AtomicInteger();
     private final AtomicLong completedWrites = new AtomicLong();
-    private final AtomicBoolean watchdogActive = new AtomicBoolean();
-    private volatile @Nullable UUID lastPendingActor;
-    private @Nullable HikariDataSource hikari;
-    private Dialect dialect = Dialect.SQLITE;
+    private long lastPublishMillis;
+    private volatile @Nullable UUID currentActor;
+    private @Nullable DegradedNoticeListener noticeListener;
     private SchemaMigrator schemaMigrator;
     public DatabaseManager(Wake plugin) {
         this.plugin = plugin;
         this.writeExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, plugin.getName() + "-DB-Writer"));
-        this.journal = new OutageJournal(plugin);
+        this.mirrors = new MirrorRegistry(plugin);
+        this.outage = new OutageMonitor(plugin, pendingWrites::get, completedWrites::get, writeExecutor::execute);
     }
 
     public void init() {
-        ConfigurationSection dbConfig = plugin.getConfig().getConfigurationSection("database");
-        if (dbConfig == null) {
-            plugin.getLogger().warning("Database configuration missing, defaulting to SQLite");
-            initSQLite();
-        } else {
-            String type = dbConfig.getString("type", "sqlite").toLowerCase(Locale.ROOT);
-            if ("mariadb".equals(type) || "mysql".equals(type)) {
-                dialect = Dialect.MARIADB;
-                initMariaDB(dbConfig);
-            } else {
-                initSQLite();
-            }
-        }
-        tightenPoolTimeouts();
-        try {
-            DB.getFirstColumn("SELECT 1");
-        } catch (Exception e) {
-            throw new IllegalStateException("Database connection test failed", e);
-        }
-        this.schemaMigrator = new SchemaMigrator(plugin, dialect);
-        if (journal.hasEntries()) {
-            int replayed = journal.replay();
-            if (replayed >= 0) {
-                plugin.getLogger().info("Replayed " + replayed + " journaled writes from the last outage");
-            } else {
-                enterDegraded(null);
-            }
-        }
-    }
-
-    // Hikari's default timeout too long for quick ingame feedback
-    private void tightenPoolTimeouts() {
-        try {
-            Field field = BaseDatabase.class.getDeclaredField("dataSource");
-            field.setAccessible(true);
-            if (field.get(DB.getGlobalDatabase()) instanceof HikariDataSource dataSource) {
-                dataSource.setConnectionTimeout(5000);
-                dataSource.setValidationTimeout(2500);
-                this.hikari = dataSource;
-            }
-        } catch (ReflectiveOperationException e) {
-            plugin.getLogger().log(Level.WARNING, "Could not tighten pool timeouts", e);
-        }
-    }
-
-    private void initSQLite() {
-        DatabaseOptions options = DatabaseOptions.builder()
-                .poolName(plugin.getName() + "-DB")
-                .logger(plugin.getLogger())
-                .sqlite(new File(plugin.getDataFolder(), "wake.db").getPath())
-                .build();
-        PooledDatabaseOptions poolOptions = PooledDatabaseOptions.builder()
-                .options(options)
-                .build();
-        BukkitDB.createHikariDatabase(plugin, poolOptions);
-        plugin.getLogger().info("Database ready (SQLite)");
-    }
-
-    private void initMariaDB(@NonNull ConfigurationSection config) {
-        String host = config.getString("host", "localhost");
-        int port = config.getInt("port", 3306);
-        String database = config.getString("database", "wake");
-        DatabaseOptions options = DatabaseOptions.builder()
-                .poolName(plugin.getName() + "-DB")
-                .logger(plugin.getLogger())
-                .mysql(
-                        config.getString("username", "root"),
-                        config.getString("password", ""),
-                        database,
-                        host + ":" + port
-                )
-                .dsn("mariadb://" + host + ":" + port + "/" + database + "?socketTimeout=3000")
-                .build();
-        PooledDatabaseOptions poolOptions = PooledDatabaseOptions.builder()
-                .options(options)
-                .build();
-        BukkitDB.createHikariDatabase(plugin, poolOptions);
-        plugin.getLogger().info("Database ready (MariaDB)");
+        DatabasePool.Handle pool = DatabasePool.open(plugin);
+        this.schemaMigrator = new SchemaMigrator(plugin, pool.dialect());
+        outage.probeVia(pool.dataSource());
+        this.noticeListener = new DegradedNoticeListener(this);
+        Bukkit.getPluginManager().registerEvents(noticeListener, plugin);
+        outage.replayOnBoot();
     }
 
     public void queueWrite(String errorMessage, @Nullable String syncScope, @Nullable UUID actor, String query, Object... params) {
-        notifyIfDegraded(actor);
-        if (actor != null) {
-            lastPendingActor = actor;
-        }
+        queueWrite(errorMessage, syncScope, actor, List.of(new SqlStatement(query, params)));
+    }
+
+    public void queueWrite(String errorMessage, @Nullable String syncScope, @Nullable UUID actor, @NonNull List<SqlStatement> statements) {
+        queueWrite(errorMessage, syncScope, null, List.of(), actor, statements, null);
+    }
+
+    /** Queues a write to a mirrored table, remembering which rows it moved */
+    void queueMirrorWrite(String errorMessage, @NonNull CachedStore<?> mirror, @NonNull List<String> rowKeys, @Nullable UUID actor, @NonNull List<SqlStatement> statements, @Nullable Runnable onLost) {
+        queueWrite(errorMessage, mirror.scope(), mirror, rowKeys, actor, statements, onLost);
+    }
+
+    /** Runs statements as one transaction */
+    private void queueWrite(String errorMessage, @Nullable String syncScope, @Nullable CachedStore<?> mirror, @NonNull List<String> rowKeys, @Nullable UUID actor, @NonNull List<SqlStatement> statements, @Nullable Runnable onLost) {
+        outage.writeQueued(actor);
         pendingWrites.incrementAndGet();
-        armWatchdog();
+        outage.armWatchdog();
         writeExecutor.execute(() -> {
             try {
-                if (degraded) {
-                    journal.append(query, params);
+                if (outage.isDegraded()) {
+                    outage.journal(statements);
                     return;
                 }
                 try {
-                    DB.executeUpdate(query, params);
-                    if (syncScope != null) {
-                        dirtyScopes.add(syncScope);
-                    }
+                    execute(statements);
+                    mirrors.recordLocalChange(mirror, rowKeys, syncScope);
                 } catch (Exception e) {
-                    plugin.getLogger().log(Level.SEVERE, errorMessage, e);
-                    if (isRetryableFailure(e)) {
-                        journal.append(query, params);
-                        enterDegraded(actor);
+                    if (OutageMonitor.isRetryableFailure(e)) {
+                        if (!outage.isDegraded()) {
+                            plugin.getLogger().log(Level.WARNING,
+                                    errorMessage + " (database unreachable, journaling until it returns)", e);
+                        }
+                        outage.journal(statements);
+                        outage.enterDegraded(actor);
+                    } else {
+                        plugin.getLogger().log(Level.SEVERE, errorMessage, e);
+                        if (onLost != null) {
+                            onLost.run();
+                        }
                     }
                 }
             } finally {
                 completedWrites.incrementAndGet();
-                if (pendingWrites.decrementAndGet() == 0) {
-                    publishDirtyScopes();
+                if (pendingWrites.decrementAndGet() == 0 || System.currentTimeMillis() - lastPublishMillis >= PUBLISH_INTERVAL_MILLIS) {
+                    lastPublishMillis = System.currentTimeMillis();
+                    mirrors.publishPending();
                 }
             }
         });
     }
 
-    // no write completes for 1s = independent probe connection (driver-enforced 1s hard cap) decides "backlogged but alive" or "outage"
-    private void armWatchdog() {
-        if (degraded || !watchdogActive.compareAndSet(false, true)) {
+    private static void execute(@NonNull List<SqlStatement> statements) throws SQLException {
+        if (statements.isEmpty()) {
             return;
         }
-        scheduleWatchdog(completedWrites.get());
-    }
-
-    private void scheduleWatchdog(long lastCompleted) {
-        if (!plugin.isEnabled()) {
-            watchdogActive.set(false);
+        if (statements.size() == 1) {
+            SqlStatement only = statements.getFirst();
+            DB.executeUpdate(only.sql(), only.params());
             return;
         }
-        try {
-            Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> watchdogCheck(lastCompleted), WATCHDOG_DELAY_TICKS);
-        } catch (IllegalPluginAccessException e) {
-            watchdogActive.set(false);
-        }
-    }
-
-    private void watchdogCheck(long lastCompleted) {
-        if (degraded || pendingWrites.get() == 0) {
-            watchdogActive.set(false);
-            return;
-        }
-        long completed = completedWrites.get();
-        if (completed != lastCompleted || probeConnectionAlive()) {
-            scheduleWatchdog(completed);
-            return;
-        }
-        watchdogActive.set(false);
-        plugin.getLogger().warning("Database unresponsive: entering degraded mode before the hung write times out");
-        enterDegraded(lastPendingActor);
-    }
-
-    private boolean probeConnectionAlive() {
-        HikariDataSource dataSource = this.hikari;
-        if (dataSource == null) {
-            try {
-                DB.getFirstColumn("SELECT 1");
-                return true;
-            } catch (Exception e) {
-                return false;
+        try (DbStatement stm = new DbStatement()) {
+            stm.startTransaction();
+            for (SqlStatement statement : statements) {
+                stm.executeUpdateQuery(statement.sql(), statement.params());
             }
-        }
-        try (Connection connection = dataSource.getConnection()) {
-            return connection.isValid(1);
-        } catch (Exception e) {
-            return false;
+            stm.commit();
         }
     }
 
+    /** The standard shape for a cache reload (Drain queued writes -> read on async thread -> apply results on main thread) */
+    public <T> void readAsync(@NonNull Supplier<@Nullable T> read, @NonNull Consumer<@Nullable T> applyOnMain) {
+        Scheduling.async(plugin, () -> {
+            T result;
+            try {
+                awaitWrites();
+                result = read.get();
+            } catch (RuntimeException e) {
+                plugin.getLogger().log(Level.SEVERE, "Database read failed", e);
+                result = null;
+            }
+            T settled = result;
+            Scheduling.onMain(plugin, () -> applyOnMain.accept(settled));
+        });
+    }
+
+    public void runWithDrainedQueue(@NonNull Runnable body) {
+        readAsync(() -> null, ignored -> body.run());
+    }
+
+    public void awaitWrites() {
+        try {
+            writeExecutor.submit(() -> {}).get(10, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            plugin.getLogger().log(Level.WARNING, "Timed out waiting for pending database writes", e);
+        }
+    }
+
+    /** Queued behind the writes it belongs to, so a scope is never announced ahead of the rows that moved in it */
+    public void publishScope(String scope) {
+        writeExecutor.execute(() -> {
+            SyncService sync = plugin.getSyncService();
+            if (sync != null) {
+                sync.publish(scope);
+            }
+        });
+    }
+
+    public void markRemoteChange(@NonNull String scope, @Nullable String table, @Nullable Collection<String> keys) {
+        mirrors.markRemoteChange(scope, table, keys);
+    }
+
+    void registerMirror(@NonNull CachedStore<?> mirror) {
+        mirrors.register(mirror);
+    }
+
+    void releaseMirror(@NonNull CachedStore<?> mirror) {
+        mirrors.release(mirror);
+    }
+
+    public boolean isDegraded() {
+        return outage.isDegraded();
+    }
+
+    void notifyOnJoin(@NonNull UUID actor) {
+        outage.notifyOnJoin(actor);
+    }
+
+    void forgetActor(@NonNull UUID actor) {
+        outage.forgetActor(actor);
+    }
+
+    /** Which command sender caused the writes being queued right now, so an outage notice reaches the right player */
     public void setActor(CommandSender sender) {
         currentActor = sender instanceof Player player ? player.getUniqueId() : null;
     }
@@ -246,165 +204,15 @@ public class DatabaseManager {
         return currentActor;
     }
 
-    public boolean isDegraded() {
-        return degraded;
-    }
-
     public SchemaMigrator getSchemaMigrator() {
         return schemaMigrator;
     }
 
-    public void publishScope(String scope) {
-        writeExecutor.execute(() -> {
-            SyncService sync = plugin.getSyncService();
-            if (sync != null) {
-                sync.publish(scope);
-            }
-        });
-    }
-
-    public void notifyIfDegraded(@Nullable UUID actor) {
-        if (degraded && actor != null && notifiedActors.add(actor)) {
-            sendLater(actor, "database.degraded");
-        }
-    }
-
-    private void enterDegraded(@Nullable UUID actor) {
-        if (!degraded) {
-            degraded = true;
-            notifiedActors.clear();
-            scheduleProbe();
-        }
-        if (actor != null && notifiedActors.add(actor)) {
-            sendLater(actor, "database.degraded");
-        }
-    }
-
-    private void scheduleProbe() {
-        if (!plugin.isEnabled()) {
-            return;
-        }
-        try {
-            Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
-                try {
-                    DB.getFirstColumn("SELECT 1");
-                } catch (Exception e) {
-                    scheduleProbe();
-                    return;
-                }
-                writeExecutor.execute(this::replayAndRecover);
-            }, PROBE_INTERVAL_TICKS);
-        } catch (IllegalPluginAccessException e) {
-            // leftover journal entries replay on next boot
-        }
-    }
-
-    /**
-     * The standard shape for a cache reload:
-     * Drain queued writes and run the database read on an async thread, then apply the result on the main thread.
-     * Reloads are remotely triggerable through cross-server sync, so they should never block the main thread on I/O.
-     */
-    public <T> void readAsync(@NonNull Supplier<T> read, @NonNull Consumer<T> applyOnMain) {
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            awaitWrites();
-            T result = read.get();
-            if (!plugin.isEnabled()) {
-                return;
-            }
-            try {
-                Bukkit.getScheduler().runTask(plugin, () -> applyOnMain.accept(result));
-            } catch (IllegalPluginAccessException ignored) {
-                // reload doesn't matter anymore
-            }
-        });
-    }
-
-    private void replayAndRecover() {
-        int replayed = journal.replay();
-        if (replayed < 0) {
-            scheduleProbe();
-            return;
-        }
-        degraded = false;
-        plugin.getLogger().info("Database recovered: replayed " + replayed + " journaled writes");
-        SyncService syncService = plugin.getSyncService();
-        if (syncService != null) {
-            syncService.resyncAfterRecovery();
-        }
-        List<UUID> warned = List.copyOf(notifiedActors);
-        notifiedActors.clear();
-        for (UUID actor : warned) {
-            sendLater(actor, "database.recovered");
-            if (replayed > 0) {
-                sendLater(actor, "database.replayed", Placeholder.unparsed("count", String.valueOf(replayed)));
-            }
-        }
-        if (replayed > 0) {
-            SyncService sync = plugin.getSyncService();
-            if (sync != null) {
-                sync.publish(SyncService.SCOPE_FULL);
-            }
-        }
-    }
-
-    private void publishDirtyScopes() {
-        if (dirtyScopes.isEmpty()) {
-            return;
-        }
-        List<String> scopes = List.copyOf(dirtyScopes);
-        dirtyScopes.clear();
-        SyncService sync = plugin.getSyncService();
-        if (sync != null) {
-            for (String scope : scopes) {
-                sync.publish(scope);
-            }
-        }
-    }
-
-    private void sendLater(UUID actor, String messageKey, TagResolver... resolvers) {
-        if (!plugin.isEnabled()) {
-            return;
-        }
-        try {
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                Player player = Bukkit.getPlayer(actor);
-                if (player != null) {
-                    plugin.getMessageManager().send(player, messageKey, resolvers);
-                }
-            });
-        } catch (IllegalPluginAccessException ignored) {
-            // nobody left to notify
-        }
-    }
-
-    static boolean isRetryableFailure(Throwable failure) {
-        int depth = 0;
-        for (Throwable current = failure; current != null && depth++ < 16; current = current.getCause()) {
-            if (!(current instanceof SQLException sql)) {
-                continue;
-            }
-            if (sql.getSQLState() != null && sql.getSQLState().startsWith("08")) {
-                return true;
-            }
-            if (sql.getClass().getName().startsWith("org.sqlite.")) {
-                int code = sql.getErrorCode() & 0xff;
-                if (code == 5 || code == 8 || code == 10 || code == 13 || code == 14) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    public void awaitWrites() {
-        try {
-            writeExecutor.submit(() -> {}).get(10, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Timed out waiting for pending database writes", e);
-        }
-    }
-
     public void shutdown() {
+        if (noticeListener != null) {
+            HandlerList.unregisterAll(noticeListener);
+            noticeListener = null;
+        }
         writeExecutor.shutdown();
         try {
             // outlasts the 3s socket timeout with margin
@@ -417,7 +225,7 @@ public class DatabaseManager {
             writeExecutor.shutdownNow();
             Thread.currentThread().interrupt();
         }
-        journal.closeWriter();
+        outage.closeJournal();
         try {
             DB.close();
         } catch (Exception e) {

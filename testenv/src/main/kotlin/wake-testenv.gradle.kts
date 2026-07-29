@@ -83,16 +83,18 @@ val testEnvUp = tasks.register("testEnvUp") {
         } else if (mariadb) {
             log.lifecycle("testenv: run/config/paper-global.yml missing: boot the server once, then rerun runServer to enable proxy joins on the primary")
         }
-        if (!mariadb) {
-            return@doLast
-        }
         if (serverProps.exists()) {
+            val wanted = if (mariadb) "false" else "true"
             val text = serverProps.readText()
-            val patched = text.replace(Regex("(?m)^online-mode=true$"), "online-mode=false")
+            val patched = text.replace(Regex("(?m)^online-mode=.*$"), "online-mode=$wanted")
             if (patched != text) {
                 serverProps.writeText(patched)
-                log.lifecycle("testenv: set online-mode=false on the primary (required behind Velocity)")
+                val why = if (mariadb) "required behind Velocity" else "no proxy in sqlite mode"
+                log.lifecycle("testenv: set online-mode=$wanted on the primary ($why)")
             }
+        }
+        if (!mariadb) {
+            return@doLast
         }
         paper2Plugins.deleteRecursively()
         if (runPlugins.isDirectory) {

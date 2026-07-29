@@ -12,49 +12,59 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.Collections;
 
+import static dev.muggel.wake.features.obu.SettingType.BLOCK_LIST;
+import static dev.muggel.wake.features.obu.SettingType.BOOLEAN;
+import static dev.muggel.wake.features.obu.SettingType.BYTE;
+import static dev.muggel.wake.features.obu.SettingType.COLLISION_ENUM;
+import static dev.muggel.wake.features.obu.SettingType.DOUBLE;
+import static dev.muggel.wake.features.obu.SettingType.ENTITY_LIST;
+import static dev.muggel.wake.features.obu.SettingType.FLOAT;
+import static dev.muggel.wake.features.obu.SettingType.INT;
+import static dev.muggel.wake.features.obu.SettingType.SETTING_ENUM;
+
 public enum OBUDefinition {
-    reset(0, "settings", List.of(), (String[]) null),
-    stepsize(1, "settings", List.of("float"), "0.0"),
-    defaultslipperiness(2, "settings", List.of("float"), "0.6"),
-    blockslipperiness(3, "settings", List.of("float", "block_list"), (String[]) null),
-    falldamage(4, "settings", List.of("boolean"), "true"),
-    waterelevation(5, "settings", List.of("boolean"), "false"),
-    aircontrol(6, "settings", List.of("boolean"), "false"),
-    jumpforce(7, "settings", List.of("float"), "0.0"),
-    boatgravity(9, "settings", List.of("double"), "-0.03999999910593033"),
-    setyawaccel(10, "settings", List.of("float"), "1.0"),
-    setforwardaccel(11, "settings", List.of("float"), "0.04"),
-    setbackwardaccel(12, "settings", List.of("float"), "0.005"),
-    setturnforwardaccel(13, "settings", List.of("float"), "0.005"),
-    allowaccelstacking(14, "settings", List.of("boolean"), "false"),
-    underwatercontrol(16, "settings", List.of("boolean"), "false"),
-    surfacewatercontrol(17, "settings", List.of("boolean"), "false"),
-    coyotetime(19, "settings", List.of("int"), "0"),
-    waterjumping(20, "settings", List.of("boolean"), "false"),
-    swimforce(21, "settings", List.of("float"), "0.0"),
-    removeblockslipperiness(22, "settings", List.of("block_list"), (String[]) null),
-    clearslipperiness(23, "settings", List.of(), (String[]) null),
-    setblocksetting(26, "settings", List.of("setting_enum", "float", "block_list"), (String[]) null),
-    collisionmode(27, "settings", List.of("collision_enum"), "VANILLA"),
-    stepwhilefalling(28, "settings", List.of("boolean"), "false"),
-    setinterpolationten(29, "settings", List.of("boolean"), "false"),
-    setcollisionresolution(30, "settings", List.of("byte"), "1"),
-    addcollisionfilter(31, "settings", List.of("entity_list"), (String[]) null),
-    clearcollisionfilter(32, "settings", List.of(), (String[]) null),
-    setwalltapmultiplier(34, "settings", List.of("float"), "0.0"),
-    setjumps(35, "settings", List.of("int"), "1"),
-    setscale(36, "settings", List.of("float"), "1.0"),
-    setstepupslipperiness(37, "settings", List.of("float"), "1.0"),
-    setresetonworldload(38, "settings", List.of("boolean"), "true"),
-    fixdoublewaterelevation(39, "settings", List.of("boolean"), "false"),
-    setlateralslipperiness(40, "settings", List.of("float"), "1.0"),
-    setbrakeslipperiness(41, "settings", List.of("float"), "1.0"),
-    applyimpulse(42, "settings", List.of("double", "double", "double"), List.of("x", "y", "z")),
-    applyimpulserelative(43, "settings", List.of("double", "double", "double"), List.of("x", "y", "z")),
-    setmultistepping(44, "settings", List.of("boolean"), "false"),
-    setmaxspeed(45, "settings", List.of("float"), "-1.0"),
-    setmaxspeedresistance(46, "settings", List.of("float"), "0.0"),
-    sethoneycompat(47, "settings", List.of("boolean"), "false");
+    reset(0, List.of(), (String[]) null),
+    stepsize(1, List.of(FLOAT), "0.0"),
+    defaultslipperiness(2, List.of(FLOAT), "0.6"),
+    blockslipperiness(3, List.of(FLOAT, BLOCK_LIST), (String[]) null),
+    falldamage(4, List.of(BOOLEAN), "true"),
+    waterelevation(5, List.of(BOOLEAN), "false"),
+    aircontrol(6, List.of(BOOLEAN), "false"),
+    jumpforce(7, List.of(FLOAT), "0.0"),
+    boatgravity(9, List.of(DOUBLE), "-0.03999999910593033"),
+    setyawaccel(10, List.of(FLOAT), "1.0"),
+    setforwardaccel(11, List.of(FLOAT), "0.04"),
+    setbackwardaccel(12, List.of(FLOAT), "0.005"),
+    setturnforwardaccel(13, List.of(FLOAT), "0.005"),
+    allowaccelstacking(14, List.of(BOOLEAN), "false"),
+    underwatercontrol(16, List.of(BOOLEAN), "false"),
+    surfacewatercontrol(17, List.of(BOOLEAN), "false"),
+    coyotetime(19, List.of(INT), "0"),
+    waterjumping(20, List.of(BOOLEAN), "false"),
+    swimforce(21, List.of(FLOAT), "0.0"),
+    removeblockslipperiness(22, List.of(BLOCK_LIST), (String[]) null),
+    clearslipperiness(23, List.of(), (String[]) null),
+    setblocksetting(26, List.of(SETTING_ENUM, FLOAT, BLOCK_LIST), (String[]) null),
+    collisionmode(27, List.of(COLLISION_ENUM), "VANILLA"),
+    stepwhilefalling(28, List.of(BOOLEAN), "false"),
+    setinterpolationten(29, List.of(BOOLEAN), "false"),
+    setcollisionresolution(30, List.of(BYTE), "1"),
+    addcollisionfilter(31, List.of(ENTITY_LIST), (String[]) null),
+    clearcollisionfilter(32, List.of(), (String[]) null),
+    setwalltapmultiplier(34, List.of(FLOAT), "0.0"),
+    setjumps(35, List.of(INT), "1"),
+    setscale(36, List.of(FLOAT), "1.0"),
+    setstepupslipperiness(37, List.of(FLOAT), "1.0"),
+    setresetonworldload(38, List.of(BOOLEAN), "true"),
+    fixdoublewaterelevation(39, List.of(BOOLEAN), "false"),
+    setlateralslipperiness(40, List.of(FLOAT), "1.0"),
+    setbrakeslipperiness(41, List.of(FLOAT), "1.0"),
+    applyimpulse(42, List.of(DOUBLE, DOUBLE, DOUBLE), List.of("x", "y", "z")),
+    applyimpulserelative(43, List.of(DOUBLE, DOUBLE, DOUBLE), List.of("x", "y", "z")),
+    setmultistepping(44, List.of(BOOLEAN), "false"),
+    setmaxspeed(45, List.of(FLOAT), "-1.0"),
+    setmaxspeedresistance(46, List.of(FLOAT), "0.0"),
+    sethoneycompat(47, List.of(BOOLEAN), "false");
 
     public static final String CONTEXT_PERSONAL = "wake:personal";
     public static final String CONTEXT_EMPTY = "wake:empty";
@@ -62,21 +72,19 @@ public enum OBUDefinition {
     public static final String CHANNEL_CONTEXT = "openboatutils:context";
     public static final String CHANNEL_CONFIGURATION = "openboatutils:configuration";
     public static final String CHANNEL_HANDSHAKE = "openboatutils:handshake";
+    public static final short PACKET_RESEND_VERSION = 15;
     public static final int LATEST_SUPPORTED_VERSION = 22;
-    public static final List<Integer> REJECTED_VERSIONS = List.of(8, 12, 15, 20, 21);
+    public static final Set<Integer> REJECTED_VERSIONS = Set.of(8, 12, 15, 20, 21);
     private final int id;
-    private final String channel;
-    private final List<String> types;
+    private final List<SettingType> types;
     private final List<String> argNames;
     private final String[] defaultValues;
 
-    OBUDefinition(int id, String channel, List<String> types, String... defaultValues) {
-        this(id, channel, types, null, defaultValues);
+    OBUDefinition(int id, List<SettingType> types, String... defaultValues) {
+        this(id, types, null, defaultValues);
     }
-
-    OBUDefinition(int id, String channel, List<String> types, List<String> argNames, String... defaultValues) {
+    OBUDefinition(int id, List<SettingType> types, List<String> argNames, String... defaultValues) {
         this.id = id;
-        this.channel = channel;
         this.types = types;
         this.argNames = argNames;
         this.defaultValues = (defaultValues == null || defaultValues.length == 0 || defaultValues[0] == null) ? null : defaultValues;
@@ -86,11 +94,7 @@ public enum OBUDefinition {
         return id;
     }
 
-    public String channel() {
-        return channel;
-    }
-
-    public List<String> types() {
+    public List<SettingType> types() {
         return types;
     }
 
@@ -127,7 +131,7 @@ public enum OBUDefinition {
         return this == applyimpulse || this == applyimpulserelative;
     }
 
-    public boolean canRepeat() {
+    private boolean canRepeat() {
         return this == blockslipperiness || this == removeblockslipperiness || this == setblocksetting || this == addcollisionfilter;
     }
 
@@ -156,8 +160,8 @@ public enum OBUDefinition {
         return REGISTERED_NAMES;
     }
 
-    public @NonNull String generateUniqueKey(List<String> args) {
-        if (canRepeat() && args != null && !args.isEmpty()) {
+    public @NonNull String generateUniqueKey(@NonNull List<String> args) {
+        if (canRepeat() && !args.isEmpty()) {
             if (this == blockslipperiness) {
                 return id + ":" + (args.size() > 1 ? args.get(1) : "");
             } else if (this == removeblockslipperiness) {
@@ -220,8 +224,7 @@ public enum OBUDefinition {
         SWITCH_CONTEXT(1),
         DROP_CONTEXT(2),
         STORE_CONTEXT(3),
-        ENTITY_CONTEXT(4),
-        COMPOUND(5);
+        ENTITY_CONTEXT(4);
         private final int id;
         ContextPacket(int id) { this.id = id; }
 

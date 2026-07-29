@@ -53,10 +53,14 @@ commands:
     export_fail: "<prefix><danger>Failed to export data for module <accent><module></accent></danger>"
     import_success: "<prefix><neutral>Imported <primary><count></primary> records for module <accent><module></accent></neutral>"
     import_fail: "<prefix><danger>Failed to import data for module <accent><module></accent></danger>"
+    import_confirm: "<prefix><danger><accent><module></accent> records will be overwritten or merged with imported data</danger><br><confirm_btn>"
     setdefaults_success: "<prefix><neutral>Seeded <primary><count></primary> default records for module <accent><module></accent></neutral>"
     setdefaults_fail: "<prefix><danger>Failed to seed defaults for module <accent><module></accent></danger>"
+    setdefaults_confirm: "<prefix><danger><accent><module></accent> records will be reset to plugin defaults (custom records are kept)</danger><br><confirm_btn>"
     drop_success: "<prefix><neutral>Dropped records for module <accent><module></accent></neutral>"
     drop_fail: "<prefix><danger>Failed to drop records for module <accent><module></accent></danger>"
+    drop_confirm: "<prefix><danger>Dropping deletes every stored <accent><module></accent> record from the database</danger><br><confirm_btn>"
+    confirm_btn: "  <muted>●</muted> <neutral>This cannot be undone. Run <click:suggest_command:'/wake database <literal> <module> confirm'><hover:show_text:'<secondary>Click to fill in</secondary>'><accent>/wake database <literal> <module> confirm</accent></hover></click> to go ahead</neutral>"
     unavailable: "<prefix><danger>Database is unreachable: try again once it has recovered</danger>"
   killemptyboats:
     success: "<prefix><neutral>Removed <primary><amount></primary> empty boats</neutral>"
@@ -74,7 +78,6 @@ commands:
       invalid_boat: "<prefix><danger>Invalid boat type specified</danger>"
       variant_oars: 'parkour (with oars)'
       variant_no_oars: 'parkour (no oars)'
-      variant_unknown: 'unknown'
     boostpad:
       block_added: "<prefix><neutral>Added boostpad block</neutral>"
       block_removed: "<prefix><neutral>Removed boostpad block</neutral>"
@@ -89,10 +92,16 @@ commands:
       block_enabled: "<prefix><neutral>Boostpad profile for <accent><block></accent> is now <primary>enabled</primary></neutral>"
       block_disabled: "<prefix><neutral>Boostpad profile for <accent><block></accent> is now <danger>disabled</danger></neutral>"
   obu:
+    requires_client: "<prefix><danger>This command needs the OpenBoatUtils mod installed on <target> client</danger>"
+    unsupported_client: "<prefix><danger>OpenBoatUtils is disabled for <target> client (version not supported by server)</danger>"
+    reconnect_client: "<prefix><danger>Server hasn't recognized OpenBoatUtils on <target> client (reconnect if its installed)</danger>"
+    no_settings: "  <muted>●</muted> <muted_dark>(no settings configured)</muted_dark>"
     config:
       invalid_duration: "<prefix><danger>Invalid duration: <accent><input></accent></danger> <neutral>→ use s, min, h, d, w, mo or y (e.g. 10h) or 0 to disable</neutral>"
       purge_set: "<prefix><neutral>Unused sandboxes are now kept for <primary><duration></primary></neutral>"
       purge_disabled: "<prefix><neutral>Automatic sandbox purging is now <danger>disabled</danger></neutral>"
+      context_quantity: "<gradient:$secondary:$primary>─── Stored Contexts ─────────</gradient><br>  <muted>●</muted> <neutral>Server contexts: <primary><server></primary></neutral><br>  <muted>●</muted> <neutral>Sandboxes (all owners): <primary><sandboxes></primary></neutral><br>  <muted>●</muted> <neutral>Total: <primary><total></primary></neutral>"
+      context_unavailable: "<prefix><danger>Cannot count contexts: the context table has not been read from the database yet</danger>"
     defaults:
       missing: "<prefix><danger>No default exists for: <accent><setting></accent></danger>"
       vanilla: "<prefix><neutral>Vanilla default for <accent><setting></accent> is <primary><value></primary></neutral>"
@@ -101,7 +110,6 @@ commands:
       clear_btn: "<click:run_command:/wakeobu -clear <setting>><hover:show_text:'<secondary>Clear current setting</secondary>'><secondary>[Clear current]</secondary></hover></click>"
       blocked_btn: "<hover:show_text:'<danger>This is a server default setting</danger><br><neutral>Create a sandbox to remove it, or override it with a temporary context to modify it</neutral>'><danger>[Server Default]</danger></hover>"
     context:
-      empty: "<prefix><danger>No contexts found</danger>"
       header_server: "<gradient:$secondary:$primary>─── Server Contexts ─────────</gradient>"
       header_sandbox: "<gradient:$secondary:$primary>─── Your Sandboxes ─────────</gradient>"
       item: "  <muted>●</muted> <accent><context></accent>"
@@ -112,6 +120,7 @@ commands:
       invalid_target: "<prefix><danger>Contexts can only be applied to players or boats</danger>"
       cannot_delete: "<prefix><danger>Cannot delete protected context: <accent><context></accent></danger>"
       deleted: "<prefix><neutral>Deleted server context <accent><context></accent></neutral>"
+      kicked: "<prefix><danger>The context <accent><context></accent> you were in was deleted</danger>"
       settings: "<gradient:$secondary:$primary>─── Settings for <context> ─────────</gradient>"
     clear:
       unknown: "<prefix><danger>Unknown OBU setting: <accent><setting></accent></danger>"
@@ -136,12 +145,12 @@ commands:
       imported: "<prefix><neutral>Imported sandbox <accent><sandbox></accent></neutral>"
       import_skipped: "<prefix><danger>Skipped <accent><count></accent> invalid settings from the share code</danger>"
       hint: "<prefix><info><hover:show_text:'<secondary>Sandbox active</secondary><br><neutral>You can now use <accent>/wakeobu</accent> to modify the sandbox context</neutral>'>?</hover></info>"
-      invalid_name: "<prefix><danger>Invalid sandbox name: <accent><sandbox></accent></danger>"
+      invalid_name: "<prefix><danger>Invalid sandbox name: <accent><input></accent></danger>"
       header: "<gradient:$secondary:$primary>─── Sandbox <sandbox> ─────────</gradient>"
       deleted: "<prefix><neutral>Deleted sandbox <accent><sandbox></accent></neutral>"
       kicked: "<prefix><danger>The sandbox <accent><sandbox></accent> you were in was deleted</danger>"
+      purged: "<prefix><danger>The sandbox <accent><sandbox></accent> you were in wes deleted (unused for too long)</danger>"
       published: "<prefix><neutral>Published sandbox <accent><sandbox></accent> as a server context</neutral>"
-      empty: "  <muted>●</muted> <muted_dark>(no settings configured)</muted_dark>"
       code: "<click:copy_to_clipboard:'<code>'><hover:show_text:'<secondary>Copy share code</secondary>'><secondary>[Copy Share Code]</secondary></hover></click><br>  <muted>●</muted> <neutral>Share it or import it with <accent>/wakeobu -sandbox import</accent></neutral>"
       header_export: "<prefix><neutral>Exported sandbox <accent><sandbox></accent>:</neutral>"
     status:
@@ -163,6 +172,8 @@ commands:
       clear: "  <muted>●</muted> <accent>/wakeobu -clear</accent><br>    <muted>○</muted> <neutral>Remove a temporary or sandbox setting</neutral>"
       defaults: "  <muted>●</muted> <accent>/wakeobu -defaults</accent><br>    <muted>○</muted> <neutral>List or revert OBU settings to vanilla defaults</neutral>"
       settings: "  <muted>●</muted> <accent>/wakeobu <setting> [args]</accent><br>    <muted>○</muted> <neutral>Add OBU settings to player and boat contexts</neutral>"
+      reset: "  <muted>●</muted> <accent>/wakeobu -reset</accent><br>    <muted>○</muted> <neutral>Drop temporary overrides and return to the default context</neutral>"
+      config: "  <muted>●</muted> <accent>/wakeobu -settings</accent><br>    <muted>○</muted> <neutral>Server-side configuration</neutral>"
       wiki: "<prefix><click:open_url:'https://openboatutils.github.io/commands.html'><hover:show_text:'<info>Open in browser</info>'><info>[OBU Wiki]</info></hover></click>"
 axiom:
   display_name: "<accent><b><!i><name></b></accent>"
@@ -170,7 +181,7 @@ networking:
   obu:
     outdated: "<prefix><danger>Warning: You are using an outdated version of OpenBoatUtils. Some features on this server may not work correctly</danger>"
     ahead: "<prefix><info>Notice: Your OpenBoatUtils version is newer than the server's supported version. New OBU features won't be available</info>"
-    rejected: "<danger>Your OpenBoatUtils version is bugged or no longer supported by this server<br><br>Please update to the latest version</danger>"
+    unsupported: "<prefix><danger>Your OpenBoatUtils version is bugged or no longer supported by this server (features disabled)</danger><br><neutral>Please update to the latest version</neutral>"
 
 words:
   target:

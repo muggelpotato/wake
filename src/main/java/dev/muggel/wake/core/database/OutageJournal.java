@@ -36,8 +36,8 @@ public class OutageJournal {
         this.file = new File(plugin.getDataFolder(), "outage-journal.jsonl");
     }
 
-    public boolean hasEntries() {
-        return file.isFile() && file.length() > 0;
+    public boolean isEmpty() {
+        return !file.isFile() || file.length() == 0;
     }
 
     public void append(String query, Object @NonNull ... params) {
@@ -61,7 +61,7 @@ public class OutageJournal {
 
     public int replay() {
         closeWriter();
-        if (!hasEntries()) {
+        if (isEmpty()) {
             return 0;
         }
         int replayed = 0;
@@ -84,7 +84,7 @@ public class OutageJournal {
                     DB.executeUpdate(query, params);
                     replayed++;
                 } catch (Exception e) {
-                    if (DatabaseManager.isRetryableFailure(e)) {
+                    if (OutageMonitor.isRetryableFailure(e)) {
                         keepRemainderFrom(lineIndex - 1);
                         plugin.getLogger().warning("Database dropped out during journal replay (remaining entries kept for next attempt)");
                         return -1;

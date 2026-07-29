@@ -47,13 +47,13 @@ public final class Wake extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
+        this.syncService = new SyncService(this);
         this.messageManager = new MessageManager(this);
         WakeCommandManager.init(this);
         this.moduleManager = new ModuleManager(this);
         registerModules();
         moduleManager.buildAllCommands();
         moduleManager.syncModules();
-        this.syncService = new SyncService(this);
     }
 
     private void registerModules() {
@@ -74,10 +74,6 @@ public final class Wake extends JavaPlugin {
     @Override
     public void onDisable() {
         try {
-            if (syncService != null) {
-                syncService.shutdown();
-                syncService = null;
-            }
             if (moduleManager != null) {
                 moduleManager.disableAll();
                 moduleManager = null;
@@ -86,8 +82,12 @@ public final class Wake extends JavaPlugin {
             serviceRegistry.unregisterAll();
             if (databaseManager != null) {
                 databaseManager.shutdown();
-                databaseManager = null;
             }
+            if (syncService != null) {
+                syncService.shutdown();
+                syncService = null;
+            }
+            databaseManager = null;
             try {
                 PacketEvents.getAPI().terminate();
             } catch (IllegalStateException e) {

@@ -11,10 +11,17 @@
  *
  * <h2>What is automatic</h2>
  * <ul>
- *   <li><b>Permissions.</b> Each literal becomes a permission node {@code wake.<module>.commands.<literal>...}. Arguments don't extend the path. Never declare permissions in {@code plugin.yml} or write permission strings by hand</li>
+ *   <li><b>Permissions.</b> Each literal becomes a permission node {@code wake.<module>.commands.<literal>...}. Arguments don't extend the path. A node the sender may not use is hidden from tab-completion, not only blocked. Never declare permissions in {@code plugin.yml} or write permission strings by hand</li>
+ *   <li><b>Permission bundles.</b> {@code .withPreset(...)} files one node under {@code wake.presetperms.admin} / {@code wake.presetperms.player}, {@code .withPresetBranch(...)} a whole branch. A bundle is a shortcut for granting exactly those nodes: it never denies, never propagates to children, and is never a default</li>
  *   <li><b>Module gating:</b> A command whose module is disabled is hidden and blocked with a localized message before the executor runs. Command bodies never re-check module presence</li>
+ *   <li><b>Gates.</b> {@code .withGate(...)} guards a whole branch (e.g. "needs the OBU client"), checked after the target is resolved. One declaration covers every command below it; {@code Gate.OPEN} lifts it again for a sub-branch that doesn't need it</li>
  *   <li><b>Errors.</b> Exceptions from executors are caught, logged, and reported to the sender</li>
  * </ul>
+ *
+ * <h2>Subject and audience</h2>
+ * The value an executor receives is the <b>subject</b>: the entity behind {@code /execute as} when there is one, otherwise the sender. <br>
+ * {@code ctx.getSource().getSender()} is the <b>audience</b>: whoever typed the command reads every reply. <br>
+ * Never re-derive the subject from the sender, and never send feedback to the subject.
  *
  * <h2>One class per command</h2>
  * Every command node is one class with {@code static CommandNode getNode(Wake plugin)}. <br>

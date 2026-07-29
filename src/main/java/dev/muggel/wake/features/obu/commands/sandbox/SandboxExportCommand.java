@@ -5,7 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
-import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
+import dev.muggel.wake.core.commands.arguments.NameArgumentType;
 import dev.muggel.wake.features.obu.context.OBUContext;
 import dev.muggel.wake.features.obu.context.OBUSetting;
 import dev.muggel.wake.features.obu.service.OBUContextManager;
@@ -20,19 +20,17 @@ import java.util.logging.Level;
 public class SandboxExportCommand {
     static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("export")
-                .arguments(CommandNode.argument("name", StringArgumentType.string())
+                .withGate(CommandNode.Gate.OPEN)
+                .arguments(CommandNode.argument("name", NameArgumentType.greedy())
                         .suggests((ctx, builder) -> SandboxCommandHelper.suggestOwnSandboxes(ctx, builder, plugin))
-                        .executesSender((ctx, sender) -> execute(ctx, plugin)));
+                        .executesSender((ctx, subject) -> execute(ctx, subject, plugin)));
     }
 
-    private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
+    private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, CommandSender subject, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         String name = StringArgumentType.getString(ctx, "name");
-        String key = SandboxCommandHelper.sandboxKeyFor(sender, name);
-        OBUContext context = contextManager.getContext(key);
+        OBUContext context = SandboxCommandHelper.requireOwnSandbox(plugin, sender, subject, name);
         if (context == null) {
-            plugin.getMessageManager().send(sender, "commands.obu.sandbox.missing", Placeholder.unparsed("sandbox", name));
             return 0;
         }
         StringJoiner joiner = new StringJoiner(";");

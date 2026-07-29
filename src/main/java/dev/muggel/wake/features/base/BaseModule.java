@@ -3,6 +3,8 @@ package dev.muggel.wake.features.base;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.commands.PermissionPreset;
+import dev.muggel.wake.core.database.StateDao;
 import dev.muggel.wake.core.module.AbstractModule;
 import dev.muggel.wake.features.base.commands.HelpCommand;
 import dev.muggel.wake.features.base.commands.KillEmptyBoatsCommand;
@@ -25,14 +27,15 @@ public class BaseModule extends AbstractModule {
     @Override
     protected void onModuleEnable() {
         registerListener(new BoatListener(this));
-        boolean wasEmpty = getPlugin().getStateDao().snapshot("base.").isEmpty();
-        seedDataIfEmpty(wasEmpty, "defaults/base_default.yml", "Base Configs");
+        StateDao stateDao = getPlugin().getStateDao();
+        seedDataIfEmpty(stateDao.isLoaded() ? stateDao.snapshot("base.").isEmpty() : null, "defaults/base_default.yml", "Base Configs");
     }
 
     @Override
     public CommandNode buildCommands(Wake plugin) {
         return CommandNode.literal("wake")
                 .withModule(BaseModule.class)
+                .withPresetBranch(PermissionPreset.ADMIN)
                 .withDescription("Main command for Wake")
                 .aliases("wa")
                 .addSubcommand(HelpCommand.getNode(plugin))

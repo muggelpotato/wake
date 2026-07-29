@@ -1,5 +1,6 @@
 package dev.muggel.wake.core.commands;
 
+import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
@@ -20,15 +21,16 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 /**
  * Compiles registered {@link CommandNode} trees into Paper/Brigadier commands. <br>
- * 1. Derives a permission from each chain of literals ({@code wake.<module>.commands.<literal>...}) <br>
+ * 1. Derives a permission from each chain of literals ({@code wake.<module>.commands.<literal>...}) and files it under whichever {@link PermissionPreset} bundles the node declared <br>
  * 2. Hides and blocks commands whose module is disabled <br>
- * 3. Resolves the executor target ({@link CommandNode.TargetType}) <br>
+ * 3. Resolves the executor target ({@link CommandNode.TargetType}) and applies the inherited {@link CommandNode.Gate} <br>
  * 4. Wraps every executor with error handling and database actor tracking <br>
  * Modules only register a root node (everything else is automatic). <br>
  */
@@ -46,6 +48,7 @@ public class WakeCommandManager {
             for (CommandNode node : REGISTERED_NODES.values()) {
                 compileAndRegister(plugin, commands, node);
             }
+            PermissionManager.registerPresets();
         });
     }
 
@@ -53,6 +56,16 @@ public class WakeCommandManager {
         List<CommandNode> roots = new ArrayList<>(REGISTERED_NODES.values());
         roots.sort(Comparator.comparing(CommandNode::getName));
         return roots;
+    }
+
+    /** The compiled root a module registered, for reading its sub-commands back (their permissions included) */
+    public static @Nullable CommandNode rootOf(@NonNull Class<? extends WakeModule> moduleClass) {
+        for (CommandNode root : REGISTERED_NODES.values()) {
+            if (root.getModuleClass() == moduleClass) {
+                return root;
+            }
+        }
+        return null;
     }
 
     public static @Nullable String moduleIdOf(Wake plugin, @NonNull CommandNode rootNode) {
@@ -72,17 +85,20 @@ public class WakeCommandManager {
         }
         String basePermission = "wake." + moduleName + ".commands";
         if (!rootNode.isArgument()) {
-            LiteralArgumentBuilder<CommandSourceStack> literalRoot = compileLiteralNode(plugin, rootNode, basePermission, moduleClass);
+            LiteralArgumentBuilder<CommandSourceStack> literalRoot = (LiteralArgumentBuilder<CommandSourceStack>)
+                    compileNode(plugin, rootNode, basePermission, new Inherited(moduleClass, Set.of(), null), true);
             commands.register(literalRoot.build(), rootNode.getDescription(), rootNode.getAliases());
         }
     }
 
-    public static @NonNull LiteralArgumentBuilder<CommandSourceStack> compileLiteralNode(
-            Wake plugin, 
-            CommandNode node, 
-            String currentPermissionPath, 
-            Class<? extends WakeModule> parentModuleClass) {
-        return (LiteralArgumentBuilder<CommandSourceStack>) compileNode(plugin, node, currentPermissionPath, parentModuleClass, true);
+    /** What a node takes from its parent unless it declares its own */
+    private record Inherited(@Nullable Class<? extends WakeModule> moduleClass, @NonNull Set<PermissionPreset> presets, CommandNode.@Nullable Gate gate) {
+        @NonNull Inherited resolve(@NonNull CommandNode node) {
+            return new Inherited(
+                    node.getModuleClass() != null ? node.getModuleClass() : moduleClass,
+                    node.getBranchPresets() != null ? node.getBranchPresets() : presets,
+                    node.getGate() != null ? node.getGate() : gate);
+        }
     }
 
     @SuppressWarnings("ExtractMethodRecommender")
@@ -90,10 +106,10 @@ public class WakeCommandManager {
             Wake plugin,
             @NonNull CommandNode node,
             String currentPermissionPath,
-            Class<? extends WakeModule> parentModuleClass,
+            @NonNull Inherited parent,
             boolean isRoot) {
-        Class<? extends WakeModule> nodeModuleClass = node.getModuleClass();
-        Class<? extends WakeModule> effectiveModuleClass = nodeModuleClass != null ? nodeModuleClass : parentModuleClass;
+        Inherited inherited = parent.resolve(node);
+        Class<? extends WakeModule> effectiveModuleClass = inherited.moduleClass();
         String cleanName = node.getName().startsWith("-") ? node.getName().substring(1) : node.getName();
         String nodePermission;
         if (isRoot || node.isArgument()) {
@@ -101,17 +117,21 @@ public class WakeCommandManager {
         } else {
             nodePermission = currentPermissionPath + "." + cleanName;
         }
+        node.setPermission(nodePermission);
         PermissionManager.registerPermission(nodePermission);
+        PermissionManager.assignPresets(nodePermission, inherited.presets());
+        PermissionManager.assignPresets(nodePermission, node.getPresets());
+        ArgumentType<?> argumentType = node.getArgumentType();
         ArgumentBuilder builder;
-        if (node.isArgument()) {
-            RequiredArgumentBuilder<CommandSourceStack, ?> argBuilder = Commands.argument(node.getName(), node.getArgumentType());
+        if (argumentType != null) {
+            RequiredArgumentBuilder<CommandSourceStack, ?> argBuilder = Commands.argument(node.getName(), argumentType);
             SuggestionProvider<CommandSourceStack> customSuggester = node.getCustomSuggester();
             if (customSuggester != null) {
                 argBuilder.suggests(customSuggester);
             }
             builder = argBuilder;
         } else {
-            builder = Commands.literal(node.getName());
+            builder = PermissionAwareLiteral.builder(node.getName());
         }
         builder.requires(source -> {
             CommandSourceStack css = (CommandSourceStack) source;
@@ -133,12 +153,16 @@ public class WakeCommandManager {
                     plugin.getMessageManager().send(sender, "commands.base.module_not_loaded", Placeholder.unparsed("module", moduleName));
                     return 0;
                 }
-                Object target = node.getTargetType().resolve(source, plugin);
-                if (target == null) {
-                    return 0;
-                }
                 UUID previousActor = plugin.getDatabaseManager().currentActor();
                 try {
+                    Object target = node.getTargetType().resolve(source, plugin);
+                    if (target == null) {
+                        return 0;
+                    }
+                    CommandNode.Gate gate = inherited.gate();
+                    if (gate != null && !gate.allows(source, target)) {
+                        return 0;
+                    }
                     plugin.getDatabaseManager().setActor(sender);
                     return executor.execute(target, (CommandContext<CommandSourceStack>) ctx);
                 } catch (Exception e) {
@@ -151,7 +175,7 @@ public class WakeCommandManager {
             });
         }
         for (CommandNode child : node.getChildren()) {
-            ArgumentBuilder childCompiled = compileNode(plugin, child, nodePermission, effectiveModuleClass, false);
+            ArgumentBuilder childCompiled = compileNode(plugin, child, nodePermission, inherited, false);
             builder.then(childCompiled);
         }
         return builder;

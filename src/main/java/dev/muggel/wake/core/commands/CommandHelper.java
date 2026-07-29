@@ -6,9 +6,11 @@ import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.text.MessageManager;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -30,12 +32,18 @@ public final class CommandHelper {
     public static @NonNull CommandNode toggleCommand(@NonNull Wake plugin, @NonNull String literal, @NonNull String stateKey, @NonNull String featureKey) {
         return CommandNode.literal(literal)
                 .arguments(CommandNode.argument("state", BoolArgumentType.bool())
-                        .executesSender((ctx, sender) -> {
+                        .executesSender((ctx, subject) -> {
                             boolean enabled = BoolArgumentType.getBool(ctx, "state");
                             plugin.getStateDao().set(stateKey, enabled);
-                            toggle(plugin, sender, featureKey, enabled);
+                            toggle(plugin, ctx.getSource().getSender(), featureKey, enabled);
                             return Command.SINGLE_SUCCESS;
                         }));
+    }
+
+    /** Who the command acts on: the {@code /execute as} subject when there is one, else the sender. Feedback still goes to {@code source.getSender()} */
+    public static @NonNull CommandSender actingSender(@NonNull CommandSourceStack source) {
+        Entity executor = source.getExecutor();
+        return executor != null ? executor : source.getSender();
     }
 
     public static void sendHint(@NonNull Wake plugin, @NonNull CommandSender sender, @NonNull String messageKey) {
@@ -50,7 +58,7 @@ public final class CommandHelper {
      * Callers should {@code return 0} when this returns null <br>
      * Pass the module id as {@code moduleLabel} for canonical module names in messages
      */
-    public static <T> @Nullable T requireService(@NonNull Class<T> type, @NonNull Wake plugin, CommandSender sender, String moduleLabel) {
+    public static <T> @Nullable T requireService(@NonNull Class<T> type, @NonNull Wake plugin, @NonNull CommandSender sender, @NonNull String moduleLabel) {
         T service = Wake.getServiceRegistry().get(type);
         if (service == null) {
             plugin.getMessageManager().send(sender, "commands.base.module_not_loaded", Placeholder.unparsed("module", moduleLabel));
@@ -68,13 +76,9 @@ public final class CommandHelper {
         return builder.buildFuture();
     }
 
-    public static void toggle(@NonNull Wake plugin, CommandSender sender, String featureKey, boolean enabled) {
+    public static void toggle(@NonNull Wake plugin, @NonNull CommandSender sender, @NonNull String featureKey, boolean enabled) {
         plugin.getMessageManager().send(sender, enabled ? "commands.base.toggle_enabled" : "commands.base.toggle_disabled",
                 Placeholder.component("name", plugin.getMessageManager().getComponent(featureKey)));
-    }
-
-    public static @NonNull String displayKey(@NonNull String key) {
-        return key.startsWith("minecraft:") ? key.substring("minecraft:".length()) : key;
     }
 
     public static @NonNull Component moduleDescription(@NonNull Wake plugin, @NonNull String moduleId, @NonNull CommandNode root) {

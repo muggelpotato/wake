@@ -3,12 +3,12 @@ package dev.muggel.wake.features.base.commands.database;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import dev.muggel.wake.core.Scheduling;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.module.WakeModule;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
-import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.jspecify.annotations.NonNull;
 
@@ -29,23 +29,24 @@ public class DatabaseExportCommand {
         WakeModule module = DatabaseCommandHelper.resolveModule(plugin, sender, moduleId);
         if (module == null) return 0;
         if (DatabaseCommandHelper.databaseUnavailable(plugin, sender)) return 0;
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+        Scheduling.async(plugin, () -> {
             File exportDir = new File(plugin.getDataFolder(), "exports");
             if (!exportDir.exists() && !exportDir.mkdirs()) {
                 plugin.getLogger().severe("Failed to create export directory for module " + moduleId);
-                Bukkit.getScheduler().runTask(plugin, () ->
+                Scheduling.onMain(plugin, () ->
                         plugin.getMessageManager().send(sender, "commands.database.export_fail", Placeholder.unparsed("module", moduleId)));
                 return;
             }
             try {
                 int exported = module.exportData(exportDir);
-                Bukkit.getScheduler().runTask(plugin, () ->
+                plugin.getLogger().info("Database export completed for module " + moduleId + " (" + exported + " records)");
+                Scheduling.onMain(plugin, () ->
                         plugin.getMessageManager().send(sender, "commands.database.export_success",
                                 Placeholder.unparsed("module", moduleId),
                                 Placeholder.unparsed("count", String.valueOf(exported))));
             } catch (Exception e) {
                 plugin.getLogger().log(Level.SEVERE, "Failed to export data for module " + moduleId, e);
-                Bukkit.getScheduler().runTask(plugin, () ->
+                Scheduling.onMain(plugin, () ->
                         plugin.getMessageManager().send(sender, "commands.database.export_fail", Placeholder.unparsed("module", moduleId)));
             }
         });

@@ -9,8 +9,10 @@ import org.jspecify.annotations.Nullable;
 
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 
 /**
@@ -20,12 +22,13 @@ import java.util.logging.Level;
  * All JSON numbers come back as {@code Double} after a restart (the getter coerces scalars to the default's type, but list elements get no coercion).
  */
 public class StateDao extends WakeDao {
+    private static final String UPSERT = "REPLACE INTO wake_state (state_key, state_value) VALUES (?, ?)";
     private final Gson gson = new Gson();
-    private final Map<String, Object> state = new ConcurrentHashMap<>();
+    private final CachedStore<Object> state = mirror("wake_state", this::readState);
     public StateDao(@NonNull Wake plugin) {
         super(plugin);
         initTables();
-        load();
+        state.load();
     }
 
     @Override
@@ -43,39 +46,30 @@ public class StateDao extends WakeDao {
                 """);
     }
 
-    /** Synchronous load (boot-time only). Reload paths use {@link #reloadAsync}. */
-    public void load() {
-        Map<String, Object> fresh = fetchAll();
-        state.clear();
-        state.putAll(fresh);
+    public boolean isLoaded() {
+        return state.isLoaded();
     }
 
     /**
-     * Reloads the cache without blocking the main thread (read async, swap on the main thread).
+     * Reloads the cache without blocking the main thread. <br>
      * Cross-server sync uses the hook to reload modules only after they can observe the fresh state values.
      */
-    public void reloadAsync(@Nullable Runnable afterApply) {
-        plugin.getDatabaseManager().readAsync(this::fetchAll, fresh -> {
-            state.clear();
-            state.putAll(fresh);
-            if (afterApply != null) {
-                afterApply.run();
-            }
-        });
+    public void reloadAsync(@Nullable Consumer<Set<String>> afterApply) {
+        state.reloadAsync(afterApply);
     }
 
-    private @NonNull Map<String, Object> fetchAll() {
+    private @Nullable Map<String, Object> readState(@Nullable Set<String> keys) {
         Map<String, Object> loaded = new HashMap<>();
         try {
-            var results = DB.getResults("SELECT state_key, state_value FROM wake_state");
-            for (var row : results) {
+            selectByKeys("SELECT state_key, state_value FROM wake_state", "state_key", keys, row -> {
                 Object value = gson.fromJson(row.getString("state_value"), Object.class);
                 if (value != null) {
                     loaded.put(row.getString("state_key"), value);
                 }
-            }
+            });
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to load state from database", e);
+            return null;
         }
         return loaded;
     }
@@ -102,8 +96,7 @@ public class StateDao extends WakeDao {
     }
 
     public void set(String key, Object value) {
-        state.put(key, value);
-        asyncUpdate("Failed to save state", "REPLACE INTO wake_state (state_key, state_value) VALUES (?, ?)", key, gson.toJson(value));
+        state.save(key, value, "Failed to save state", List.of(new SqlStatement(UPSERT, new Object[]{key, gson.toJson(value)})));
     }
 
     public boolean toggle(String key, boolean defaultValue) {
@@ -117,13 +110,13 @@ public class StateDao extends WakeDao {
     }
 
     public void importValue(String key, Object value) throws SQLException {
-        state.put(key, value);
-        DB.executeUpdate("REPLACE INTO wake_state (state_key, state_value) VALUES (?, ?)", key, gson.toJson(value));
+        DB.executeUpdate(UPSERT, key, gson.toJson(value));
+        state.announce(key, value);
     }
 
     public Map<String, Object> snapshot(String prefix) {
         Map<String, Object> out = new HashMap<>();
-        state.forEach((k, v) -> {
+        state.view().forEach((k, v) -> {
             if (k.startsWith(prefix)) {
                 out.put(k, v);
             }
@@ -132,7 +125,12 @@ public class StateDao extends WakeDao {
     }
 
     public void clearPrefix(String prefix) {
-        state.keySet().removeIf(k -> k.startsWith(prefix));
-        asyncUpdate("Failed to clear state", "DELETE FROM wake_state WHERE state_key LIKE ?", prefix + "%");
+        for (String key : List.copyOf(state.keys())) {
+            if (key.startsWith(prefix)) {
+                state.forget(key);
+            }
+        }
+        state.announceWholeScope("Failed to clear state", List.of(
+                new SqlStatement("DELETE FROM wake_state WHERE state_key LIKE ?", new Object[]{prefix + "%"})));
     }
 }

@@ -2,6 +2,7 @@ package dev.muggel.wake.features.drydock;
 
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.core.module.AbstractModule;
 import dev.muggel.wake.features.drydock.api.DrydockService;
 import dev.muggel.wake.features.drydock.commands.boostpad.BoostpadCommand;
@@ -28,19 +29,19 @@ public class DrydockModule extends AbstractModule {
         this.drydockDao = new DrydockDao(getPlugin());
         drydockDao.initTables();
         registerDao(drydockDao);
-        DrydockService drydockService = new DrydockServiceImpl(getPlugin(), drydockDao);
-        boolean wasEmpty = drydockService.cachedBoostpads().isEmpty();
+        DrydockServiceImpl drydockService = new DrydockServiceImpl(getPlugin(), drydockDao);
         Wake.getServiceRegistry().register(DrydockService.class, drydockService);
         this.detectorListener = new BoostpadDetectorListener(getPlugin(), drydockService);
         drydockService.setOnReloadCallback(this.detectorListener::updateRegistration);
         registerListener(new OBUBoostpadIntegration());
-        seedDataIfEmpty(wasEmpty, "defaults/drydock_default.yml", "Drydock");
+        seedDataIfEmpty(drydockService.isLoaded() ? drydockService.cachedBoostpads().isEmpty() : null, "defaults/drydock_default.yml", "Drydock");
     }
 
     @Override
     public CommandNode buildCommands(Wake plugin) {
         return CommandNode.literal("drydock")
                 .withModule(DrydockModule.class)
+                .withPresetBranch(PermissionPreset.ADMIN)
                 .withDescription("Commands for the Drydock server")
                 .aliases("dd")
                 .addSubcommand(BoostpadCommand.getNode(plugin))

@@ -5,10 +5,14 @@ import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
+import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.features.obu.OBUModule;
+import dev.muggel.wake.features.obu.SettingType;
 import dev.muggel.wake.features.obu.context.OBUContext;
+import dev.muggel.wake.features.obu.context.OBUSetting;
 import dev.muggel.wake.features.obu.service.OBUContextManager;
 import dev.muggel.wake.features.obu.service.OBUServiceImpl;
+import dev.muggel.wake.features.obu.service.ClientRegistry.ClientState;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
@@ -17,9 +21,11 @@ import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.StringJoiner;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
@@ -50,13 +56,65 @@ public final class OBUCommandHelper {
         return contextManager;
     }
 
+    public static boolean requireClient(@NonNull Wake plugin, @NonNull CommandSourceStack source, @NonNull Object target) {
+        if (!(target instanceof Player player)) {
+            return true;
+        }
+        ClientState state = service(plugin).clients().state(player.getUniqueId());
+        if (state == ClientState.DRIVEN) {
+            return true;
+        }
+        String key = switch (state) {
+            case UNSUPPORTED -> "commands.obu.unsupported_client";
+            case UNKNOWN -> "commands.obu.reconnect_client";
+            case null, default -> "commands.obu.requires_client";
+        };
+        CommandSender sender = source.getSender();
+        plugin.getMessageManager().send(sender, key, Placeholder.component("target", targetPossessive(plugin, player, sender)));
+        return false;
+    }
+
+    public static @Nullable OBUContext resolveForSubject(@NonNull Wake plugin, @NonNull CommandSender subject, @NonNull String name) {
+        OBUContextManager contextManager = contexts(plugin);
+        OBUContext context = contextManager.getContext(name);
+        if (context != null && !(context.isSandbox() && subject instanceof Player)) {
+            return context;
+        }
+        return subject instanceof Player owner
+                ? contextManager.getContext(OBUContextManager.sandboxKey(name, owner.getUniqueId()))
+                : null;
+    }
+
+    public static @NonNull List<String> displayArgs(@NonNull OBUSetting setting) {
+        List<SettingType> types = setting.definition().types();
+        List<String> args = setting.args();
+        List<String> shown = new ArrayList<>(args.size());
+        for (int i = 0; i < args.size(); i++) {
+            boolean list = i < types.size() && types.get(i).isList();
+            shown.add(list ? stripNamespaces(args.get(i)) : args.get(i));
+        }
+        return shown;
+    }
+
+    private static @NonNull String stripNamespaces(@NonNull String list) {
+        StringJoiner shown = new StringJoiner(", ");
+        for (String entry : list.split(",")) {
+            String trimmed = entry.trim();
+            if (!trimmed.isEmpty()) {
+                shown.add(MessageManager.stripNamespace(trimmed));
+            }
+        }
+        return shown.toString();
+    }
+
     public static @NonNull CompletableFuture<Suggestions> suggestContexts(
             @NonNull CommandContext<CommandSourceStack> ctx, @NonNull SuggestionsBuilder builder,
             @NonNull Wake plugin, @NonNull Predicate<OBUContext> filter) {
         OBUContextManager contextManager = contexts(plugin);
-        CommandSender sender = ctx.getSource().getSender();
+        CommandSender sender = CommandHelper.actingSender(ctx.getSource());
         List<String> shown = new ArrayList<>();
         for (String name : contextManager.getContextNames()) {
+            if (OBUContextManager.isInternal(name)) continue;
             OBUContext context = contextManager.getContext(name);
             if (context == null || !filter.test(context)) continue;
             String display = name;
@@ -69,7 +127,7 @@ public final class OBUCommandHelper {
         return CommandHelper.suggestMatching(builder, shown);
     }
 
-    public static @NonNull Component targetName(@NonNull Wake plugin, Entity target, CommandSender sender) {
+    public static @NonNull Component targetName(@NonNull Wake plugin, @NonNull Entity target, @NonNull CommandSender sender) {
         if (target instanceof Player p) {
             return p.equals(sender) ? plugin.getMessageManager().getComponent("words.target.self") : Component.text(p.getName());
         }
@@ -79,7 +137,7 @@ public final class OBUCommandHelper {
         return Component.text(target.getName());
     }
 
-    public static @NonNull Component targetPossessive(@NonNull Wake plugin, Entity target, CommandSender sender) {
+    public static @NonNull Component targetPossessive(@NonNull Wake plugin, @NonNull Entity target, @NonNull CommandSender sender) {
         if (target instanceof Player p) {
             return p.equals(sender)
                     ? plugin.getMessageManager().getComponent("words.target.self_possessive")

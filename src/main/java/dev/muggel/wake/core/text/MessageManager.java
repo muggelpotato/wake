@@ -127,6 +127,10 @@ public class MessageManager {
         return out;
     }
 
+    public static @NonNull String stripNamespace(@NonNull String key) {
+        return key.startsWith("minecraft:") ? key.substring("minecraft:".length()) : key;
+    }
+
     /** A {@code $tag} palette variable and the hex string it expands to */
     private record ColorVariable(String token, String hex) {
     }

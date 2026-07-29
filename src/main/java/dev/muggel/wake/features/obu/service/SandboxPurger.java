@@ -1,20 +1,20 @@
 package dev.muggel.wake.features.obu.service;
 
+import dev.muggel.wake.core.Scheduling;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.features.obu.OBUDao;
 import dev.muggel.wake.features.obu.api.OBUService;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.Bukkit;
-import org.bukkit.entity.Boat;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.scheduler.BukkitTask;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.UUID;
 
 public final class SandboxPurger {
     public static final String STATE_KEY_KEEP_UNUSED = "obu.keep_unused_sandboxes";
@@ -25,31 +25,28 @@ public final class SandboxPurger {
     private final OBUDao dao;
     private final OBUServiceImpl service;
     private @Nullable BukkitTask task;
+    private long scheduledKeepMillis;
     public SandboxPurger(Wake plugin, OBUDao dao, OBUServiceImpl service) {
         this.plugin = plugin;
         this.dao = dao;
         this.service = service;
     }
 
-    public @Nullable BukkitTask start() {
+    public @Nullable BukkitTask restart() {
         long keepMillis = configuredKeepMillis();
-        if (keepMillis <= 0) return null;
-        long intervalTicks = Math.min(keepMillis, MAX_SWEEP_INTERVAL_MILLIS) / 50L;
-        long delayTicks = Math.min(FIRST_SWEEP_DELAY_MILLIS / 50L, intervalTicks);
-        this.task = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::sweep, delayTicks, intervalTicks);
-        return this.task;
-    }
-
-    public void stop() {
+        if (task != null && keepMillis == scheduledKeepMillis) {
+            return null;
+        }
         if (task != null) {
             task.cancel();
             task = null;
         }
-    }
-
-    public @Nullable BukkitTask restart() {
-        stop();
-        return start();
+        if (keepMillis <= 0) return null;
+        long intervalTicks = Math.min(keepMillis, MAX_SWEEP_INTERVAL_MILLIS) / 50L;
+        long delayTicks = Math.min(FIRST_SWEEP_DELAY_MILLIS / 50L, intervalTicks);
+        scheduledKeepMillis = keepMillis;
+        this.task = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::sweep, delayTicks, intervalTicks);
+        return this.task;
     }
 
     private long configuredKeepMillis() {
@@ -60,40 +57,39 @@ public final class SandboxPurger {
         long thresholdMillis = configuredKeepMillis();
         if (thresholdMillis <= 0) return;
         long cutoff = System.currentTimeMillis() - thresholdMillis;
-        List<String> oldSandboxes = dao.getOldSandboxes(cutoff);
-        if (oldSandboxes.isEmpty() || !plugin.isEnabled()) return;
-        try {
-            Bukkit.getScheduler().runTask(plugin, () -> deleteUnlessActive(oldSandboxes));
-        } catch (IllegalPluginAccessException ignored) {
-            // skip this run
-        }
+        List<String> expired = dao.getOldSandboxes(cutoff);
+        if (expired.isEmpty()) return;
+        Scheduling.onMain(plugin, () -> purge(expired));
     }
 
-    private void deleteUnlessActive(List<String> oldSandboxes) {
+    private void purge(@NonNull List<String> expired) {
         if (Wake.getServiceRegistry().get(OBUService.class) != service) return;
-        Set<String> activeNow = new HashSet<>();
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            String active = service.getPlayerActiveSandbox(p);
-            if (active != null) activeNow.add(active.toLowerCase(Locale.ROOT));
-            String context = service.getActiveContextName(p);
-            if (context != null) activeNow.add(context.toLowerCase(Locale.ROOT));
+        Set<String> gone = new HashSet<>();
+        for (String sandbox : expired) {
+            gone.add(sandbox.toLowerCase(Locale.ROOT));
+            dao.deleteContext(sandbox);
         }
-        for (UUID boatId : service.getSyncManager().getKnownBoatContexts()) {
-            if (Bukkit.getEntity(boatId) instanceof Boat boat) {
-                String pinned = service.getBoatContextName(boat);
-                if (pinned != null) activeNow.add(pinned.toLowerCase(Locale.ROOT));
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            String lost = lostContext(gone, player);
+            if (lost == null) {
+                continue;
             }
+            service.applyDefaultContext(player);
+            plugin.getMessageManager().send(player, "commands.obu.sandbox.purged", Placeholder.unparsed("sandbox", OBUContextManager.displayName(lost)));
         }
-        for (String oldSandbox : oldSandboxes) {
-            if (!activeNow.contains(oldSandbox.toLowerCase(Locale.ROOT))) {
-                service.deleteContextAndEvict(oldSandbox);
-                plugin.getLogger().info("Purged inactive sandbox: " + oldSandbox);
-            }
-        }
+        plugin.getLogger().info("Purged " + expired.size() + " sandbox(es) unused past the keep window");
     }
 
-    public static long parseKeepMillis(@Nullable String raw) {
-        if (raw == null) return -1;
+    private @Nullable String lostContext(@NonNull Set<String> gone, @NonNull Player player) {
+        String sandbox = service.getPlayerActiveSandbox(player);
+        if (sandbox != null && gone.contains(sandbox.toLowerCase(Locale.ROOT))) {
+            return sandbox;
+        }
+        String context = service.getActiveContextName(player);
+        return gone.contains(context.toLowerCase(Locale.ROOT)) ? context : null;
+    }
+
+    public static long parseKeepMillis(@NonNull String raw) {
         String s = raw.trim().toLowerCase(Locale.ROOT);
         if (s.equals("0") || s.equals("off") || s.equals("never") || s.equals("disabled")) return 0;
         int unitStart = 0;

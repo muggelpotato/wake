@@ -16,6 +16,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Fluent builder for a node in Wake's command tree. <br>
@@ -28,18 +29,18 @@ import java.util.List;
 public class CommandNode {
     /** How the framework resolves the object handed to an executor */
     public enum TargetType {
-        /** player or console (never fails) */
+        /** player or console, or the entity behind {@code /execute as} (never fails) */
         SENDER {
             @Override
             @NonNull Object resolve(@NonNull CommandSourceStack source, @NonNull Wake plugin) {
-                return source.getSender();
+                return CommandHelper.actingSender(source);
             }
         },
         /** player required */
         PLAYER {
             @Override
             @Nullable Object resolve(@NonNull CommandSourceStack source, @NonNull Wake plugin) {
-                if (source.getSender() instanceof Player player) {
+                if (CommandHelper.actingSender(source) instanceof Player player) {
                     return player;
                 }
                 plugin.getMessageManager().send(source.getSender(), "commands.only_players");
@@ -50,11 +51,7 @@ public class CommandNode {
         ENTITY {
             @Override
             @Nullable Object resolve(@NonNull CommandSourceStack source, @NonNull Wake plugin) {
-                Entity executor = source.getExecutor();
-                if (executor != null) {
-                    return executor;
-                }
-                if (source.getSender() instanceof Entity entity) {
+                if (CommandHelper.actingSender(source) instanceof Entity entity) {
                     return entity;
                 }
                 plugin.getMessageManager().send(source.getSender(), "commands.only_entities");
@@ -78,6 +75,14 @@ public class CommandNode {
         abstract @Nullable Object resolve(@NonNull CommandSourceStack source, @NonNull Wake plugin);
     }
 
+    /** A precondition every executor below a node must pass, checked after the target is resolved */
+    @FunctionalInterface
+    public interface Gate {
+        /** Clears an inherited gate: this node and everything below it are guarded by nothing */
+        Gate OPEN = (source, target) -> true;
+        boolean allows(@NonNull CommandSourceStack source, @NonNull Object target);
+    }
+
     @FunctionalInterface
     public interface CommandExecution<T> {
         @SuppressWarnings("RedundantThrows")
@@ -96,6 +101,10 @@ public class CommandNode {
     private final List<String> aliases = new ArrayList<>();
     private String description = "";
     private Class<? extends WakeModule> moduleClass;
+    private String permission = "";
+    private Set<PermissionPreset> presets;
+    private Set<PermissionPreset> branchPresets;
+    private Gate gate;
     private TargetType targetType = TargetType.SENDER;
     private NodeExecutor executor;
     private SuggestionProvider<CommandSourceStack> customSuggester;
@@ -106,13 +115,13 @@ public class CommandNode {
         this.argumentType = argumentType;
     }
 
-    @Contract("_ -> new")
-    public static @NonNull CommandNode literal(String name) {
+    @Contract(value = "_ -> new", pure = true)
+    public static @NonNull CommandNode literal(@NonNull String name) {
         return new CommandNode(name, false, null);
     }
 
-    @Contract("_, _ -> new")
-    public static @NonNull CommandNode argument(String name, ArgumentType<?> argumentType) {
+    @Contract(value = "_, _ -> new", pure = true)
+    public static @NonNull CommandNode argument(@NonNull String name, @NonNull ArgumentType<?> argumentType) {
         return new CommandNode(name, true, argumentType);
     }
 
@@ -123,6 +132,24 @@ public class CommandNode {
 
     public CommandNode withModule(Class<? extends WakeModule> moduleClass) {
         this.moduleClass = moduleClass;
+        return this;
+    }
+
+    /** Files this node alone under bundles, leaving what its children inherit untouched */
+    public CommandNode withPreset(PermissionPreset... presets) {
+        this.presets = Set.of(presets);
+        return this;
+    }
+
+    /** Files this node and everything below it under bundles. Without arguments the branch is in no bundle at all */
+    public CommandNode withPresetBranch(PermissionPreset... presets) {
+        this.branchPresets = Set.of(presets);
+        return this;
+    }
+
+    /** Guards this node and everything below it. Declare it once, on the highest node it applies to */
+    public CommandNode withGate(Gate gate) {
+        this.gate = gate;
         return this;
     }
 
@@ -173,14 +200,19 @@ public class CommandNode {
         return executes(TargetType.ENTITY_OR_AIMED_BOAT, execution);
     }
 
-    public String getName() { return name; }
+    public @NonNull String getName() { return name; }
     public boolean isArgument() { return isArgument; }
-    public ArgumentType<?> getArgumentType() { return argumentType; }
-    public List<CommandNode> getChildren() { return children; }
-    public List<String> getAliases() { return aliases; }
-    public String getDescription() { return description; }
+    public @Nullable ArgumentType<?> getArgumentType() { return argumentType; }
+    public @NonNull List<CommandNode> getChildren() { return children; }
+    public @NonNull List<String> getAliases() { return aliases; }
+    public @NonNull String getDescription() { return description; }
     public @Nullable Class<? extends WakeModule> getModuleClass() { return moduleClass; }
-    public TargetType getTargetType() { return targetType; }
+    public @NonNull String getPermission() { return permission; }
+    void setPermission(@NonNull String permission) { this.permission = permission; }
+    public @Nullable Set<PermissionPreset> getPresets() { return presets; }
+    public @Nullable Set<PermissionPreset> getBranchPresets() { return branchPresets; }
+    public @Nullable Gate getGate() { return gate; }
+    public @NonNull TargetType getTargetType() { return targetType; }
     public @Nullable NodeExecutor getExecutor() { return executor; }
     public @Nullable SuggestionProvider<CommandSourceStack> getCustomSuggester() { return customSuggester; }
 }

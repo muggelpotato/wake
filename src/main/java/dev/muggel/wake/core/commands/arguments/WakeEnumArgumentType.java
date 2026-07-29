@@ -34,8 +34,8 @@ public class WakeEnumArgumentType<T extends Enum<T>> implements CustomArgumentTy
                 .collect(Collectors.toList());
     }
 
-    @Contract("_ -> new")
-    public static <T extends Enum<T>> @NonNull WakeEnumArgumentType<T> wakeEnum(Class<T> enumClass) {
+    @Contract(value = "_ -> new", pure = true)
+    public static <T extends Enum<T>> @NonNull WakeEnumArgumentType<T> wakeEnum(@NonNull Class<T> enumClass) {
         return new WakeEnumArgumentType<>(enumClass);
     }
 

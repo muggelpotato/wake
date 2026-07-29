@@ -6,6 +6,7 @@ import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.PermissionManager;
+import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.core.commands.WakeCommandManager;
 import dev.muggel.wake.core.module.WakeModule;
 import dev.muggel.wake.core.text.MessageManager;
@@ -23,7 +24,9 @@ public class HelpCommand {
     private static final int HOVER_SUBCOMMAND_CAP = 12;
 
     public static @NonNull CommandNode getNode(Wake plugin) {
-        return CommandNode.literal("help").executesSender((ctx, sender) -> execute(ctx, plugin));
+        return CommandNode.literal("help")
+                .withPreset(PermissionPreset.PLAYER)
+                .executesSender((ctx, sender) -> execute(ctx, plugin));
     }
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, @NonNull Wake plugin) {
@@ -39,14 +42,14 @@ public class HelpCommand {
             if (moduleClass != null && plugin.getModule(moduleClass) == null) {
                 continue;
             }
-            if (!PermissionManager.hasAccess(sender, "wake." + moduleId + ".commands")) {
+            if (!PermissionManager.hasAccess(sender, root.getPermission())) {
                 continue;
             }
             mm.send(sender, "commands.help.entry",
                     Placeholder.parsed("command", root.getName()),
                     Placeholder.unparsed("aliases", aliasText(root)),
                     Placeholder.component("description", CommandHelper.moduleDescription(plugin, moduleId, root)),
-                    Placeholder.component("subcommands", subcommandHover(plugin, root)));
+                    Placeholder.component("subcommands", subcommandHover(plugin, sender, root)));
         }
         return Command.SINGLE_SUCCESS;
     }
@@ -59,12 +62,14 @@ public class HelpCommand {
         return "(/" + String.join(", /", aliases) + ")";
     }
 
-    private static @NonNull Component subcommandHover(@NonNull Wake plugin, @NonNull CommandNode root) {
+    private static @NonNull Component subcommandHover(@NonNull Wake plugin, @NonNull CommandSender sender, @NonNull CommandNode root) {
         MessageManager mm = plugin.getMessageManager();
         List<Component> lines = new ArrayList<>();
         lines.add(mm.getComponent("commands.help.hover_header",
                 Placeholder.unparsed("command", root.getName())));
-        List<CommandNode> literals = root.getChildren().stream().filter(child -> !child.isArgument()).toList();
+        List<CommandNode> literals = root.getChildren().stream()
+                .filter(child -> !child.isArgument() && PermissionManager.hasAccess(sender, child.getPermission()))
+                .toList();
         for (CommandNode child : literals.subList(0, Math.min(literals.size(), HOVER_SUBCOMMAND_CAP))) {
             lines.add(mm.getComponent("commands.help.hover_line",
                     Placeholder.unparsed("command", root.getName()),

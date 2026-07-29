@@ -1,24 +1,23 @@
 package dev.muggel.wake.features.obu.networking;
 
+import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListenerAbstract;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.event.UserDisconnectEvent;
-import com.github.retrooper.packetevents.protocol.ConnectionState;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.player.User;
 import com.github.retrooper.packetevents.wrapper.configuration.client.WrapperConfigClientPluginMessage;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPluginMessage;
+import dev.muggel.wake.core.Scheduling;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.features.obu.OBUDefinition;
 import dev.muggel.wake.features.obu.api.OBUService;
-import dev.muggel.wake.features.obu.commands.ConfigCommand;
 import dev.muggel.wake.features.obu.context.OBUContext;
 import dev.muggel.wake.features.obu.context.OBUPlayerState;
 import dev.muggel.wake.features.obu.service.OBUContextManager;
 import dev.muggel.wake.features.obu.service.OBUServiceImpl;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
+import dev.muggel.wake.features.obu.service.ClientRegistry.ClientState;
 import io.papermc.paper.event.player.PlayerTrackEntityEvent;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -27,133 +26,102 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.event.vehicle.VehicleExitEvent;
-import org.bukkit.plugin.IllegalPluginAccessException;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
-import java.util.List;
+import java.nio.ByteBuffer;
 import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class HandshakeListener extends PacketListenerAbstract implements Listener {
+    private record HandshakeData(int versionId, boolean isUnstable) {}
+    private final Map<User, HandshakeData> pendingHandshakes = new ConcurrentHashMap<>();
     private final Wake plugin;
     private final OBUServiceImpl obuService;
-    private final Set<UUID> initializedPlayers = ConcurrentHashMap.newKeySet();
     public HandshakeListener(Wake plugin, OBUServiceImpl obuService) {
         this.plugin = plugin;
         this.obuService = obuService;
     }
 
     @Override
-    @SuppressWarnings("ConstantValue")
     public void onUserDisconnect(@NonNull UserDisconnectEvent event) {
-        UUID uuid = event.getUser().getUUID();
-        if (uuid != null && event.getUser().getConnectionState() != ConnectionState.PLAY) {
-            pendingHandshakes.remove(uuid);
-            initializedPlayers.remove(uuid);
-        }
+        pendingHandshakes.remove(event.getUser());
     }
-
-    private record HandshakeData(int versionId, boolean isUnstable) {}
-    private final Map<UUID, HandshakeData> pendingHandshakes = new ConcurrentHashMap<>();
 
     @Override
     public void onPacketReceive(@NonNull PacketReceiveEvent event) {
+        String channel;
+        byte[] data;
         if (event.getPacketType() == PacketType.Configuration.Client.PLUGIN_MESSAGE) {
             WrapperConfigClientPluginMessage msg = new WrapperConfigClientPluginMessage(event);
-            String channel = msg.getChannelName();
-            if (OBUDefinition.CHANNEL_HANDSHAKE.equals(channel) || 
-                OBUDefinition.CHANNEL_CONFIGURATION.equals(channel) ||
-                OBUDefinition.CHANNEL_SETTINGS.equals(channel)) {
-                HandshakeData data = parseHandshakeData(msg.getData());
-                if (data != null) {
-                    pendingHandshakes.put(event.getUser().getUUID(), data);
-                }
-            }
+            channel = msg.getChannelName();
+            data = msg.getData();
         } else if (event.getPacketType() == PacketType.Play.Client.PLUGIN_MESSAGE) {
             WrapperPlayClientPluginMessage msg = new WrapperPlayClientPluginMessage(event);
-            String channel = msg.getChannelName();
-            if (OBUDefinition.CHANNEL_HANDSHAKE.equals(channel) ||
-                OBUDefinition.CHANNEL_CONFIGURATION.equals(channel) ||
-                OBUDefinition.CHANNEL_SETTINGS.equals(channel)) {
-                HandshakeData data = parseHandshakeData(msg.getData());
-                if (data != null && event.getPlayer() instanceof Player player) {
-                    handleOBUPlayer(player, data.versionId(), data.isUnstable());
-                }
-            }
+            channel = msg.getChannelName();
+            data = msg.getData();
+        } else {
+            return;
+        }
+        if (!isHandshakeChannel(channel)) {
+            return;
+        }
+        HandshakeData handshake = parseHandshakeData(data);
+        if (handshake == null) {
+            return;
+        }
+        if (event.getPlayer() instanceof Player player) {
+            handleOBUPlayer(player, event.getUser(), handshake);
+        } else {
+            pendingHandshakes.put(event.getUser(), handshake);
         }
     }
 
-    private HandshakeData parseHandshakeData(byte[] data) {
-        if (data == null || data.length < 5) return null;
-        ByteBuf buf = Unpooled.wrappedBuffer(data);
-        try {
-            int version;
-            boolean isUnstable;
-            if (buf.readableBytes() >= 7) {
-                short packetId = buf.readShort();
-                if (packetId == 0) {
-                    version = buf.readInt();
-                    isUnstable = buf.readBoolean();
-                } else {
-                    return null;
-                }
-            } else if (buf.readableBytes() == 5) {
-                version = buf.readInt();
-                isUnstable = buf.readBoolean();
-            } else {
-                return null;
-            }
-            return new HandshakeData(version, isUnstable);
-        } catch (IndexOutOfBoundsException e) {
+    private static boolean isHandshakeChannel(String channel) {
+        return OBUDefinition.CHANNEL_HANDSHAKE.equals(channel)
+                || OBUDefinition.CHANNEL_CONFIGURATION.equals(channel)
+                || OBUDefinition.CHANNEL_SETTINGS.equals(channel);
+    }
+
+    private static @Nullable HandshakeData parseHandshakeData(byte @Nullable [] data) {
+        if (data == null) {
             return null;
-        } catch (Exception e) {
-            plugin.getLogger().warning("Failed to parse OpenBoatUtils handshake: " + e.getMessage());
-            return null;
-        } finally {
-            buf.release();
         }
+        ByteBuffer buf = ByteBuffer.wrap(data);
+        if (data.length >= 7) {
+            if (buf.getShort() != 0) return null;
+        } else if (data.length != 5) {
+            return null;
+        }
+        return new HandshakeData(buf.getInt(), buf.get() != 0);
     }
 
     @EventHandler
     public void onPlayerJoin(@NonNull PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        initializedPlayers.remove(player.getUniqueId());
-        HandshakeData data = pendingHandshakes.remove(player.getUniqueId());
-        if (data != null) {
-            handleOBUPlayer(player, data.versionId(), data.isUnstable());
+        User user = PacketEvents.getAPI().getPlayerManager().getUser(event.getPlayer());
+        HandshakeData handshake = user != null ? pendingHandshakes.remove(user) : null;
+        if (handshake != null) {
+            handleOBUPlayer(event.getPlayer(), user, handshake);
         }
     }
 
     @EventHandler
     public void onPlayerQuit(@NonNull PlayerQuitEvent event) {
-        boolean wasObuPlayer = initializedPlayers.remove(event.getPlayer().getUniqueId());
-        pendingHandshakes.remove(event.getPlayer().getUniqueId());
-        if (wasObuPlayer) {
-            boolean persist = plugin.getStateDao().get(ConfigCommand.STATE_KEY_PERSISTENT_STATES, true);
-            String activeSandbox = obuService.getPlayerActiveSandbox(event.getPlayer());
-            String activeContext = obuService.getActiveContextName(event.getPlayer());
-            if (persist && (activeSandbox != null || !"default".equals(activeContext))) {
-                obuService.savePlayerState(event.getPlayer().getUniqueId(), activeSandbox, activeContext);
-            } else {
-                obuService.savePlayerState(event.getPlayer().getUniqueId(), null, null);
-            }
-        }
+        obuService.saveSelection(event.getPlayer());
         obuService.cleanupPlayer(event.getPlayer());
     }
 
     @EventHandler
     public void onEntityTrack(@NonNull PlayerTrackEntityEvent event) {
         if (event.getEntity() instanceof Boat boat) {
-            obuService.sendBoatContext(boat, event.getPlayer());
+            obuService.getSyncManager().syncToViewer(boat, event.getPlayer());
         }
     }
 
     @EventHandler
     public void onVehicleEnter(@NonNull VehicleEnterEvent event) {
         if (event.getVehicle() instanceof Boat boat && event.getEntered() instanceof Player player) {
-            Bukkit.getScheduler().runTask(plugin, () -> {
+            Scheduling.onMain(plugin, () -> {
                 obuService.getSyncManager().syncPlayer(player);
                 if (!(player.getVehicle() instanceof Boat)) {
                     obuService.getSyncManager().broadcastSync(boat);
@@ -165,67 +133,74 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     @EventHandler
     public void onVehicleExit(@NonNull VehicleExitEvent event) {
         if (event.getVehicle() instanceof Boat boat && event.getExited() instanceof Player) {
-            Bukkit.getScheduler().runTask(plugin, () -> obuService.getSyncManager().broadcastSync(boat));
+            Scheduling.onMain(plugin, () -> obuService.getSyncManager().broadcastSync(boat));
         }
     }
 
-    private void handleOBUPlayer(@NonNull Player player, int versionId, boolean isUnstable) {
-        if (!initializedPlayers.add(player.getUniqueId())) {
-            return;
-        }
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            OBUPlayerState state = obuService.getPlayerState(player.getUniqueId());
-            if (!plugin.isEnabled()) {
-                return;
-            }
-            try {
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) {
-                    return;
-                }
-                if (Wake.getServiceRegistry().get(OBUService.class) != obuService) {
-                    return;
-                }
-                plugin.getDatabaseManager().notifyIfDegraded(player.getUniqueId());
-                String unstableTag = isUnstable ? " [UNSTABLE BUILD]" : "";
-                plugin.getLogger().info(player.getName() + " connected with OBU Version ID: " + versionId + unstableTag);
-                List<Integer> rejectedVersions = OBUDefinition.REJECTED_VERSIONS;
-                int latestVersion = OBUDefinition.LATEST_SUPPORTED_VERSION;
-                if (rejectedVersions.contains(versionId)) {
-                    player.kick(plugin.getMessageManager().getComponent("networking.obu.rejected"));
-                    return;
-                }
-                if (versionId < latestVersion) {
-                    plugin.getMessageManager().send(player, "networking.obu.outdated");
-                } else if (versionId > latestVersion) {
-                    plugin.getMessageManager().send(player, "networking.obu.ahead");
-                }
-                OBUContextManager contextManager = obuService.getContextManager();
-                if (state != null && (state.activeSandbox() != null || state.activeContext() != null)) {
-                    String sandboxName = state.activeSandbox();
-                    if (sandboxName != null) {
-                        OBUContext sandbox = contextManager.getContext(sandboxName);
-                        if (sandbox == null || !sandbox.isSandbox() || !player.getUniqueId().equals(sandbox.ownerUuid())) {
-                            sandboxName = null;
-                        }
-                    }
-                    obuService.setPlayerActiveSandbox(player, sandboxName);
-                    obuService.getSyncManager().clearLocalOverrides(player.getUniqueId());
-                    String ctxName = state.activeContext() != null ? state.activeContext() : "default";
-                    OBUContext ctx = contextManager.getContext(ctxName);
-                    if (ctx == null) {
-                        ctx = contextManager.getContext("default");
-                    }
-                    if (ctx != null) {
-                        obuService.applyContext(player, ctx);
-                    }
-                    obuService.getSyncManager().syncPlayer(player);
-                } else {
-                    obuService.applyDefaultContext(player);
-                }
-                });
-            } catch (IllegalPluginAccessException ignored) {
+    private void logVersion(@NonNull User user, @NonNull HandshakeData handshake) {
+        plugin.getLogger().info(user.getName() + " is running OpenBoatUtils version " + handshake.versionId() + (handshake.isUnstable() ? " [UNSTABLE BUILD]" : ""));
+    }
+
+    private void warnUnsupported(@NonNull Player player) {
+        Scheduling.onMain(plugin, () -> {
+            if (player.isOnline()) {
+                plugin.getMessageManager().send(player, "networking.obu.unsupported");
             }
         });
+    }
+
+    private void handleOBUPlayer(@NonNull Player player, @NonNull User user, @NonNull HandshakeData handshake) {
+        boolean rejected = OBUDefinition.REJECTED_VERSIONS.contains(handshake.versionId());
+        ClientState verdict = rejected ? ClientState.UNSUPPORTED : ClientState.DRIVEN;
+        if (!obuService.clients().claim(player.getUniqueId(), verdict)) {
+            return;
+        }
+        logVersion(user, handshake);
+        if (rejected) {
+            warnUnsupported(player);
+            return;
+        }
+        obuService.loadPlayerState(player.getUniqueId(), state -> driveClient(player, handshake.versionId(), state));
+    }
+
+    private void driveClient(@NonNull Player player, int versionId, @Nullable OBUPlayerState state) {
+        if (!player.isOnline() || Wake.getServiceRegistry().get(OBUService.class) != obuService) {
+            return;
+        }
+        if (versionId < OBUDefinition.LATEST_SUPPORTED_VERSION) {
+            plugin.getMessageManager().send(player, "networking.obu.outdated");
+        } else if (versionId > OBUDefinition.LATEST_SUPPORTED_VERSION) {
+            plugin.getMessageManager().send(player, "networking.obu.ahead");
+        }
+        if (state == null) {
+            obuService.getSyncManager().syncPlayer(player);
+        } else if (state.activeSandbox() == null && state.activeContext() == null) {
+            obuService.applyDefaultContext(player);
+        } else {
+            restoreSelection(player, state);
+        }
+        obuService.getSyncManager().syncTrackedBoats(player);
+    }
+
+    private void restoreSelection(@NonNull Player player, @NonNull OBUPlayerState state) {
+        OBUContextManager contextManager = obuService.getContextManager();
+        String sandboxName = state.activeSandbox();
+        if (sandboxName != null) {
+            OBUContext sandbox = contextManager.getContext(sandboxName);
+            if (sandbox == null || !sandbox.isSandbox() || !player.getUniqueId().equals(sandbox.ownerUuid())) {
+                sandboxName = null;
+            }
+        }
+        obuService.setPlayerActiveSandbox(player, sandboxName);
+        obuService.getSyncManager().clearLocalOverrides(player.getUniqueId());
+        String contextName = state.activeContext() != null ? state.activeContext() : OBUContextManager.DEFAULT_CONTEXT;
+        OBUContext context = contextManager.getContext(contextName);
+        if (context == null) {
+            context = contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT);
+        }
+        if (context != null) {
+            obuService.applyContext(player, context);
+        }
+        obuService.getSyncManager().syncPlayer(player);
     }
 }

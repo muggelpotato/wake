@@ -1,9 +1,8 @@
 config:
   persistent_player_states: true
   keep_unused_sandboxes: "30d"
-contexts:
+server:
   default:
-    type: SERVER
     settings:
       setinterpolationten: "true"
       collisionmode: "NO_ENTITIES"
@@ -15,7 +14,6 @@ contexts:
       fixdoublewaterelevation: "true"
       sethoneycompat: "true"
   harbour:
-    type: SERVER
     settings:
       defaultslipperiness: "0.98"
       aircontrol: "true"
@@ -26,7 +24,6 @@ contexts:
       setturnforwardaccel: "0"
       stepwhilefalling: "true"
   parkour1:
-    type: SERVER
     settings:
       defaultslipperiness: "0.98"
       aircontrol: "true"
@@ -38,7 +35,6 @@ contexts:
       stepwhilefalling: "true"
       waterjumping: "true"
   city:
-    type: SERVER
     settings:
       defaultslipperiness: "0.98"
       aircontrol: "true"
@@ -49,7 +45,6 @@ contexts:
       setturnforwardaccel: "0"
       stepwhilefalling: "true"
   mazewave:
-    type: SERVER
     settings:
       defaultslipperiness: ".98"
       aircontrol: "true"
@@ -60,7 +55,6 @@ contexts:
       setturnforwardaccel: "0"
       stepwhilefalling: "true"
   example:
-    type: SERVER
     settings:
       jumpforce: "1"
       aircontrol: "true"
