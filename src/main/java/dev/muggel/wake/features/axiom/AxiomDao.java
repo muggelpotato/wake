@@ -2,16 +2,19 @@ package dev.muggel.wake.features.axiom;
 
 import co.aikar.idb.DB;
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.database.CachedStore;
 import dev.muggel.wake.core.database.WakeDao;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Level;
 
 public class AxiomDao extends WakeDao {
+    private final CachedStore<String> displays = mirror("wake_axiom_displays", this::readDisplays);
     public AxiomDao(Wake plugin) {
         super(plugin);
     }
@@ -30,13 +33,17 @@ public class AxiomDao extends WakeDao {
                 """);
     }
 
-    public @Nullable List<String> loadDisplays() {
-        List<String> models = new ArrayList<>();
+    public @NonNull CachedStore<String> displays() {
+        return displays;
+    }
+
+    private @Nullable Map<String, String> readDisplays(@Nullable Set<String> keys) {
+        Map<String, String> models = new HashMap<>();
         try {
-            var results = DB.getResults("SELECT model_key FROM wake_axiom_displays");
-            for (var row : results) {
-                models.add(row.getString("model_key"));
-            }
+            selectByKeys("SELECT model_key FROM wake_axiom_displays", "model_key", keys, row -> {
+                String key = row.getString("model_key");
+                models.put(key, key);
+            });
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to load axiom displays from database", e);
             return null;
@@ -46,5 +53,6 @@ public class AxiomDao extends WakeDao {
 
     public void importDisplay(String modelKey) throws SQLException {
         DB.executeUpdate("REPLACE INTO wake_axiom_displays (model_key) VALUES (?)", modelKey);
+        displays.announce(modelKey, modelKey);
     }
 }

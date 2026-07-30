@@ -179,8 +179,9 @@ public class OBUDao extends WakeDao {
 
     public void importContextData(String name, @NonNull ContextType type, String ownerUuid, @NonNull List<OBUSetting> settings) throws SQLException {
         String canonicalName = canonical(name);
-        DB.executeUpdate("DELETE FROM wake_obu_settings WHERE context_name = ?", canonicalName);
-        DB.executeUpdate("DELETE FROM wake_obu_contexts WHERE name = ?", canonicalName);
+        for (SqlStatement delete : deleteStatements(canonicalName)) {
+            DB.executeUpdate(delete.sql(), delete.params());
+        }
         DB.executeUpdate(UPSERT_CONTEXT, canonicalName, type.name(), ownerUuid, System.currentTimeMillis());
 
         for (OBUSetting setting : settings) {

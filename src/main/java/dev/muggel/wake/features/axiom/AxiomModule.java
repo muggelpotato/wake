@@ -1,5 +1,6 @@
 package dev.muggel.wake.features.axiom;
 
+import dev.muggel.wake.core.database.CachedStore;
 import dev.muggel.wake.core.module.AbstractModule;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -17,14 +18,12 @@ import java.lang.reflect.Method;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.Set;
 import java.util.logging.Level;
 
 public class AxiomModule extends AbstractModule {
-    private final AtomicLong reads = new AtomicLong();
-    private long appliedRead;
-    private AxiomDao dao;
     private static final String DISPLAY_API_CLASS = "com.moulberry.axiom.paperapi.AxiomCustomDisplayAPI";
+    private AxiomDao dao;
     public AxiomModule() {
         super("axiom");
     }
@@ -39,15 +38,15 @@ public class AxiomModule extends AbstractModule {
         dao = new AxiomDao(getPlugin());
         dao.initTables();
         registerDao(dao);
-        List<String> models = dao.loadDisplays();
-        if (models != null && !models.isEmpty()) {
-            registerDisplays(models);
-        }
-        seedDataIfEmpty(models == null ? null : models.isEmpty(), "defaults/axiom_default.yml", "Axiom Displays");
+        CachedStore<String> displays = dao.displays();
+        boolean read = displays.load();
+        registerDisplays(Set.copyOf(displays.keys()));
+        seedDataIfEmpty(read ? displays.keys().isEmpty() : null, "defaults/axiom_default.yml", "Axiom Displays");
     }
 
     @SuppressWarnings("PatternValidation")
-    private void registerDisplays(List<String> models) {
+    private void registerDisplays(Set<String> models) {
+        if (models.isEmpty()) return;
         try {
             Class<?> apiClass = Class.forName(DISPLAY_API_CLASS);
             Object apiInstance = apiClass.getMethod("getAPI").invoke(null);
@@ -109,14 +108,10 @@ public class AxiomModule extends AbstractModule {
         AxiomDao currentDao = this.dao;
         if (currentDao == null || !isCompatible()) return;
         if (getPlugin().getDatabaseManager().isDegraded()) return;
-        long ticket = reads.incrementAndGet();
-        getPlugin().getDatabaseManager().readAsync(currentDao::loadDisplays, models -> {
-            if (models == null || this.dao != currentDao || ticket <= appliedRead) return;
-            appliedRead = ticket;
+        currentDao.displays().reloadAsync(ignored -> {
+            if (this.dao != currentDao) return;
             unregisterDisplays();
-            if (!models.isEmpty()) {
-                registerDisplays(models);
-            }
+            registerDisplays(Set.copyOf(currentDao.displays().keys()));
         });
     }
 
@@ -138,10 +133,11 @@ public class AxiomModule extends AbstractModule {
     @Override
     protected int onExportData(YamlConfiguration yaml) throws SQLException {
         if (dao == null) return 0;
-        List<String> models = dao.loadDisplays();
-        if (models == null) {
+        CachedStore<String> displays = dao.displays();
+        if (!displays.isLoaded()) {
             throw new SQLException("Axiom displays could not be read");
         }
+        List<String> models = List.copyOf(displays.keys());
         yaml.set("displays", models);
         return models.size();
     }

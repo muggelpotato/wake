@@ -33,7 +33,6 @@ import java.util.regex.Pattern;
  */
 public class MessageManager {
     private static final String DEFAULT_LANGUAGE = "en_us";
-    private static final String DEFAULT_PREFIX = "<gray>[<blue>Wake</blue>] </gray>";
     private static final Pattern SHADOW_TAG = Pattern.compile("</?shadow(:[^>]*)?>");
     private final Wake plugin;
     private final MiniMessage miniMessage;
@@ -57,7 +56,7 @@ public class MessageManager {
     }
 
     public void reload() {
-        String defaultResource = "lang/" + DEFAULT_LANGUAGE + ".yml";
+        String defaultResource = langResource(DEFAULT_LANGUAGE);
         File defaultFile = new File(plugin.getDataFolder(), defaultResource);
         if (!defaultFile.exists()) {
             try {
@@ -67,9 +66,9 @@ public class MessageManager {
             }
         }
         String language = plugin.getConfig().getString("language", DEFAULT_LANGUAGE);
-        File langFile = new File(plugin.getDataFolder(), "lang/" + language + ".yml");
+        File langFile = new File(plugin.getDataFolder(), langResource(language));
         if (!langFile.exists() && !language.equals(DEFAULT_LANGUAGE)) {
-            plugin.getLogger().warning("Language lang/" + language + ".yml not found, using bundled " + DEFAULT_LANGUAGE);
+            plugin.getLogger().warning("Language " + langResource(language) + " not found, using bundled " + DEFAULT_LANGUAGE);
         }
         YamlConfiguration loaded = langFile.exists()
                 ? YamlConfiguration.loadConfiguration(langFile)
@@ -81,7 +80,12 @@ public class MessageManager {
         } catch (IOException ignored) {
         }
         this.config = loaded;
-        this.prefixResolver = Placeholder.component("prefix", deserialize(loaded.getString("prefix", DEFAULT_PREFIX)));
+        String prefix = loaded.getString("prefix");
+        this.prefixResolver = Placeholder.component("prefix", prefix == null ? Component.empty() : deserialize(prefix));
+    }
+
+    private static String langResource(String language) {
+        return "lang/" + language + ".yml";
     }
 
     public boolean hasKey(String key) {

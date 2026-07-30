@@ -19,6 +19,7 @@ import java.util.List;
  * Failed migrations abort module loading.
  */
 public class SchemaMigrator {
+    private static final String STAMP_VERSION = "REPLACE INTO wake_schema_version (module, version) VALUES (?, ?)";
     private final Wake plugin;
     private final Dialect dialect;
     private boolean backedUp = false;
@@ -48,7 +49,7 @@ public class SchemaMigrator {
 
     public void stamp(@NonNull String schemaId, int version) {
         try {
-            DB.executeUpdate("REPLACE INTO wake_schema_version (module, version) VALUES (?, ?)", schemaId, version);
+            DB.executeUpdate(STAMP_VERSION, schemaId, version);
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to stamp schema version for " + schemaId, e);
         }
@@ -68,7 +69,7 @@ public class SchemaMigrator {
                         throw new IllegalStateException("Migration step failed for '" + schemaId + "' v" + version + " -> v" + (version + 1) + ": " + sql, e);
                     }
                 }
-                stm.executeUpdateQuery("REPLACE INTO wake_schema_version (module, version) VALUES (?, ?)", schemaId, version + 1);
+                stm.executeUpdateQuery(STAMP_VERSION, schemaId, version + 1);
                 stm.commit();
             } catch (SQLException e) {
                 throw new IllegalStateException("Migration failed for '" + schemaId + "' v" + version + " -> v" + (version + 1), e);
