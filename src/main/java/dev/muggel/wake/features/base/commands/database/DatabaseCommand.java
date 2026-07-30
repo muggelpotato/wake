@@ -7,7 +7,6 @@ import org.jspecify.annotations.NonNull;
 public class DatabaseCommand {
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("database")
-                .withDescription("Database operations")
                 .addSubcommand(DatabaseExportCommand.getNode(plugin))
                 .addSubcommand(DatabaseImportCommand.getNode(plugin))
                 .addSubcommand(DatabaseDropCommand.getNode(plugin))

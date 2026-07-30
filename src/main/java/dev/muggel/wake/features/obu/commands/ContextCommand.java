@@ -31,10 +31,12 @@ import java.util.concurrent.CompletableFuture;
 public class ContextCommand {
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("-context")
+                .withHelpKey("commands.obu.help.context")
                 .withPreset(PermissionPreset.PLAYER)
                 .withGate(CommandNode.Gate.OPEN)
                 .executesSender((ctx, subject) -> executeList(ctx, subject, plugin))
                 .addSubcommand(CommandNode.literal("-delete")
+                        .withoutPresets()
                         .arguments(CommandNode.argument("name", NameArgumentType.greedy())
                                 .suggests((c, b) -> suggestDeletable(c, b, plugin))
                                 .executesSender((ctx, subject) -> executeDelete(ctx, plugin))))

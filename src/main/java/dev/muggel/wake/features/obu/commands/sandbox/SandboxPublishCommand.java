@@ -18,6 +18,7 @@ import org.jspecify.annotations.NonNull;
 public class SandboxPublishCommand {
     static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("publish")
+                .withoutPresets()
                 .withGate(CommandNode.Gate.OPEN)
                 .arguments(CommandNode.argument("name", NameArgumentType.greedy())
                         .suggests((ctx, builder) -> SandboxCommandHelper.suggestOwnSandboxes(ctx, builder, plugin))

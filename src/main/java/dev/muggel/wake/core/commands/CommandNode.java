@@ -15,6 +15,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
@@ -100,10 +101,10 @@ public class CommandNode {
     private final List<CommandNode> children = new ArrayList<>();
     private final List<String> aliases = new ArrayList<>();
     private String description = "";
+    private String helpKey;
     private Class<? extends WakeModule> moduleClass;
     private String permission = "";
     private Set<PermissionPreset> presets;
-    private Set<PermissionPreset> branchPresets;
     private Gate gate;
     private TargetType targetType = TargetType.SENDER;
     private NodeExecutor executor;
@@ -130,20 +131,25 @@ public class CommandNode {
         return this;
     }
 
+    public CommandNode withHelpKey(String helpKey) {
+        this.helpKey = helpKey;
+        return this;
+    }
+
     public CommandNode withModule(Class<? extends WakeModule> moduleClass) {
         this.moduleClass = moduleClass;
         return this;
     }
 
-    /** Files this node alone under bundles, leaving what its children inherit untouched */
-    public CommandNode withPreset(PermissionPreset... presets) {
-        this.presets = Set.of(presets);
+    /** Files this node and everything below it under bundles, on top of the ones it inherited */
+    public CommandNode withPreset(@NonNull PermissionPreset preset, PermissionPreset @NonNull ... more) {
+        this.presets = EnumSet.of(preset, more);
         return this;
     }
 
-    /** Files this node and everything below it under bundles. Without arguments the branch is in no bundle at all */
-    public CommandNode withPresetBranch(PermissionPreset... presets) {
-        this.branchPresets = Set.of(presets);
+    /** Takes this node and everything below it back out of every bundle its parent filed it under */
+    public CommandNode withoutPresets() {
+        this.presets = EnumSet.noneOf(PermissionPreset.class);
         return this;
     }
 
@@ -206,13 +212,13 @@ public class CommandNode {
     public @NonNull List<CommandNode> getChildren() { return children; }
     public @NonNull List<String> getAliases() { return aliases; }
     public @NonNull String getDescription() { return description; }
+    public @Nullable String getHelpKey() { return helpKey; }
     public @Nullable Class<? extends WakeModule> getModuleClass() { return moduleClass; }
     public @NonNull String getPermission() { return permission; }
     void setPermission(@NonNull String permission) { this.permission = permission; }
-    public @Nullable Set<PermissionPreset> getPresets() { return presets; }
-    public @Nullable Set<PermissionPreset> getBranchPresets() { return branchPresets; }
-    public @Nullable Gate getGate() { return gate; }
-    public @NonNull TargetType getTargetType() { return targetType; }
-    public @Nullable NodeExecutor getExecutor() { return executor; }
+    @Nullable Set<PermissionPreset> getPresets() { return presets; }
+    @Nullable Gate getGate() { return gate; }
+    @NonNull TargetType getTargetType() { return targetType; }
+    @Nullable NodeExecutor getExecutor() { return executor; }
     public @Nullable SuggestionProvider<CommandSourceStack> getCustomSuggester() { return customSuggester; }
 }

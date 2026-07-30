@@ -11,13 +11,18 @@ import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.features.obu.OBUDefinition;
 import dev.muggel.wake.features.obu.OBUModule;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
+
+import java.util.List;
 
 public class HelpCommand {
+    private static final String LITERAL = "-help";
+    private static final String KEY_PREFIX = "commands.obu.help.";
+
     public static @NonNull CommandNode getNode(Wake plugin) {
-        return CommandNode.literal("-help")
+        return CommandNode.literal(LITERAL)
                 .withPreset(PermissionPreset.PLAYER)
                 .withGate(CommandNode.Gate.OPEN)
                 .executesSender((ctx, sender) -> execute(ctx, plugin));
@@ -27,50 +32,26 @@ public class HelpCommand {
         CommandSender sender = ctx.getSource().getSender();
         MessageManager mm = plugin.getMessageManager();
         CommandNode root = WakeCommandManager.rootOf(OBUModule.class);
-        mm.send(sender, "commands.obu.help.header");
-        sendIfAllowed(mm, sender, root, "-status", "commands.obu.help.status");
-        sendIfAllowed(mm, sender, root, "-sandbox", "commands.obu.help.sandbox");
-        sendIfAllowed(mm, sender, root, "-context", "commands.obu.help.context");
-        sendIfAllowed(mm, sender, root, "-clear", "commands.obu.help.clear");
-        sendIfAllowed(mm, sender, root, "-defaults", "commands.obu.help.defaults");
-        if (canUseAnySetting(sender, root)) {
-            mm.send(sender, "commands.obu.help.settings");
-        }
-        sendIfAllowed(mm, sender, root, OBUDefinition.reset.commandName(), "commands.obu.help.reset");
-        sendIfAllowed(mm, sender, root, "-settings", "commands.obu.help.config");
-        mm.send(sender, "commands.obu.help.wiki");
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private static void sendIfAllowed(MessageManager mm, CommandSender sender, @Nullable CommandNode root, String literal, String key) {
-        CommandNode node = childNamed(root, literal);
-        if (node != null && PermissionManager.hasAccess(sender, node.getPermission())) {
-            mm.send(sender, key);
-        }
-    }
-
-    private static boolean canUseAnySetting(CommandSender sender, @Nullable CommandNode root) {
-        if (root == null) {
-            return false;
-        }
-        for (CommandNode child : root.getChildren()) {
+        mm.send(sender, KEY_PREFIX + "header");
+        boolean settingsListed = false;
+        for (CommandNode child : root == null ? List.<CommandNode>of() : root.getChildren()) {
+            if (child.isArgument() || child.getName().equals(LITERAL)
+                    || !PermissionManager.canReach(sender, child.getPermission())) {
+                continue;
+            }
             OBUDefinition def = OBUDefinition.get(child.getName());
-            if (def != null && def != OBUDefinition.reset && PermissionManager.hasAccess(sender, child.getPermission())) {
-                return true;
+            if (def != null && def != OBUDefinition.reset) {
+                if (!settingsListed) {
+                    mm.send(sender, KEY_PREFIX + "settings");
+                    settingsListed = true;
+                }
+                continue;
             }
+            String helpKey = child.getHelpKey();
+            mm.send(sender, helpKey != null ? helpKey : KEY_PREFIX + "fallback",
+                    Placeholder.unparsed("command", child.getName()));
         }
-        return false;
-    }
-
-    private static @Nullable CommandNode childNamed(@Nullable CommandNode root, String literal) {
-        if (root == null) {
-            return null;
-        }
-        for (CommandNode child : root.getChildren()) {
-            if (child.getName().equals(literal)) {
-                return child;
-            }
-        }
-        return null;
+        mm.send(sender, KEY_PREFIX + "wiki");
+        return Command.SINGLE_SUCCESS;
     }
 }

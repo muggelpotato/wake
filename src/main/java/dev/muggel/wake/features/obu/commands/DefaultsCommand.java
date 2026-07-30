@@ -28,6 +28,7 @@ import java.util.concurrent.CompletableFuture;
 public class DefaultsCommand {
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("-defaults")
+                .withHelpKey("commands.obu.help.defaults")
                 .arguments(CommandNode.argument("setting", NameArgumentType.greedy())
                         .suggests(DefaultsCommand::suggestSetting)
                         .executesSender((ctx, subject) -> execute(ctx, subject, plugin)));

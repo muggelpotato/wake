@@ -31,6 +31,7 @@ import java.util.function.Predicate;
 public class ClearCommand {
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("-clear")
+                .withHelpKey("commands.obu.help.clear")
                 .arguments(CommandNode.argument("setting", NameArgumentType.greedy())
                         .suggests((ctx, builder) -> suggestSetting(ctx, builder, plugin))
                         .executesEntityOrAimedBoat((ctx, target) -> execute(ctx, target, plugin)));

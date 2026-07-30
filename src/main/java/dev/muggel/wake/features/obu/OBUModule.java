@@ -93,7 +93,7 @@ public class OBUModule extends AbstractModule {
     public CommandNode buildCommands(Wake plugin) {
         CommandNode obuRootNode = CommandNode.literal("wakeobu")
                 .withModule(OBUModule.class)
-                .withPresetBranch(PermissionPreset.ADMIN)
+                .withPreset(PermissionPreset.BUILDER)
                 .withGate((source, target) -> OBUCommandHelper.requireClient(plugin, source, target))
                 .withDescription("OpenBoatUtils settings and configuration")
                 .aliases("wobu", "wo")

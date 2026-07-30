@@ -4,6 +4,7 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.features.obu.OBUDefinition;
 import dev.muggel.wake.features.obu.SettingType;
 import dev.muggel.wake.features.obu.context.OBUSetting;
@@ -36,6 +37,9 @@ public class SettingsCommand {
 
     private static @NonNull CommandNode createSettingNode(@NonNull OBUDefinition def, Wake plugin) {
         CommandNode settingNode = CommandNode.literal(def.commandName());
+        if (def == OBUDefinition.reset) {
+            settingNode.withPreset(PermissionPreset.PLAYER).withHelpKey("commands.obu.help.reset");
+        }
         List<SettingType> types = def.types();
         String[] argNames = argNames(def);
         if (types.isEmpty()) {

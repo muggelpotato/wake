@@ -35,12 +35,12 @@ public class BaseModule extends AbstractModule {
     public CommandNode buildCommands(Wake plugin) {
         return CommandNode.literal("wake")
                 .withModule(BaseModule.class)
-                .withPresetBranch(PermissionPreset.ADMIN)
                 .withDescription("Main command for Wake")
                 .aliases("wa")
                 .addSubcommand(HelpCommand.getNode(plugin))
                 .addSubcommand(ReloadCommand.getNode(plugin))
-                .addSubcommand(CommandHelper.toggleCommand(plugin, "killboatonexit", STATE_KEY_KILL_BOAT_ON_EXIT, "words.feature.auto_kill"))
+                .addSubcommand(CommandHelper.toggleCommand(plugin, "killboatonexit", STATE_KEY_KILL_BOAT_ON_EXIT, "words.feature.auto_kill")
+                        .withPreset(PermissionPreset.BUILDER))
                 .addSubcommand(KillEmptyBoatsCommand.getNode(plugin))
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "hints", CommandHelper.STATE_KEY_SHOW_HINTS, "words.feature.hints"))
                 .addSubcommand(DatabaseCommand.getNode(plugin));

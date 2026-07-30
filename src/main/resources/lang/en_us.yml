@@ -174,6 +174,7 @@ commands:
       settings: "  <muted>●</muted> <accent>/wakeobu <setting> [args]</accent><br>    <muted>○</muted> <neutral>Add OBU settings to player and boat contexts</neutral>"
       reset: "  <muted>●</muted> <accent>/wakeobu -reset</accent><br>    <muted>○</muted> <neutral>Drop temporary overrides and return to the default context</neutral>"
       config: "  <muted>●</muted> <accent>/wakeobu -settings</accent><br>    <muted>○</muted> <neutral>Server-side configuration</neutral>"
+      fallback: "  <muted>●</muted> <accent>/wakeobu <command></accent>"
       wiki: "<prefix><click:open_url:'https://openboatutils.github.io/commands.html'><hover:show_text:'<info>Open in browser</info>'><info>[OBU Wiki]</info></hover></click>"
 axiom:
   display_name: "<accent><b><!i><name></b></accent>"

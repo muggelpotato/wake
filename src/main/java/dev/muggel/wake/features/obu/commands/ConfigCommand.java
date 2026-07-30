@@ -19,8 +19,9 @@ import java.util.Locale;
 public class ConfigCommand {
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("-settings")
+                .withHelpKey("commands.obu.help.config")
+                .withoutPresets()
                 .withGate(CommandNode.Gate.OPEN)
-                .withDescription("Adjusts server-side OBU module settings")
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "persistence", OBUServiceImpl.STATE_KEY_PERSISTENT_STATES, "words.feature.persistent_states"))
                 .addSubcommand(CommandNode.literal("keep-unused-sandboxes")
                         .arguments(CommandNode.argument("duration", StringArgumentType.string())

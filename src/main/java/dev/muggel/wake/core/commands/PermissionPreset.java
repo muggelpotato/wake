@@ -2,10 +2,12 @@ package dev.muggel.wake.core.commands;
 
 /**
  * A bundle of command permissions. <br>
- * A bundle is empty until commands declare themselves part of it with {@link CommandNode#withPreset} (one node) or {@link CommandNode#withPresetBranch} (a whole branch).
+ * A bundle is empty until commands declare themselves part of it with {@link CommandNode#withPreset}, which covers that node and everything below it. <br>
+ * {@link CommandNode#withoutPresets()} punches a hole for a sub-command its parent's bundles shouldn't reach. <br>
+ * Any permission written by hand ingame outrank them.
  */
 public enum PermissionPreset {
-    ADMIN("wake.presetperms.admin"),
+    BUILDER("wake.presetperms.builder"),
     PLAYER("wake.presetperms.player");
     private final String node;
     PermissionPreset(String node) {

@@ -7,6 +7,7 @@ import org.jspecify.annotations.NonNull;
 public class SandboxCommand {
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("-sandbox")
+                .withHelpKey("commands.obu.help.sandbox")
                 .addSubcommand(SandboxCreateCommand.getNode(plugin))
                 .addSubcommand(SandboxForkCommand.getNode(plugin))
                 .addSubcommand(SandboxImportCommand.getNode(plugin))

@@ -41,7 +41,7 @@ public class DrydockModule extends AbstractModule {
     public CommandNode buildCommands(Wake plugin) {
         return CommandNode.literal("drydock")
                 .withModule(DrydockModule.class)
-                .withPresetBranch(PermissionPreset.ADMIN)
+                .withPreset(PermissionPreset.BUILDER)
                 .withDescription("Commands for the Drydock server")
                 .aliases("dd")
                 .addSubcommand(BoostpadCommand.getNode(plugin))

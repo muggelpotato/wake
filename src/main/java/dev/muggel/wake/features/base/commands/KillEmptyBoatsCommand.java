@@ -4,6 +4,7 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.commands.PermissionPreset;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.Bukkit;
@@ -14,6 +15,7 @@ import org.jspecify.annotations.NonNull;
 public class KillEmptyBoatsCommand {
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("killemptyboats")
+                .withPreset(PermissionPreset.BUILDER)
                 .executesSender((ctx, sender) -> execute(ctx, plugin));
     }
 

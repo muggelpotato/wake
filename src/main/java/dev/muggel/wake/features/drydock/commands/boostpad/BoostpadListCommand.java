@@ -5,7 +5,6 @@ import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.core.commands.CommandNode;
-import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.features.drydock.api.BoostpadConfig;
 import dev.muggel.wake.features.drydock.api.DrydockService;
 import dev.muggel.wake.features.drydock.commands.DrydockCommandHelper;
@@ -21,7 +20,6 @@ import java.util.Map;
 public class BoostpadListCommand {
     static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("list")
-                .withPreset(PermissionPreset.PLAYER)
                 .executesSender((ctx, sender) -> execute(ctx, plugin));
     }
 

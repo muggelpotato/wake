@@ -30,6 +30,7 @@ import java.util.Set;
 public class StatusCommand {
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("-status")
+                .withHelpKey("commands.obu.help.status")
                 .withPreset(PermissionPreset.PLAYER)
                 .executesPlayer((ctx, player) -> execute(ctx, player, plugin));
     }

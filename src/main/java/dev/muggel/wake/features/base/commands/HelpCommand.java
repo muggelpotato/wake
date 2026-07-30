@@ -25,7 +25,7 @@ public class HelpCommand {
 
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("help")
-                .withPreset(PermissionPreset.PLAYER)
+                .withPreset(PermissionPreset.PLAYER, PermissionPreset.BUILDER)
                 .executesSender((ctx, sender) -> execute(ctx, plugin));
     }
 
@@ -42,7 +42,7 @@ public class HelpCommand {
             if (moduleClass != null && plugin.getModule(moduleClass) == null) {
                 continue;
             }
-            if (!PermissionManager.hasAccess(sender, root.getPermission())) {
+            if (!PermissionManager.canReach(sender, root.getPermission())) {
                 continue;
             }
             mm.send(sender, "commands.help.entry",
@@ -68,7 +68,7 @@ public class HelpCommand {
         lines.add(mm.getComponent("commands.help.hover_header",
                 Placeholder.unparsed("command", root.getName())));
         List<CommandNode> literals = root.getChildren().stream()
-                .filter(child -> !child.isArgument() && PermissionManager.hasAccess(sender, child.getPermission()))
+                .filter(child -> !child.isArgument() && PermissionManager.canReach(sender, child.getPermission()))
                 .toList();
         for (CommandNode child : literals.subList(0, Math.min(literals.size(), HOVER_SUBCOMMAND_CAP))) {
             lines.add(mm.getComponent("commands.help.hover_line",
