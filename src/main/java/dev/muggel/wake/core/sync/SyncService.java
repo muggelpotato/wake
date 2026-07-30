@@ -1,11 +1,11 @@
 package dev.muggel.wake.core.sync;
 
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.database.Dialect;
 import org.bukkit.configuration.ConfigurationSection;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -25,7 +25,7 @@ public class SyncService {
         this.dispatcher = new SyncDispatcher(plugin);
         ConfigurationSection config = plugin.getConfig().getConfigurationSection("sync");
         boolean wanted = config != null && config.getBoolean("enabled", false);
-        if (wanted && !isSharedDatabase(plugin)) {
+        if (wanted && plugin.getDatabaseManager().dialect() != Dialect.MARIADB) {
             plugin.getLogger().info("Cross-server sync inactive (needs a shared mariadb database)");
             wanted = false;
         }
@@ -41,11 +41,6 @@ public class SyncService {
                     dispatcher.accept(SCOPE_FULL);
                 });
         plugin.getLogger().info("Cross-server sync enabled (redis " + host + ":" + port + ")");
-    }
-
-    private static boolean isSharedDatabase(@NonNull Wake plugin) {
-        String type = plugin.getConfig().getString("database.type", "sqlite").toLowerCase(Locale.ROOT);
-        return "mariadb".equals(type) || "mysql".equals(type);
     }
 
     public void publishKeys(String scope, String table, @NonNull Set<String> keys) {

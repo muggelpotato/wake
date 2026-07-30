@@ -18,6 +18,8 @@ import java.util.logging.Level;
 
 /** Opens the connection pool everything else in the layer runs on at boot */
 final class DatabasePool {
+    static final String SQLITE_FILE = "wake.db";
+    static final String PROBE_QUERY = "SELECT 1";
     private DatabasePool() {}
 
     record Handle(@NonNull Dialect dialect, @Nullable HikariDataSource dataSource) {}
@@ -36,7 +38,7 @@ final class DatabasePool {
         }
         HikariDataSource dataSource = tightenTimeouts(plugin);
         try {
-            DB.getFirstColumn("SELECT 1");
+            DB.getFirstColumn(PROBE_QUERY);
         } catch (Exception e) {
             throw new IllegalStateException("Database connection test failed", e);
         }
@@ -52,7 +54,7 @@ final class DatabasePool {
         DatabaseOptions options = DatabaseOptions.builder()
                 .poolName(plugin.getName() + "-DB")
                 .logger(plugin.getLogger())
-                .sqlite(new File(plugin.getDataFolder(), "wake.db").getPath())
+                .sqlite(new File(plugin.getDataFolder(), SQLITE_FILE).getPath())
                 .build();
         BukkitDB.createHikariDatabase(plugin, PooledDatabaseOptions.builder().options(options).build());
         plugin.getLogger().info("Database ready (SQLite)");

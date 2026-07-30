@@ -91,7 +91,7 @@ public class DrydockModule extends AbstractModule {
                 double forceY = padsSec.getDouble(key + ".force_y", 0);
                 double forceZ = padsSec.getDouble(key + ".force_z", 0);
                 long delayMs = padsSec.getLong(key + ".delay_ms", 1000);
-                int hitboxPercent = padsSec.getInt(key + ".hitbox_percent", 99);
+                int hitboxPercent = padsSec.getInt(key + ".hitbox_percent", BoostpadConfig.DEFAULT_HITBOX_PERCENT);
                 BoostpadConfig config = new BoostpadConfig(key, enabled, forceX, forceY, forceZ, delayMs, hitboxPercent);
                 try {
                     drydockDao.importBoostpad(config);

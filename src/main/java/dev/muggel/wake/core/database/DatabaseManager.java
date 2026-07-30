@@ -43,6 +43,7 @@ public class DatabaseManager {
     private volatile @Nullable UUID currentActor;
     private @Nullable DegradedNoticeListener noticeListener;
     private SchemaMigrator schemaMigrator;
+    private Dialect dialect = Dialect.SQLITE;
     public DatabaseManager(Wake plugin) {
         this.plugin = plugin;
         this.writeExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, plugin.getName() + "-DB-Writer"));
@@ -52,7 +53,8 @@ public class DatabaseManager {
 
     public void init() {
         DatabasePool.Handle pool = DatabasePool.open(plugin);
-        this.schemaMigrator = new SchemaMigrator(plugin, pool.dialect());
+        this.dialect = pool.dialect();
+        this.schemaMigrator = new SchemaMigrator(plugin, dialect);
         outage.probeVia(pool.dataSource());
         this.noticeListener = new DegradedNoticeListener(this);
         Bukkit.getPluginManager().registerEvents(noticeListener, plugin);
@@ -206,6 +208,10 @@ public class DatabaseManager {
 
     public SchemaMigrator getSchemaMigrator() {
         return schemaMigrator;
+    }
+
+    public @NonNull Dialect dialect() {
+        return dialect;
     }
 
     public void shutdown() {

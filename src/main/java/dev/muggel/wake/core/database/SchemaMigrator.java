@@ -83,7 +83,7 @@ public class SchemaMigrator {
             plugin.getLogger().warning("Schema migrations pending: DDL cannot roll back, dump the database first if you need a restore path next time");
             return;
         }
-        File dbFile = new File(plugin.getDataFolder(), "wake.db");
+        File dbFile = new File(plugin.getDataFolder(), DatabasePool.SQLITE_FILE);
         if (!dbFile.exists()) return;
         File backupDir = new File(plugin.getDataFolder(), "backups");
         if (!backupDir.exists() && !backupDir.mkdirs()) {
@@ -94,14 +94,14 @@ public class SchemaMigrator {
         try {
             Files.copy(dbFile.toPath(), new File(backupDir, baseName + ".db").toPath(), StandardCopyOption.REPLACE_EXISTING);
             for (String suffix : new String[]{"-wal", "-shm"}) {
-                File extra = new File(plugin.getDataFolder(), "wake.db" + suffix);
+                File extra = new File(plugin.getDataFolder(), DatabasePool.SQLITE_FILE + suffix);
                 if (extra.exists()) {
                     Files.copy(extra.toPath(), new File(backupDir, baseName + ".db" + suffix).toPath(), StandardCopyOption.REPLACE_EXISTING);
                 }
             }
-            plugin.getLogger().info("Backed up wake.db to backups/" + baseName + ".db before migrating");
+            plugin.getLogger().info("Backed up " + DatabasePool.SQLITE_FILE + " to backups/" + baseName + ".db before migrating");
         } catch (IOException e) {
-            throw new IllegalStateException("Could not back up wake.db before migrating", e);
+            throw new IllegalStateException("Could not back up " + DatabasePool.SQLITE_FILE + " before migrating", e);
         }
     }
 }

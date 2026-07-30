@@ -28,6 +28,8 @@ import java.util.Set;
  * See the package documentation for the full command-authoring convention.
  */
 public class CommandNode {
+    public static final int AIM_DISTANCE = 16;
+
     /** How the framework resolves the object handed to an executor */
     public enum TargetType {
         /** player or console, or the entity behind {@code /execute as} (never fails) */
@@ -70,8 +72,6 @@ public class CommandNode {
                 return entity;
             }
         };
-
-        private static final int AIM_DISTANCE = 16;
 
         abstract @Nullable Object resolve(@NonNull CommandSourceStack source, @NonNull Wake plugin);
     }

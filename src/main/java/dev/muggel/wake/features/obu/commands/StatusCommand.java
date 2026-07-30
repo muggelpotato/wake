@@ -48,7 +48,7 @@ public class StatusCommand {
         if (inBoat) {
             targetedBoat = (Boat) player.getVehicle();
         } else {
-            Entity targetEntity = player.getTargetEntity(16);
+            Entity targetEntity = player.getTargetEntity(CommandNode.AIM_DISTANCE);
             if (targetEntity instanceof Boat boat) {
                 targetedBoat = boat;
             }

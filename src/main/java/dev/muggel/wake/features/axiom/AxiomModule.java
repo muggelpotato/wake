@@ -24,6 +24,7 @@ public class AxiomModule extends AbstractModule {
     private final AtomicLong reads = new AtomicLong();
     private long appliedRead;
     private AxiomDao dao;
+    private static final String DISPLAY_API_CLASS = "com.moulberry.axiom.paperapi.AxiomCustomDisplayAPI";
     public AxiomModule() {
         super("axiom");
     }
@@ -48,7 +49,7 @@ public class AxiomModule extends AbstractModule {
     @SuppressWarnings("PatternValidation")
     private void registerDisplays(List<String> models) {
         try {
-            Class<?> apiClass = Class.forName("com.moulberry.axiom.paperapi.AxiomCustomDisplayAPI");
+            Class<?> apiClass = Class.forName(DISPLAY_API_CLASS);
             Object apiInstance = apiClass.getMethod("getAPI").invoke(null);
             Method createMethod = apiClass.getMethod("create", Key.class, String.class, ItemStack.class);
             Method registerMethod = apiClass.getMethod("register", Plugin.class, createMethod.getReturnType());
@@ -87,9 +88,9 @@ public class AxiomModule extends AbstractModule {
     }
 
     private void unregisterDisplays() {
-        if (!Bukkit.getPluginManager().isPluginEnabled("AxiomPaper")) return;
+        if (!isCompatible()) return;
         try {
-            Class<?> apiClass = Class.forName("com.moulberry.axiom.paperapi.AxiomCustomDisplayAPI");
+            Class<?> apiClass = Class.forName(DISPLAY_API_CLASS);
             Object apiInstance = apiClass.getMethod("getAPI").invoke(null);
             apiClass.getMethod("unregisterAll", Plugin.class).invoke(apiInstance, getPlugin());
         } catch (Exception e) {
@@ -106,7 +107,7 @@ public class AxiomModule extends AbstractModule {
     @Override
     public void reload() {
         AxiomDao currentDao = this.dao;
-        if (currentDao == null || !Bukkit.getPluginManager().isPluginEnabled("AxiomPaper")) return;
+        if (currentDao == null || !isCompatible()) return;
         if (getPlugin().getDatabaseManager().isDegraded()) return;
         long ticket = reads.incrementAndGet();
         getPlugin().getDatabaseManager().readAsync(currentDao::loadDisplays, models -> {

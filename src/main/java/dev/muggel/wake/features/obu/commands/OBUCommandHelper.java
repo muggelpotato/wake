@@ -33,27 +33,22 @@ public final class OBUCommandHelper {
     private OBUCommandHelper() {}
 
     public static @NonNull OBUModule module(@NonNull Wake plugin) {
-        OBUModule module = plugin.getModule(OBUModule.class);
-        if (module == null) {
-            throw new IllegalStateException("OBU module is not loaded");
-        }
-        return module;
+        return loaded(plugin.getModule(OBUModule.class));
     }
 
     public static @NonNull OBUServiceImpl service(@NonNull Wake plugin) {
-        OBUServiceImpl service = module(plugin).getObuService();
-        if (service == null) {
-            throw new IllegalStateException("OBU module is not loaded");
-        }
-        return service;
+        return loaded(module(plugin).getObuService());
     }
 
     public static @NonNull OBUContextManager contexts(@NonNull Wake plugin) {
-        OBUContextManager contextManager = module(plugin).getContextManager();
-        if (contextManager == null) {
+        return loaded(module(plugin).getContextManager());
+    }
+
+    private static <T> @NonNull T loaded(@Nullable T part) {
+        if (part == null) {
             throw new IllegalStateException("OBU module is not loaded");
         }
-        return contextManager;
+        return part;
     }
 
     public static boolean requireClient(@NonNull Wake plugin, @NonNull CommandSourceStack source, @NonNull Object target) {

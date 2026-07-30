@@ -31,9 +31,9 @@ public enum SettingType {
     FLOAT(FloatArgumentType::floatArg, (buf, arg) -> buf.writeFloat(Float.parseFloat(arg))),
     DOUBLE(DoubleArgumentType::doubleArg, (buf, arg) -> buf.writeDouble(Double.parseDouble(arg))),
     INT(IntegerArgumentType::integer, (buf, arg) -> buf.writeInt(Integer.parseInt(arg))),
-    BYTE(() -> IntegerArgumentType.integer(0, 255), (buf, arg) -> {
+    BYTE(() -> IntegerArgumentType.integer(0, SettingType.MAX_BYTE), (buf, arg) -> {
         int value = Integer.parseInt(arg);
-        if (value < 0 || value > 255) {
+        if (value < 0 || value > SettingType.MAX_BYTE) {
             throw new IllegalArgumentException("Byte argument out of range: " + arg);
         }
         buf.writeByte((byte) value);
@@ -48,6 +48,7 @@ public enum SettingType {
         void write(@NonNull PacketByteBuf buf, @NonNull String arg) throws IOException;
     }
 
+    private static final int MAX_BYTE = 255;
     private final Supplier<ArgumentType<?>> argument;
     private final Encoder encoder;
     SettingType(Supplier<ArgumentType<?>> argument, Encoder encoder) {

@@ -61,7 +61,7 @@ public class DrydockServiceImpl implements DrydockService {
     private void rebuildDerived() {
         Map<String, BoostpadConfig> snapshot = Map.copyOf(boostpads.view());
         Map<Material, BoostpadConfig> newConfigs = new HashMap<>();
-        int maxPct = 100;
+        double maxOffset = 0.0;
         for (Map.Entry<String, BoostpadConfig> entry : snapshot.entrySet()) {
             BoostpadConfig cfg = entry.getValue();
             if (cfg.enabled()) {
@@ -70,14 +70,12 @@ public class DrydockServiceImpl implements DrydockService {
                 if (mat != null) {
                     newConfigs.put(mat, cfg);
                 }
-                if (cfg.hitboxPercent() > maxPct) {
-                    maxPct = cfg.hitboxPercent();
-                }
+                maxOffset = Math.max(maxOffset, cfg.offsetMultiplier());
             }
         }
         this.publishedConfigs = snapshot;
         this.materialConfigs = Map.copyOf(newConfigs);
-        this.cachedMaxOffsetMultiplier = (maxPct / 100.0) - 1.0;
+        this.cachedMaxOffsetMultiplier = maxOffset;
         if (this.onReloadCallback != null) {
             this.onReloadCallback.run();
         }

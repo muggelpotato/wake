@@ -152,7 +152,7 @@ class OutageMonitor {
         HikariDataSource dataSource = this.probeSource;
         if (dataSource == null) {
             try {
-                DB.getFirstColumn("SELECT 1");
+                DB.getFirstColumn(DatabasePool.PROBE_QUERY);
                 return true;
             } catch (Exception unreachable) {
                 return false;
@@ -168,7 +168,7 @@ class OutageMonitor {
     private void scheduleProbe() {
         Scheduling.laterAsync(plugin, () -> {
             try {
-                DB.getFirstColumn("SELECT 1");
+                DB.getFirstColumn(DatabasePool.PROBE_QUERY);
             } catch (Exception stillDown) {
                 scheduleProbe();
                 return;

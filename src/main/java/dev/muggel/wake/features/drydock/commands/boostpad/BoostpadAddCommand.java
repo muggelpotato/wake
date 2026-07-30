@@ -22,8 +22,8 @@ public class BoostpadAddCommand {
                         CommandNode.argument("y", DoubleArgumentType.doubleArg()),
                         CommandNode.argument("z", DoubleArgumentType.doubleArg()),
                         CommandNode.argument("delay_ms", IntegerArgumentType.integer(0))
-                                .executesSender((ctx, sender) -> execute(ctx, plugin, 99)),
-                        CommandNode.argument("hitbox_percent", IntegerArgumentType.integer(0, 245))
+                                .executesSender((ctx, sender) -> execute(ctx, plugin, BoostpadConfig.DEFAULT_HITBOX_PERCENT)),
+                        CommandNode.argument("hitbox_percent", IntegerArgumentType.integer(0, BoostpadConfig.MAX_HITBOX_PERCENT))
                                 .executesSender((ctx, sender) -> execute(ctx, plugin, IntegerArgumentType.getInteger(ctx, "hitbox_percent"))));
     }
 
