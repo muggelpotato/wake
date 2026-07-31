@@ -13,6 +13,9 @@ import org.bukkit.plugin.Plugin;
 import org.jspecify.annotations.NonNull;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.logging.Level;
@@ -32,12 +35,15 @@ public final class AxiomDisplays {
     @SuppressWarnings("PatternValidation")
     public void register(@NonNull Set<String> models) {
         if (models.isEmpty()) return;
+        List<String> ordered = new ArrayList<>(models);
+        ordered.sort(Comparator.comparing((String model) -> model.substring(model.indexOf(':') + 1).toLowerCase(Locale.ROOT))
+                .thenComparing(Comparator.naturalOrder()));
         try {
             Class<?> apiClass = Class.forName(DISPLAY_API_CLASS);
             Object apiInstance = apiClass.getMethod("getAPI").invoke(null);
             Method createMethod = apiClass.getMethod("create", Key.class, String.class, ItemStack.class);
             Method registerMethod = apiClass.getMethod("register", Plugin.class, createMethod.getReturnType());
-            for (String model : models) {
+            for (String model : ordered) {
                 try {
                     NamespacedKey modelKey = NamespacedKey.fromString(model.toLowerCase(Locale.ROOT));
                     if (modelKey == null) {
