@@ -1,9 +1,9 @@
 package dev.muggel.wake.core.database;
 
 import co.aikar.idb.BaseDatabase;
-import co.aikar.idb.BukkitDB;
 import co.aikar.idb.DB;
 import co.aikar.idb.DatabaseOptions;
+import co.aikar.idb.HikariPooledDatabase;
 import co.aikar.idb.PooledDatabaseOptions;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.muggel.wake.Wake;
@@ -56,7 +56,7 @@ final class DatabasePool {
                 .logger(plugin.getLogger())
                 .sqlite(new File(plugin.getDataFolder(), SQLITE_FILE).getPath())
                 .build();
-        BukkitDB.createHikariDatabase(plugin, PooledDatabaseOptions.builder().options(options).build());
+        openPool(options);
         plugin.getLogger().info("Database ready (SQLite)");
     }
 
@@ -75,8 +75,12 @@ final class DatabasePool {
                 )
                 .dsn("mariadb://" + host + ":" + port + "/" + database + "?socketTimeout=3000")
                 .build();
-        BukkitDB.createHikariDatabase(plugin, PooledDatabaseOptions.builder().options(options).build());
+        openPool(options);
         plugin.getLogger().info("Database ready (MariaDB)");
+    }
+
+    private static void openPool(@NonNull DatabaseOptions options) {
+        DB.setGlobalDatabase(new HikariPooledDatabase(PooledDatabaseOptions.builder().options(options).build()));
     }
 
     /** Hikari's defaults are too long for quick ingame feedback */

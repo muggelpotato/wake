@@ -7,12 +7,12 @@ import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.features.obu.OBUModule;
-import dev.muggel.wake.features.obu.SettingType;
-import dev.muggel.wake.features.obu.context.OBUContext;
-import dev.muggel.wake.features.obu.context.OBUSetting;
-import dev.muggel.wake.features.obu.service.OBUContextManager;
-import dev.muggel.wake.features.obu.service.OBUServiceImpl;
-import dev.muggel.wake.features.obu.service.ClientRegistry.ClientState;
+import dev.muggel.wake.features.obu.protocol.SettingType;
+import dev.muggel.wake.features.obu.contexts.OBUContext;
+import dev.muggel.wake.features.obu.protocol.OBUSetting;
+import dev.muggel.wake.features.obu.contexts.OBUContextManager;
+import dev.muggel.wake.features.obu.delivery.ContextDelivery;
+import dev.muggel.wake.features.obu.clients.ClientRegistry.ClientState;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
@@ -36,8 +36,8 @@ public final class OBUCommandHelper {
         return loaded(plugin.getModule(OBUModule.class));
     }
 
-    public static @NonNull OBUServiceImpl service(@NonNull Wake plugin) {
-        return loaded(module(plugin).getObuService());
+    public static @NonNull ContextDelivery delivery(@NonNull Wake plugin) {
+        return loaded(module(plugin).getDelivery());
     }
 
     public static @NonNull OBUContextManager contexts(@NonNull Wake plugin) {
@@ -55,7 +55,7 @@ public final class OBUCommandHelper {
         if (!(target instanceof Player player)) {
             return true;
         }
-        ClientState state = service(plugin).clients().state(player.getUniqueId());
+        ClientState state = delivery(plugin).clients().state(player.getUniqueId());
         if (state == ClientState.DRIVEN) {
             return true;
         }

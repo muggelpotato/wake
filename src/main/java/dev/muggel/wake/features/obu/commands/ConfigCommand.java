@@ -6,9 +6,9 @@ import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
-import dev.muggel.wake.features.obu.service.OBUContextManager.ContextCounts;
-import dev.muggel.wake.features.obu.service.OBUServiceImpl;
-import dev.muggel.wake.features.obu.service.SandboxPurger;
+import dev.muggel.wake.features.obu.contexts.OBUContextManager.ContextCounts;
+import dev.muggel.wake.features.obu.delivery.ContextDelivery;
+import dev.muggel.wake.features.obu.contexts.SandboxPurger;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
@@ -22,7 +22,7 @@ public class ConfigCommand {
                 .withHelpKey("commands.obu.help.config")
                 .withoutPresets()
                 .withGate(CommandNode.Gate.OPEN)
-                .addSubcommand(CommandHelper.toggleCommand(plugin, "persistence", OBUServiceImpl.STATE_KEY_PERSISTENT_STATES, "words.feature.persistent_states"))
+                .addSubcommand(CommandHelper.toggleCommand(plugin, "persistence", ContextDelivery.STATE_KEY_PERSISTENT_STATES, "words.feature.persistent_states"))
                 .addSubcommand(CommandNode.literal("keep-unused-sandboxes")
                         .arguments(CommandNode.argument("duration", StringArgumentType.string())
                                 .executesSender((ctx, sender) -> executeKeepUnused(ctx, plugin))))

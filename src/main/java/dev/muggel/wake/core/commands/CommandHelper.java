@@ -12,7 +12,6 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
@@ -50,20 +49,6 @@ public final class CommandHelper {
         if (plugin.getStateDao().get(STATE_KEY_SHOW_HINTS, true)) {
             plugin.getMessageManager().send(sender, messageKey);
         }
-    }
-
-    /**
-     * Resolves a module's published service from the registry <br>
-     * Returns {@code null} or notifies the sender if it's not loaded <br>
-     * Callers should {@code return 0} when this returns null <br>
-     * Pass the module id as {@code moduleLabel} for canonical module names in messages
-     */
-    public static <T> @Nullable T requireService(@NonNull Class<T> type, @NonNull Wake plugin, @NonNull CommandSender sender, @NonNull String moduleLabel) {
-        T service = Wake.getServiceRegistry().get(type);
-        if (service == null) {
-            plugin.getMessageManager().send(sender, "commands.base.module_not_loaded", Placeholder.unparsed("module", moduleLabel));
-        }
-        return service;
     }
 
     public static @NonNull CompletableFuture<Suggestions> suggestMatching(@NonNull SuggestionsBuilder builder, @NonNull Iterable<String> options) {

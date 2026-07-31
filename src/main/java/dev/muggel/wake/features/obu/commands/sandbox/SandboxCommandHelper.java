@@ -8,9 +8,9 @@ import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.arguments.NameArgumentType;
 import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
-import dev.muggel.wake.features.obu.context.OBUContext;
-import dev.muggel.wake.features.obu.service.OBUContextManager;
-import dev.muggel.wake.features.obu.service.OBUServiceImpl;
+import dev.muggel.wake.features.obu.contexts.OBUContext;
+import dev.muggel.wake.features.obu.contexts.OBUContextManager;
+import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
@@ -65,7 +65,7 @@ final class SandboxCommandHelper {
         return OBUCommandHelper.suggestContexts(ctx, builder, plugin, OBUContext::isSandbox);
     }
 
-    static void enterSandbox(Player player, String name, @NonNull OBUServiceImpl service) {
+    static void enterSandbox(Player player, String name, @NonNull ContextDelivery service) {
         service.setPlayerActiveSandbox(player, name);
         service.getSyncManager().clearLocalOverrides(player.getUniqueId());
         if (player.getVehicle() instanceof Boat boat) {

@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -79,6 +80,19 @@ public class DatabaseManager {
         outage.writeQueued(actor);
         pendingWrites.incrementAndGet();
         outage.armWatchdog();
+        try {
+            submitWrite(errorMessage, syncScope, mirror, rowKeys, actor, statements, onLost);
+        } catch (RejectedExecutionException afterShutdown) {
+            completedWrites.incrementAndGet();
+            pendingWrites.decrementAndGet();
+            plugin.getLogger().log(Level.SEVERE, errorMessage + " (queued after the database was shut down)", afterShutdown);
+            if (onLost != null) {
+                onLost.run();
+            }
+        }
+    }
+
+    private void submitWrite(String errorMessage, @Nullable String syncScope, @Nullable CachedStore<?> mirror, @NonNull List<String> rowKeys, @Nullable UUID actor, @NonNull List<SqlStatement> statements, @Nullable Runnable onLost) {
         writeExecutor.execute(() -> {
             try {
                 if (outage.isDegraded()) {

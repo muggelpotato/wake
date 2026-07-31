@@ -7,8 +7,8 @@ import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.arguments.NameArgumentType;
 import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
-import dev.muggel.wake.features.obu.context.OBUContext;
-import dev.muggel.wake.features.obu.service.OBUServiceImpl;
+import dev.muggel.wake.features.obu.contexts.OBUContext;
+import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
@@ -25,7 +25,7 @@ public class SandboxSwitchCommand {
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, @NonNull Player player, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        OBUServiceImpl service = OBUCommandHelper.service(plugin);
+        ContextDelivery service = OBUCommandHelper.delivery(plugin);
         String name = StringArgumentType.getString(ctx, "name");
         OBUContext context = SandboxCommandHelper.requireOwnSandbox(plugin, sender, player, name);
         if (context == null) {

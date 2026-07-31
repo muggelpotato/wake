@@ -9,11 +9,11 @@ import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.arguments.NameArgumentType;
-import dev.muggel.wake.features.obu.OBUDefinition;
-import dev.muggel.wake.features.obu.context.OBUContext;
-import dev.muggel.wake.features.obu.context.OBUSetting;
-import dev.muggel.wake.features.obu.service.OBUContextManager;
-import dev.muggel.wake.features.obu.service.OBUServiceImpl;
+import dev.muggel.wake.features.obu.protocol.OBUDefinition;
+import dev.muggel.wake.features.obu.contexts.OBUContext;
+import dev.muggel.wake.features.obu.protocol.OBUSetting;
+import dev.muggel.wake.features.obu.contexts.OBUContextManager;
+import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
@@ -41,7 +41,7 @@ public class ClearCommand {
         if (!(CommandHelper.actingSender(ctx.getSource()) instanceof Player player)) {
             return builder.buildFuture();
         }
-        OBUServiceImpl service = OBUCommandHelper.service(plugin);
+        ContextDelivery service = OBUCommandHelper.delivery(plugin);
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         String sandboxName = service.getPlayerActiveSandbox(player);
         Map<String, OBUSetting> active = new HashMap<>();
@@ -57,7 +57,7 @@ public class ClearCommand {
     }
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, @NonNull Entity target, Wake plugin) {
-        OBUServiceImpl service = OBUCommandHelper.service(plugin);
+        ContextDelivery service = OBUCommandHelper.delivery(plugin);
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         String settingKey = StringArgumentType.getString(ctx, "setting");
         CommandSender sender = ctx.getSource().getSender();

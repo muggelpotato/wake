@@ -8,7 +8,7 @@ import dev.muggel.wake.core.commands.PermissionManager;
 import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.core.commands.WakeCommandManager;
 import dev.muggel.wake.core.text.MessageManager;
-import dev.muggel.wake.features.obu.OBUDefinition;
+import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.OBUModule;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;

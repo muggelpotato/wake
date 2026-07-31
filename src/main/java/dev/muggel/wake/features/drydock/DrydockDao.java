@@ -2,7 +2,7 @@ package dev.muggel.wake.features.drydock;
 
 import co.aikar.idb.DB;
 import dev.muggel.wake.Wake;
-import dev.muggel.wake.features.drydock.api.BoostpadConfig;
+import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
 
 import dev.muggel.wake.core.database.CachedStore;
 import dev.muggel.wake.core.database.SqlStatement;

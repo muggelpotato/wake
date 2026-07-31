@@ -5,8 +5,7 @@ import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.core.commands.CommandNode;
-import dev.muggel.wake.features.drydock.api.BoostpadConfig;
-import dev.muggel.wake.features.drydock.api.DrydockService;
+import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
 import dev.muggel.wake.features.drydock.commands.DrydockCommandHelper;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
@@ -25,10 +24,8 @@ public class BoostpadListCommand {
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        DrydockService service = DrydockCommandHelper.requireService(plugin, sender);
-        if (service == null) return 0;
         boolean globalEnabled = plugin.getStateDao().get(BoostpadCommand.STATE_KEY_ENABLED, true);
-        Map<String, BoostpadConfig> configs = service.cachedBoostpads();
+        Map<String, BoostpadConfig> configs = DrydockCommandHelper.boostpads(plugin).cachedBoostpads();
         Component blocksComp = Component.empty();
         if (configs.isEmpty()) {
             blocksComp = plugin.getMessageManager().getComponent("commands.drydock.boostpad.empty");

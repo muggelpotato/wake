@@ -7,7 +7,11 @@ import org.bukkit.scheduler.BukkitTask;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-/** Scheduling that tolerates the plugin shutting down */
+/**
+ * Scheduling that tolerates the plugin shutting down. <br>
+ * Once Bukkit has disabled the plugin every submission here is silently discarded. <br>
+ * It's the wrong tool for teardown work (do that inline)
+ */
 public final class Scheduling {
     private Scheduling() {}
 

@@ -9,7 +9,6 @@ import dev.muggel.wake.core.module.AbstractModule;
 import dev.muggel.wake.features.base.commands.HelpCommand;
 import dev.muggel.wake.features.base.commands.KillEmptyBoatsCommand;
 import dev.muggel.wake.features.base.commands.ReloadCommand;
-import dev.muggel.wake.features.base.listeners.BoatListener;
 import dev.muggel.wake.features.base.commands.database.DatabaseCommand;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.jspecify.annotations.NonNull;
@@ -26,7 +25,7 @@ public class BaseModule extends AbstractModule {
 
     @Override
     protected void onModuleEnable() {
-        registerListener(new BoatListener(this));
+        registerListener(new EmptyBoatListener(this));
         StateDao stateDao = getPlugin().getStateDao();
         seedDataIfEmpty(stateDao.isLoaded() ? stateDao.snapshot("base.").isEmpty() : null, "defaults/base_default.yml", "Base Configs");
     }

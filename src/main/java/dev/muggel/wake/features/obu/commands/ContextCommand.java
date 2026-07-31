@@ -9,10 +9,10 @@ import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.core.commands.arguments.NameArgumentType;
-import dev.muggel.wake.features.obu.context.OBUContext;
-import dev.muggel.wake.features.obu.context.OBUSetting;
-import dev.muggel.wake.features.obu.service.OBUContextManager;
-import dev.muggel.wake.features.obu.service.OBUServiceImpl;
+import dev.muggel.wake.features.obu.contexts.OBUContext;
+import dev.muggel.wake.features.obu.protocol.OBUSetting;
+import dev.muggel.wake.features.obu.contexts.OBUContextManager;
+import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -82,7 +82,7 @@ public class ContextCommand {
 
     private static int executeApply(@NonNull CommandContext<CommandSourceStack> ctx, Entity target, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        OBUServiceImpl service = OBUCommandHelper.service(plugin);
+        ContextDelivery service = OBUCommandHelper.delivery(plugin);
         String contextName = StringArgumentType.getString(ctx, "name");
         OBUContext context = OBUCommandHelper.resolveForSubject(plugin, target, contextName);
         if (context == null) {
@@ -116,7 +116,7 @@ public class ContextCommand {
 
     private static int executeDelete(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        OBUServiceImpl service = OBUCommandHelper.service(plugin);
+        ContextDelivery service = OBUCommandHelper.delivery(plugin);
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         String name = StringArgumentType.getString(ctx, "name");
         OBUContext context = contextManager.getContext(name);

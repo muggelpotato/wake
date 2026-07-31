@@ -5,9 +5,9 @@ import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
-import dev.muggel.wake.features.obu.context.OBUContext;
-import dev.muggel.wake.features.obu.service.OBUContextManager;
-import dev.muggel.wake.features.obu.service.OBUServiceImpl;
+import dev.muggel.wake.features.obu.contexts.OBUContext;
+import dev.muggel.wake.features.obu.contexts.OBUContextManager;
+import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Boat;
@@ -25,7 +25,7 @@ public class SandboxExitCommand {
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Player player, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        OBUServiceImpl service = OBUCommandHelper.service(plugin);
+        ContextDelivery service = OBUCommandHelper.delivery(plugin);
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         String sandbox = service.getPlayerActiveSandbox(player);
         if (sandbox == null) {

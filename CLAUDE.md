@@ -45,6 +45,15 @@ Modules today: `base` (plugin chrome + shared commands), `obu` (OpenBoatUtils in
    Reuse before adding; delete rather than deprecate. Add defensive handling only where it buys real
    stability. If a class does two jobs, split it; if a guard covers a case that can't happen, remove
    it.
+7. **Package layout.** Three fixed words mean the same thing everywhere and nothing else does:
+   `api/` (what other modules may reference — nothing outside it is cross-module public), `commands/`
+   (the command framework's contract), `integration/` (a quarantined seam to something that may not
+   be there, another module or a third-party plugin). Every other package is named for what it is
+   *about*, never for what kind of thing it holds — `util`, `model`, `service`, `listeners`, `impl`
+   and `helpers` are not package names. A subject package needs two or more files; one file is never
+   a package, it sits at the module root. The three fixed words are exempt — a boundary is worth
+   signposting even at one file. A module class is lifecycle wiring only: if it holds logic, the
+   logic moves out.
 
 ## Commands
 

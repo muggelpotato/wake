@@ -5,11 +5,11 @@ import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.PermissionPreset;
-import dev.muggel.wake.features.obu.OBUDefinition;
-import dev.muggel.wake.features.obu.SettingType;
-import dev.muggel.wake.features.obu.context.OBUSetting;
-import dev.muggel.wake.features.obu.service.OBUContextManager;
-import dev.muggel.wake.features.obu.service.OBUServiceImpl;
+import dev.muggel.wake.features.obu.protocol.OBUDefinition;
+import dev.muggel.wake.features.obu.protocol.SettingType;
+import dev.muggel.wake.features.obu.protocol.OBUSetting;
+import dev.muggel.wake.features.obu.contexts.OBUContextManager;
+import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
@@ -43,14 +43,14 @@ public class SettingsCommand {
         List<SettingType> types = def.types();
         String[] argNames = argNames(def);
         if (types.isEmpty()) {
-            settingNode.executesEntityOrAimedBoat((ctx, target) -> executeSetting(ctx, def, types, argNames, target, OBUCommandHelper.service(plugin), plugin));
+            settingNode.executesEntityOrAimedBoat((ctx, target) -> executeSetting(ctx, def, types, argNames, target, OBUCommandHelper.delivery(plugin), plugin));
             return settingNode;
         }
         List<CommandNode> argNodes = new ArrayList<>();
         for (int i = 0; i < types.size(); i++) {
             argNodes.add(CommandNode.argument(argNames[i], types.get(i).argument()));
         }
-        argNodes.getLast().executesEntityOrAimedBoat((ctx, target) -> executeSetting(ctx, def, types, argNames, target, OBUCommandHelper.service(plugin), plugin));
+        argNodes.getLast().executesEntityOrAimedBoat((ctx, target) -> executeSetting(ctx, def, types, argNames, target, OBUCommandHelper.delivery(plugin), plugin));
         settingNode.arguments(argNodes.toArray(new CommandNode[0]));
         return settingNode;
     }
@@ -72,7 +72,7 @@ public class SettingsCommand {
         return names;
     }
 
-    private static int executeSetting(CommandContext<CommandSourceStack> ctx, OBUDefinition def, @NonNull List<SettingType> types, String[] argNames, Entity target, OBUServiceImpl obuService, Wake plugin) {
+    private static int executeSetting(CommandContext<CommandSourceStack> ctx, OBUDefinition def, @NonNull List<SettingType> types, String[] argNames, Entity target, ContextDelivery delivery, Wake plugin) {
         String[] args = new String[types.size()];
         for (int i = 0; i < types.size(); i++) {
             Object argVal = ctx.getArgument(argNames[i], Object.class);
@@ -82,11 +82,11 @@ public class SettingsCommand {
         CommandSender sender = ctx.getSource().getSender();
         if (def == OBUDefinition.reset) {
             if (target instanceof Player p) {
-                obuService.applyDefaultContext(p);
+                delivery.applyDefaultContext(p);
                 plugin.getMessageManager().send(sender, "commands.obu.settings.reset");
             } else if (target instanceof Boat b) {
-                obuService.getSyncManager().clearLocalOverrides(b.getUniqueId());
-                obuService.getSyncManager().broadcastSync(b);
+                delivery.getSyncManager().clearLocalOverrides(b.getUniqueId());
+                delivery.getSyncManager().broadcastSync(b);
                 plugin.getMessageManager().send(sender, "commands.obu.settings.success",
                         Placeholder.parsed("setting", def.commandName()),
                         Placeholder.unparsed("value", ""),
@@ -94,14 +94,14 @@ public class SettingsCommand {
             }
             return Command.SINGLE_SUCCESS;
         }
-        if (!obuService.applySetting(target, setting)) {
+        if (!delivery.applySetting(target, setting)) {
             plugin.getMessageManager().send(sender, "commands.obu.context.invalid_target");
             return 0;
         }
         String valueStr = String.join(" ", OBUCommandHelper.displayArgs(setting));
         String sandbox = null;
         if (target instanceof Player p) {
-            sandbox = obuService.getPlayerActiveSandbox(p);
+            sandbox = delivery.getPlayerActiveSandbox(p);
         }
         if (sandbox != null && def.isContextSetting()) {
             plugin.getMessageManager().send(sender, "commands.obu.settings.sandbox",

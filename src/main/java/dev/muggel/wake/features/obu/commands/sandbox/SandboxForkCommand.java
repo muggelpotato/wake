@@ -7,9 +7,9 @@ import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.arguments.NameArgumentType;
 import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
-import dev.muggel.wake.features.obu.context.OBUContext;
-import dev.muggel.wake.features.obu.service.OBUContextManager;
-import dev.muggel.wake.features.obu.service.OBUServiceImpl;
+import dev.muggel.wake.features.obu.contexts.OBUContext;
+import dev.muggel.wake.features.obu.contexts.OBUContextManager;
+import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
@@ -28,7 +28,7 @@ public class SandboxForkCommand {
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, CommandSender subject, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        OBUServiceImpl service = OBUCommandHelper.service(plugin);
+        ContextDelivery service = OBUCommandHelper.delivery(plugin);
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         String contextToLoad = StringArgumentType.getString(ctx, "contextToLoad");
         String newName = StringArgumentType.getString(ctx, "newName");

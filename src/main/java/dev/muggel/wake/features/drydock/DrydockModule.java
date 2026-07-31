@@ -4,21 +4,22 @@ import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.core.module.AbstractModule;
-import dev.muggel.wake.features.drydock.api.DrydockService;
 import dev.muggel.wake.features.drydock.commands.boostpad.BoostpadCommand;
 import dev.muggel.wake.features.drydock.commands.GetBoatCommand;
-import dev.muggel.wake.features.drydock.integration.obu.OBUBoostpadIntegration;
-import dev.muggel.wake.features.drydock.listeners.BoostpadDetectorListener;
-import dev.muggel.wake.features.drydock.service.DrydockServiceImpl;
+import dev.muggel.wake.features.drydock.boostpads.BoostpadDetectorListener;
+import dev.muggel.wake.features.drydock.boostpads.BoostpadRegistry;
+import dev.muggel.wake.features.drydock.integration.OBUBoostpadIntegration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.configuration.ConfigurationSection;
 import java.util.Map;
 import java.util.logging.Level;
-import dev.muggel.wake.features.drydock.api.BoostpadConfig;
+import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 public class DrydockModule extends AbstractModule {
     private DrydockDao drydockDao;
+    private BoostpadRegistry boostpads;
     private BoostpadDetectorListener detectorListener;
     public DrydockModule() {
         super("drydock");
@@ -29,12 +30,11 @@ public class DrydockModule extends AbstractModule {
         this.drydockDao = new DrydockDao(getPlugin());
         drydockDao.initTables();
         registerDao(drydockDao);
-        DrydockServiceImpl drydockService = new DrydockServiceImpl(getPlugin(), drydockDao);
-        Wake.getServiceRegistry().register(DrydockService.class, drydockService);
-        this.detectorListener = new BoostpadDetectorListener(getPlugin(), drydockService);
-        drydockService.setOnReloadCallback(this.detectorListener::updateRegistration);
+        this.boostpads = new BoostpadRegistry(getPlugin(), drydockDao);
+        this.detectorListener = new BoostpadDetectorListener(getPlugin(), boostpads);
+        boostpads.setOnReloadCallback(this.detectorListener::updateRegistration);
         registerListener(new OBUBoostpadIntegration());
-        seedDataIfEmpty(drydockService.isLoaded() ? drydockService.cachedBoostpads().isEmpty() : null, "defaults/drydock_default.yml", "Drydock");
+        seedDataIfEmpty(boostpads.isLoaded() ? boostpads.cachedBoostpads().isEmpty() : null, "defaults/drydock_default.yml", "Drydock");
     }
 
     @Override
@@ -54,18 +54,22 @@ public class DrydockModule extends AbstractModule {
             detectorListener.unregister();
             detectorListener = null;
         }
-        Wake.getServiceRegistry().unregister(DrydockService.class);
+        boostpads = null;
         drydockDao = null;
+    }
+
+    public @Nullable BoostpadRegistry getBoostpads() {
+        return boostpads;
     }
 
     @Override
     protected int onExportData(YamlConfiguration yaml) {
-        DrydockService service = Wake.getServiceRegistry().get(DrydockService.class);
-        if (service == null) {
+        BoostpadRegistry registry = this.boostpads;
+        if (registry == null) {
             return 0;
         }
         int count = 0;
-        for (Map.Entry<String, BoostpadConfig> entry : service.cachedBoostpads().entrySet()) {
+        for (Map.Entry<String, BoostpadConfig> entry : registry.cachedBoostpads().entrySet()) {
             String key = entry.getKey();
             BoostpadConfig config = entry.getValue();
             String path = "boostpads." + key;
@@ -110,9 +114,9 @@ public class DrydockModule extends AbstractModule {
 
     @Override
     public void reload() {
-        DrydockService service = Wake.getServiceRegistry().get(DrydockService.class);
-        if (service != null) {
-            service.reloadBoostpads();
+        BoostpadRegistry registry = this.boostpads;
+        if (registry != null) {
+            registry.reloadBoostpads();
         }
     }
 }

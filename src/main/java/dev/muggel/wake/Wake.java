@@ -5,7 +5,7 @@ import dev.muggel.wake.core.database.StateDao;
 import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.core.module.ModuleManager;
 import dev.muggel.wake.core.module.WakeModule;
-import dev.muggel.wake.core.registry.ServiceRegistry;
+import dev.muggel.wake.core.module.ServiceRegistry;
 import dev.muggel.wake.core.sync.SyncService;
 import dev.muggel.wake.features.drydock.DrydockModule;
 import dev.muggel.wake.features.obu.OBUModule;
