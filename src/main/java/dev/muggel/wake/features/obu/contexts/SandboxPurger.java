@@ -3,6 +3,7 @@ package dev.muggel.wake.features.obu.contexts;
 import dev.muggel.wake.core.Scheduling;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.features.obu.OBUDao;
+import dev.muggel.wake.features.obu.delivery.ActiveContexts;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.Bukkit;
@@ -24,12 +25,14 @@ public final class SandboxPurger {
     private final Wake plugin;
     private final OBUDao dao;
     private final ContextDelivery service;
+    private final ActiveContexts active;
     private @Nullable BukkitTask task;
     private long scheduledKeepMillis;
-    public SandboxPurger(Wake plugin, OBUDao dao, ContextDelivery service) {
+    public SandboxPurger(Wake plugin, OBUDao dao, ContextDelivery service, ActiveContexts active) {
         this.plugin = plugin;
         this.dao = dao;
         this.service = service;
+        this.active = active;
     }
 
     public @Nullable BukkitTask restart() {
@@ -58,7 +61,7 @@ public final class SandboxPurger {
         if (thresholdMillis <= 0) return;
         long cutoff = System.currentTimeMillis() - thresholdMillis;
         List<String> expired = dao.getOldSandboxes(cutoff);
-        if (expired.isEmpty()) return;
+        if (expired == null || expired.isEmpty()) return;
         Scheduling.onMain(plugin, () -> purge(expired));
     }
 
@@ -81,11 +84,11 @@ public final class SandboxPurger {
     }
 
     private @Nullable String lostContext(@NonNull Set<String> gone, @NonNull Player player) {
-        String sandbox = service.getPlayerActiveSandbox(player);
+        String sandbox = active.sandboxOf(player.getUniqueId());
         if (sandbox != null && gone.contains(sandbox.toLowerCase(Locale.ROOT))) {
             return sandbox;
         }
-        String context = service.getActiveContextName(player);
+        String context = active.contextOf(player.getUniqueId());
         return gone.contains(context.toLowerCase(Locale.ROOT)) ? context : null;
     }
 

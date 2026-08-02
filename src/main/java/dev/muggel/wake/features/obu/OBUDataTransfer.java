@@ -5,6 +5,7 @@ import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.contexts.SandboxPurger;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
+import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import org.bukkit.Bukkit;
@@ -26,12 +27,12 @@ final class OBUDataTransfer {
     private final Wake plugin;
     private final OBUDao obuDao;
     private final OBUContextManager contextManager;
-    private final ContextDelivery delivery;
-    OBUDataTransfer(@NonNull Wake plugin, @NonNull OBUDao obuDao, @NonNull OBUContextManager contextManager, @NonNull ContextDelivery delivery) {
+    private final OBUSyncManager syncManager;
+    OBUDataTransfer(@NonNull Wake plugin, @NonNull OBUDao obuDao, @NonNull OBUContextManager contextManager, @NonNull OBUSyncManager syncManager) {
         this.plugin = plugin;
         this.obuDao = obuDao;
         this.contextManager = contextManager;
-        this.delivery = delivery;
+        this.syncManager = syncManager;
     }
 
     int export(@NonNull YamlConfiguration yaml) {
@@ -86,7 +87,7 @@ final class OBUDataTransfer {
         }
         contextManager.loadContexts();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            delivery.getSyncManager().syncPlayer(player);
+            syncManager.syncPlayer(player);
         }
         return count;
     }

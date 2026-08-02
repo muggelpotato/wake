@@ -1,6 +1,7 @@
 package dev.muggel.wake.features.obu.delivery;
 
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.features.obu.clients.ClientRegistry;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
@@ -11,6 +12,7 @@ import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,14 +29,23 @@ public class OBUSyncManager {
     private final Wake plugin;
     private final PacketSender packetSender;
     private final OBUContextManager contextManager;
-    private final ContextDelivery delivery;
+    private final ActiveContexts active;
+    private final ClientRegistry clients;
     private final Map<UUID, Map<String, OBUSetting>> localOverrides = new ConcurrentHashMap<>();
     private final Set<UUID> knownBoatContexts = ConcurrentHashMap.newKeySet();
-    public OBUSyncManager(Wake plugin, PacketSender packetSender, OBUContextManager contextManager, ContextDelivery delivery) {
+    public OBUSyncManager(Wake plugin, PacketSender packetSender, OBUContextManager contextManager, ActiveContexts active, ClientRegistry clients) {
         this.plugin = plugin;
         this.packetSender = packetSender;
         this.contextManager = contextManager;
-        this.delivery = delivery;
+        this.active = active;
+        this.clients = clients;
+    }
+
+    static @Nullable Player driverOf(@NonNull Entity target) {
+        if (target instanceof Player player) {
+            return player;
+        }
+        return target instanceof Boat boat && !boat.getPassengers().isEmpty() && boat.getPassengers().getFirst() instanceof Player driver ? driver : null;
     }
 
     public void cleanup(UUID uuid) {
@@ -68,15 +79,15 @@ public class OBUSyncManager {
 
     private @NonNull List<OBUSetting> calculateAbsoluteTruth(@NonNull UUID uuid) {
         boolean blankSlate = false;
-        String contextName = delivery.getPlayerActiveSandbox(uuid);
+        String contextName = active.sandboxOf(uuid);
         if (contextName != null) {
             blankSlate = true;
         } else {
-            contextName = delivery.getActiveContextName(uuid);
+            contextName = active.contextOf(uuid);
         }
         Entity entity = Bukkit.getEntity(uuid);
         if (entity instanceof Boat boat) {
-            contextName = delivery.getBoatContextName(boat);
+            contextName = active.pinnedOn(boat);
             blankSlate = false;
         }
         Map<String, OBUSetting> absoluteTruth = new HashMap<>();
@@ -96,10 +107,12 @@ public class OBUSyncManager {
                 }
             }
         }
-        if (entity instanceof Boat boat && !boat.getPassengers().isEmpty() && boat.getPassengers().getFirst() instanceof Player driver) {
-            List<OBUSetting> driverTruth = calculateAbsoluteTruth(driver.getUniqueId());
-            for (OBUSetting setting : driverTruth) {
-                absoluteTruth.put(setting.getUniqueKey(), setting);
+        if (entity instanceof Boat) {
+            Player driver = driverOf(entity);
+            if (driver != null) {
+                for (OBUSetting setting : calculateAbsoluteTruth(driver.getUniqueId())) {
+                    absoluteTruth.put(setting.getUniqueKey(), setting);
+                }
             }
         }
         Map<String, OBUSetting> overrides = localOverrides.get(uuid);
@@ -111,7 +124,7 @@ public class OBUSyncManager {
 
     public void syncPlayer(@NonNull Player player) {
         List<OBUSetting> truth = calculateAbsoluteTruth(player.getUniqueId());
-        delivery.updateVehicleScaleCache(player.getUniqueId(), truth);
+        active.updateScale(player.getUniqueId(), truth);
         String personalContextName = OBUDefinition.CONTEXT_PERSONAL;
         try {
             if (truth.isEmpty()) {
@@ -130,9 +143,9 @@ public class OBUSyncManager {
 
     public void syncToViewer(@NonNull Boat boat, @NonNull Player viewer) {
         List<OBUSetting> settings = calculateAbsoluteTruth(boat.getUniqueId());
-        delivery.updateVehicleScaleCache(boat.getUniqueId(), settings);
+        active.updateScale(boat.getUniqueId(), settings);
         knownBoatContexts.add(boat.getUniqueId());
-        if (!delivery.clients().isDriven(viewer.getUniqueId())) {
+        if (!clients.isDriven(viewer.getUniqueId())) {
             return;
         }
         try {
@@ -153,13 +166,14 @@ public class OBUSyncManager {
 
     public void broadcastSync(@NonNull Boat boat) {
         List<OBUSetting> settings = calculateAbsoluteTruth(boat.getUniqueId());
-        delivery.updateVehicleScaleCache(boat.getUniqueId(), settings);
+        active.updateScale(boat.getUniqueId(), settings);
         knownBoatContexts.add(boat.getUniqueId());
         Set<Player> viewers = new HashSet<>(boat.getTrackedBy());
-        if (!boat.getPassengers().isEmpty() && boat.getPassengers().getFirst() instanceof Player p) {
-            viewers.add(p);
+        Player driver = driverOf(boat);
+        if (driver != null) {
+            viewers.add(driver);
         }
-        viewers.removeIf(viewer -> !delivery.clients().isDriven(viewer.getUniqueId()));
+        viewers.removeIf(viewer -> !clients.isDriven(viewer.getUniqueId()));
         if (viewers.isEmpty()) {
             return;
         }

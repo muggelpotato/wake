@@ -1,7 +1,8 @@
 # Wake — Boatracing Framework (Paper)
 
 An all-in-one boat-racing engine: ships as one jar, but every feature is an isolated module an
-admin can toggle on or off. Java 21 · Gradle KTS · Paper · PacketEvents · Aikar IDB (SQLite/MariaDB).
+admin can toggle on or off. Java 21 · Gradle KTS · Paper · PacketEvents · Aikar IDB (SQLite/MariaDB)
+· Lettuce (optional Valkey/Redis cache invalidation across servers).
 
 Build: `./gradlew compileJava` (run often) · `build` · `runServer`
 
@@ -84,6 +85,10 @@ that can't inject markup. Speak database terms to admins ("saved to database", n
   data-access object.
 - **SQL must be parameterized and portable** across the supported databases (SQLite and MariaDB) —
   never concatenate values into a query, never rely on one dialect's types or functions.
+- **Assume the database can vanish and that another server shares it.** A write that fails
+  transiently is journaled and replayed, never dropped; a read that fails leaves the cache alone,
+  because an empty result is not an empty table. A cached table is a mirror: a change made here is
+  announced, a change made elsewhere is read back. Never write as if this server were the only one.
 - Ship factory defaults as bundled resources, applied only when the store is empty.
 
 ## Threading & memory — hard rules

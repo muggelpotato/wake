@@ -14,10 +14,12 @@ import dev.muggel.wake.core.database.WakeDao;
 import java.util.ArrayList;
 import java.util.List;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.logging.Level;
 
 /**
@@ -101,7 +103,7 @@ public abstract class AbstractModule implements WakeModule {
         tasks.add(task);
     }
 
-    protected final int seedData(String defaultFileName, String logNoun) throws Exception {
+    protected final int seedData(String defaultFileName, String logNoun) throws SQLException, IOException {
         try (InputStream in = plugin.getResource(defaultFileName)) {
             if (in == null) {
                 plugin.getLogger().warning("Default " + logNoun + " data file not found in jar: " + defaultFileName);
@@ -125,7 +127,7 @@ public abstract class AbstractModule implements WakeModule {
     }
 
     @Override
-    public final int exportData(File exportDir) throws Exception {
+    public final int exportData(File exportDir) throws SQLException, IOException {
         plugin.getDatabaseManager().awaitWrites();
         File outFile = new File(exportDir, getExportFileName());
         YamlConfiguration yaml = new YamlConfiguration();
@@ -136,7 +138,7 @@ public abstract class AbstractModule implements WakeModule {
     }
 
     @Override
-    public final int importData(File importDir) throws Exception {
+    public final int importData(File importDir) throws SQLException {
         File inFile = new File(importDir, getExportFileName());
         if (!inFile.exists()) return 0;
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(inFile);
@@ -154,12 +156,11 @@ public abstract class AbstractModule implements WakeModule {
         return getId() + "_data.yml";
     }
 
-    @SuppressWarnings("RedundantThrows")
-    protected int onExportData(YamlConfiguration yaml) throws Exception {
+    protected int onExportData(YamlConfiguration yaml) throws SQLException {
         return 0;
     }
 
-    protected int onImportData(YamlConfiguration yaml) throws Exception {
+    protected int onImportData(YamlConfiguration yaml) throws SQLException {
         return 0;
     }
 
@@ -168,8 +169,7 @@ public abstract class AbstractModule implements WakeModule {
     }
 
     @Override
-    @SuppressWarnings("RedundantThrows")
-    public void resetDatabase() throws Exception {
+    public void resetDatabase() {
         for (WakeDao dao : daos) {
             dao.resetTables();
         }
@@ -180,7 +180,7 @@ public abstract class AbstractModule implements WakeModule {
     }
 
     @Override
-    public int seedData() throws Exception {
+    public int seedData() throws SQLException, IOException {
         String defaultFileName = getDefaultDataFileName();
         if (defaultFileName == null) return 0;
         return seedData(defaultFileName, getId());

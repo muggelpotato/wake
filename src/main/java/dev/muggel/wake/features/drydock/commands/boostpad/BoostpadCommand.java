@@ -6,6 +6,7 @@ import org.jspecify.annotations.NonNull;
 
 public class BoostpadCommand {
     public static final String STATE_KEY_ENABLED = "drydock.boostpads_enabled";
+    public static final boolean DEFAULT_ENABLED = false;
 
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("boostpad")

@@ -24,7 +24,7 @@ public class BoostpadListCommand {
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        boolean globalEnabled = plugin.getStateDao().get(BoostpadCommand.STATE_KEY_ENABLED, true);
+        boolean globalEnabled = plugin.getStateDao().get(BoostpadCommand.STATE_KEY_ENABLED, BoostpadCommand.DEFAULT_ENABLED);
         Map<String, BoostpadConfig> configs = DrydockCommandHelper.boostpads(plugin).cachedBoostpads();
         Component blocksComp = Component.empty();
         if (configs.isEmpty()) {

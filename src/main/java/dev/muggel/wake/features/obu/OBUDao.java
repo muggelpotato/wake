@@ -30,7 +30,7 @@ public class OBUDao extends WakeDao {
     private static final String UPSERT_CONTEXT = "REPLACE INTO wake_obu_contexts (name, type, owner_uuid, last_accessed_at) VALUES (?, ?, ?, ?)";
     private static final Gson GSON = new Gson();
     private final CachedStore<OBUContext> contexts = mirror("wake_obu_contexts", this::loadContexts);
-    public OBUDao(Wake plugin) {
+    public OBUDao(@NonNull Wake plugin) {
         super(plugin);
     }
 
@@ -144,12 +144,12 @@ public class OBUDao extends WakeDao {
         contexts.save(name, context, "Failed to save OBU context", statements);
     }
 
-    public void deleteContext(String name) {
+    public void deleteContext(@NonNull String name) {
         String canonicalName = canonical(name);
         contexts.delete(canonicalName, "Failed to delete OBU context", deleteStatements(canonicalName));
     }
 
-    public void renameContext(String fromName, @NonNull OBUContext to) {
+    public void renameContext(@NonNull String fromName, @NonNull OBUContext to) {
         String from = canonical(fromName);
         String toName = canonical(to.name());
         String ownerStr = to.ownerUuid() != null ? to.ownerUuid().toString() : null;
@@ -168,17 +168,17 @@ public class OBUDao extends WakeDao {
                 new SqlStatement("DELETE FROM wake_obu_contexts WHERE name = ?", new Object[]{canonicalName}));
     }
 
-    public @NonNull SqlStatement settingUpsert(String contextName, @NonNull OBUSetting setting) {
+    public @NonNull SqlStatement settingUpsert(@NonNull String contextName, @NonNull OBUSetting setting) {
         return new SqlStatement("REPLACE INTO wake_obu_settings (context_name, unique_key, definition_name, args) VALUES (?, ?, ?, ?)",
                 new Object[]{canonical(contextName), setting.getUniqueKey(), setting.definition().name(), GSON.toJson(setting.args())});
     }
 
-    public @NonNull SqlStatement settingDelete(String contextName, String uniqueKey) {
+    public @NonNull SqlStatement settingDelete(@NonNull String contextName, @NonNull String uniqueKey) {
         return new SqlStatement("DELETE FROM wake_obu_settings WHERE context_name = ? AND unique_key = ?",
                 new Object[]{canonical(contextName), uniqueKey});
     }
 
-    public void importContextData(String name, @NonNull ContextType type, String ownerUuid, @NonNull List<OBUSetting> settings) throws SQLException {
+    public void importContextData(@NonNull String name, @NonNull ContextType type, @Nullable String ownerUuid, @NonNull List<OBUSetting> settings) throws SQLException {
         String canonicalName = canonical(name);
         for (SqlStatement delete : deleteStatements(canonicalName)) {
             DB.executeUpdate(delete.sql(), delete.params());
@@ -197,18 +197,18 @@ public class OBUDao extends WakeDao {
         contexts.announce(canonicalName, new OBUContext(canonicalName, type, owner, settings));
     }
 
-    public void savePlayerState(UUID uuid, String activeSandbox, String activeContext) {
+    public void savePlayerState(@NonNull UUID uuid, @Nullable String activeSandbox, @Nullable String activeContext) {
         if (activeSandbox == null && activeContext == null) {
-            asyncUpdateFor(uuid, "Failed to clear player state async",
+            asyncUpdateFor(uuid, "Failed to clear player state",
                     "DELETE FROM wake_obu_player_states WHERE player_uuid = ?", uuid.toString());
             return;
         }
-        asyncUpdateFor(uuid, "Failed to save player state async",
+        asyncUpdateFor(uuid, "Failed to save player state",
                 "REPLACE INTO wake_obu_player_states (player_uuid, active_sandbox, active_context) VALUES (?, ?, ?)",
                 uuid.toString(), activeSandbox, activeContext);
     }
 
-    public @Nullable OBUPlayerState getPlayerState(UUID uuid) {
+    public @Nullable OBUPlayerState getPlayerState(@NonNull UUID uuid) {
         if (plugin.getDatabaseManager().isDegraded()) {
             return null;
         }
@@ -223,13 +223,16 @@ public class OBUDao extends WakeDao {
         }
     }
 
-    public void updateSandboxAccessTime(String name) {
-        asyncUpdateLocal("Failed to update sandbox access time async",
+    public void updateSandboxAccessTime(@NonNull String name) {
+        asyncUpdateLocal("Failed to update sandbox access time",
                 "UPDATE wake_obu_contexts SET last_accessed_at = ? WHERE name = ?",
                 System.currentTimeMillis(), canonical(name));
     }
 
-    public List<String> getOldSandboxes(long cutoffTimeMillis) {
+    public @Nullable List<String> getOldSandboxes(long cutoffTimeMillis) {
+        if (plugin.getDatabaseManager().isDegraded()) {
+            return null;
+        }
         List<String> oldSandboxes = new ArrayList<>();
         try {
             var results = DB.getResults("SELECT name FROM wake_obu_contexts WHERE type = 'SANDBOX' AND last_accessed_at < ?", cutoffTimeMillis);
@@ -238,6 +241,7 @@ public class OBUDao extends WakeDao {
             }
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to fetch old sandboxes", e);
+            return null;
         }
         return oldSandboxes;
     }

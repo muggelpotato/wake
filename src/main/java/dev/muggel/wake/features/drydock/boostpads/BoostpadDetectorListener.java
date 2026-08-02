@@ -2,21 +2,23 @@ package dev.muggel.wake.features.drydock.boostpads;
 
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.CollisionGeometry;
+import dev.muggel.wake.core.CollisionGeometry.BlockSweep;
+import dev.muggel.wake.core.VehiclePath.Legs;
 import dev.muggel.wake.features.drydock.api.PlayerHitBoostpadEvent;
 import dev.muggel.wake.features.drydock.commands.boostpad.BoostpadCommand;
 import dev.muggel.wake.features.drydock.integration.OBUBoostpadIntegration;
+import com.destroystokyo.paper.event.server.ServerTickEndEvent;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityRemoveEvent;
+import org.bukkit.event.player.PlayerInputEvent;
 import org.bukkit.event.vehicle.VehicleMoveEvent;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
@@ -25,17 +27,19 @@ import org.jspecify.annotations.NonNull;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class BoostpadDetectorListener implements Listener {
     private static final double SURFACE_BAND = 0.15;
-    private static final int MAX_SCAN_BLOCKS = 4096;
+    private static final double SURFACE_DROP = 0.5;
     private final Wake plugin;
     private final BoostpadRegistry boostpads;
-    private final Map<UUID, Map<String, Long>> lastBoostTimes = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<String, Long>> lastBoostTimes = new HashMap<>();
+    private final Set<UUID> jumpPresses = new HashSet<>();
     private volatile boolean isRegistered = false;
     public BoostpadDetectorListener(@NonNull Wake plugin, BoostpadRegistry boostpads) {
         this.plugin = plugin;
@@ -44,21 +48,25 @@ public class BoostpadDetectorListener implements Listener {
     }
 
     public void updateRegistration() {
-        boolean enabled = plugin.getStateDao().get(BoostpadCommand.STATE_KEY_ENABLED, true);
+        boolean enabled = plugin.getStateDao().get(BoostpadCommand.STATE_KEY_ENABLED, BoostpadCommand.DEFAULT_ENABLED);
         boolean shouldBeRegistered = enabled && !boostpads.getBoostpadConfigs().isEmpty();
         if (shouldBeRegistered && !isRegistered) {
             Bukkit.getPluginManager().registerEvents(this, plugin);
+            plugin.getVehiclePath().claim();
             isRegistered = true;
-        } else if (!shouldBeRegistered && isRegistered) {
-            HandlerList.unregisterAll(this);
-            lastBoostTimes.clear();
-            isRegistered = false;
+        } else if (!shouldBeRegistered) {
+            unregister();
         }
     }
 
     public void unregister() {
+        if (!isRegistered) {
+            return;
+        }
         HandlerList.unregisterAll(this);
+        plugin.getVehiclePath().release();
         lastBoostTimes.clear();
+        jumpPresses.clear();
         isRegistered = false;
     }
 
@@ -69,7 +77,19 @@ public class BoostpadDetectorListener implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    @EventHandler
+    public void onPlayerInput(@NonNull PlayerInputEvent event) {
+        if (event.getInput().isJump() && event.getPlayer().getVehicle() instanceof Boat) {
+            jumpPresses.add(event.getPlayer().getUniqueId());
+        }
+    }
+
+    @EventHandler
+    public void onTickEnd(@NonNull ServerTickEndEvent event) {
+        jumpPresses.clear();
+    }
+
+    @EventHandler
     public void onVehicleMove(@NonNull VehicleMoveEvent event) {
         Map<Material, BoostpadConfig> materialConfigs = boostpads.getBoostpadConfigs();
         if (materialConfigs.isEmpty() || !(event.getVehicle() instanceof Boat boat)) {
@@ -79,51 +99,51 @@ public class BoostpadDetectorListener implements Listener {
         if (passengers.isEmpty() || !(passengers.getFirst() instanceof Player player)) {
             return;
         }
-        List<PadHit> hits = findHits(boat, event, materialConfigs);
+        List<PadHit> hits = findHits(boat, plugin.getVehiclePath().legs(event), materialConfigs);
         if (!hits.isEmpty()) {
-            fireBoosts(boat, player, hits);
+            fireBoosts(boat, player, hits, jumpPresses.contains(player.getUniqueId()) || player.getCurrentInput().isJump());
         }
     }
 
-    private @NonNull List<PadHit> findHits(@NonNull Boat boat, @NonNull VehicleMoveEvent event, @NonNull Map<Material, BoostpadConfig> materialConfigs) {
+    private @NonNull List<PadHit> findHits(@NonNull Boat boat, @NonNull Legs legs, @NonNull Map<Material, BoostpadConfig> materialConfigs) {
         BoundingBox box = boat.getBoundingBox();
-        double scale = OBUBoostpadIntegration.getVehicleScale(boat.getUniqueId());
-        double sizing = scale != 1.0 && scale > 0 ? scale : 1.0;
+        double scale = OBUBoostpadIntegration.getVehicleScale(plugin, boat.getUniqueId());
+        double sizing = scale > 0 ? scale : 1.0;
         double halfWidth = (box.getMaxX() - box.getMinX()) / 2.0 * sizing;
         double halfLength = (box.getMaxZ() - box.getMinZ()) / 2.0 * sizing;
-        World world = boat.getWorld();
-        Location from = event.getFrom();
-        Vector toVec = event.getTo().toVector();
-        Vector fromVec = from.getWorld() == world ? from.toVector() : toVec;
         double reach = 1.0 + Math.max(0.0, boostpads.getMaxOffsetMultiplier());
-        ScanBox scan = scanBox(fromVec, toVec, halfWidth * reach, halfLength * reach);
-        if (scan.blocks() > MAX_SCAN_BLOCKS) {
-            fromVec = toVec;
-            scan = scanBox(toVec, toVec, halfWidth * reach, halfLength * reach);
-        }
+        World world = boat.getWorld();
+        int legCount = legs.count();
+        Set<Long> seen = legCount > 1 ? new HashSet<>() : null;
         List<PadHit> hits = null;
-        for (int y = scan.minY(); y <= scan.maxY(); y++) {
-            for (int x = scan.minX(); x <= scan.maxX(); x++) {
-                for (int z = scan.minZ(); z <= scan.maxZ(); z++) {
-                    if (!world.isChunkLoaded(x >> 4, z >> 4)) {
-                        continue;
-                    }
-                    BoostpadConfig config = materialConfigs.get(world.getType(x, y, z));
-                    if (config == null) {
-                        continue;
-                    }
-                    double halfX = Math.max(0.0, halfWidth * (1.0 + config.offsetMultiplier()));
-                    double halfZ = Math.max(0.0, halfLength * (1.0 + config.offsetMultiplier()));
-                    double fraction = CollisionGeometry.intersectionFraction(
-                            fromVec.getX(), fromVec.getY(), fromVec.getZ(),
-                            toVec.getX(), toVec.getY(), toVec.getZ(),
-                            x - halfX, y + 1 - SURFACE_BAND, z - halfZ,
-                            x + 1 + halfX, y + 1 + SURFACE_BAND, z + 1 + halfZ);
-                    if (fraction >= 0) {
+        for (int leg = 0; leg < legCount; leg++) {
+            Vector legEnd = legs.at(leg + 1);
+            BlockSweep sweep = CollisionGeometry.sweep(legs.at(leg), legEnd, halfWidth * reach, halfLength * reach, -SURFACE_DROP);
+            Vector scanned = sweep.from();
+            for (int y = sweep.minY(); y <= sweep.maxY(); y++) {
+                for (int x = sweep.minX(); x <= sweep.maxX(); x++) {
+                    for (int z = sweep.minZ(); z <= sweep.maxZ(); z++) {
+                        if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+                            continue;
+                        }
+                        BoostpadConfig config = materialConfigs.get(world.getType(x, y, z));
+                        if (config == null) {
+                            continue;
+                        }
+                        double halfX = Math.max(0.0, halfWidth * (1.0 + config.offsetMultiplier()));
+                        double halfZ = Math.max(0.0, halfLength * (1.0 + config.offsetMultiplier()));
+                        double fraction = CollisionGeometry.intersectionFraction(
+                                scanned.getX(), scanned.getY(), scanned.getZ(),
+                                legEnd.getX(), legEnd.getY(), legEnd.getZ(),
+                                x - halfX, y + 1 - SURFACE_BAND, z - halfZ,
+                                x + 1 + halfX, y + 1 + SURFACE_BAND, z + 1 + halfZ);
+                        if (fraction < 0 || (seen != null && !seen.add(blockKey(x, y, z)))) {
+                            continue;
+                        }
                         if (hits == null) {
                             hits = new ArrayList<>();
                         }
-                        hits.add(new PadHit(fraction, config, x, y, z));
+                        hits.add(new PadHit(legs.progress(leg, fraction), config, x, y, z));
                     }
                 }
             }
@@ -131,32 +151,22 @@ public class BoostpadDetectorListener implements Listener {
         return hits == null ? List.of() : hits;
     }
 
-    private static @NonNull ScanBox scanBox(@NonNull Vector from, @NonNull Vector to, double reachX, double reachZ) {
-        return new ScanBox(
-                (int) Math.floor(Math.min(from.getX(), to.getX()) - reachX),
-                (int) Math.floor(Math.max(from.getX(), to.getX()) + reachX),
-                (int) Math.floor(Math.min(from.getZ(), to.getZ()) - reachZ),
-                (int) Math.floor(Math.max(from.getZ(), to.getZ()) + reachZ),
-                (int) Math.floor(Math.min(from.getY(), to.getY()) - 0.85),
-                (int) Math.floor(Math.max(from.getY(), to.getY()) - 0.85));
-    }
-
-    private void fireBoosts(@NonNull Boat boat, @NonNull Player player, @NonNull List<PadHit> hits) {
-        hits.sort(Comparator.comparingDouble(PadHit::fraction));
+    private void fireBoosts(@NonNull Boat boat, @NonNull Player player, @NonNull List<PadHit> hits, boolean jumping) {
+        hits.sort(Comparator.comparingDouble(PadHit::progress));
+        Map<String, Long> boatCooldowns = lastBoostTimes.computeIfAbsent(boat.getUniqueId(), key -> new HashMap<>(4));
         World world = boat.getWorld();
-        long now = System.currentTimeMillis();
-        Map<String, Long> boatCooldowns = lastBoostTimes.computeIfAbsent(boat.getUniqueId(), k -> new HashMap<>());
         boolean firedJumpPad = false;
         for (PadHit hit : hits) {
             BoostpadConfig config = hit.config();
-            if (config.forceY() > 0 && (firedJumpPad || !boat.isOnGround() || boat.getVelocity().getY() < -0.1)) {
+            if (config.forceY() > 0 && (firedJumpPad || jumping || !boat.isOnGround())) {
                 continue;
             }
-            Long lastBoost = boatCooldowns.get(config.blockKey());
-            if (lastBoost != null && (now - lastBoost) < config.delayMs()) {
+            long crossedNanos = plugin.getTickClock().at(hit.progress());
+            Long lastBoostNanos = boatCooldowns.get(config.blockKey());
+            if (lastBoostNanos != null && (crossedNanos - lastBoostNanos) / 1_000_000L < config.delayMs()) {
                 continue;
             }
-            boatCooldowns.put(config.blockKey(), now);
+            boatCooldowns.put(config.blockKey(), crossedNanos);
             if (config.forceY() > 0) {
                 firedJumpPad = true;
             }
@@ -166,11 +176,9 @@ public class BoostpadDetectorListener implements Listener {
         }
     }
 
-    private record PadHit(double fraction, BoostpadConfig config, int x, int y, int z) {}
-
-    private record ScanBox(int minX, int maxX, int minZ, int maxZ, int minY, int maxY) {
-        long blocks() {
-            return (long) (maxX - minX + 1) * (maxZ - minZ + 1) * (maxY - minY + 1);
-        }
+    private static long blockKey(int x, int y, int z) {
+        return ((long) x & 0x3FFFFFF) << 38 | ((long) z & 0x3FFFFFF) << 12 | (y & 0xFFFL);
     }
+
+    private record PadHit(double progress, BoostpadConfig config, int x, int y, int z) {}
 }

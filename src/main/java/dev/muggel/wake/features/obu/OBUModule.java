@@ -20,13 +20,16 @@ import dev.muggel.wake.features.obu.protocol.PacketSender;
 import dev.muggel.wake.features.obu.clients.BoatLagInterceptor;
 import dev.muggel.wake.features.obu.clients.ClientRegistry;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
+import dev.muggel.wake.features.obu.delivery.ActiveContexts;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
+import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
 import dev.muggel.wake.features.obu.delivery.VehicleCleanupListener;
 import dev.muggel.wake.features.obu.contexts.SandboxPurger;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.sql.SQLException;
 import java.util.logging.Level;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.jspecify.annotations.Nullable;
@@ -34,6 +37,10 @@ import org.jspecify.annotations.Nullable;
 public class OBUModule extends AbstractModule {
     private OBUDao obuDao;
     private OBUContextManager contextManager;
+    private ClientRegistry clients;
+    private ActiveContexts active;
+    private PacketSender packetSender;
+    private OBUSyncManager syncManager;
     private ContextDelivery delivery;
     private SandboxPurger sandboxPurger;
     private OBUDataTransfer dataTransfer;
@@ -47,13 +54,15 @@ public class OBUModule extends AbstractModule {
         obuDao.initTables();
         registerDao(obuDao);
         Boolean hasContexts = obuDao.hasAnyContexts();
-        ClientRegistry clients = new ClientRegistry();
-        PacketSender packetSender = new PacketSender(clients);
+        this.clients = new ClientRegistry();
+        this.packetSender = new PacketSender(clients);
         this.contextManager = new OBUContextManager(obuDao);
-        this.delivery = new ContextDelivery(getPlugin(), packetSender, contextManager, obuDao, clients);
-        this.dataTransfer = new OBUDataTransfer(getPlugin(), obuDao, contextManager, delivery);
-        Wake.getServiceRegistry().register(OBUService.class, delivery);
-        HandshakeListener handshakeListener = new HandshakeListener(getPlugin(), delivery);
+        this.active = new ActiveContexts(getPlugin());
+        this.syncManager = new OBUSyncManager(getPlugin(), packetSender, contextManager, active, clients);
+        this.delivery = new ContextDelivery(getPlugin(), packetSender, contextManager, obuDao, clients, active, syncManager);
+        this.dataTransfer = new OBUDataTransfer(getPlugin(), obuDao, contextManager, syncManager);
+        getPlugin().getServiceRegistry().register(OBUService.class, delivery);
+        HandshakeListener handshakeListener = new HandshakeListener(getPlugin(), delivery, contextManager, syncManager, clients);
         registerListener(handshakeListener);
         registerPacketListener(handshakeListener);
         BoatLagInterceptor boatLagInterceptor = new BoatLagInterceptor();
@@ -61,8 +70,9 @@ public class OBUModule extends AbstractModule {
         registerPacketListener(boatLagInterceptor);
         for (Player player : Bukkit.getOnlinePlayers()) {
             delivery.requestClientVersion(player);
+            boatLagInterceptor.adoptDriver(player);
         }
-        this.sandboxPurger = new SandboxPurger(getPlugin(), obuDao, delivery);
+        this.sandboxPurger = new SandboxPurger(getPlugin(), obuDao, delivery, active);
         schedulePurgerSweep();
 
         registerListener(new VehicleCleanupListener(delivery));
@@ -93,8 +103,7 @@ public class OBUModule extends AbstractModule {
     @Override
     protected void onModuleDisable() {
         sandboxPurger = null;
-        if (delivery != null) {
-            PacketSender packetSender = delivery.packetSender();
+        if (delivery != null && syncManager != null && packetSender != null) {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 delivery.saveSelection(player);
                 try {
@@ -103,14 +112,18 @@ public class OBUModule extends AbstractModule {
                     getPlugin().getLogger().log(Level.WARNING, "Failed to send wipe packet", e);
                 }
             }
-            delivery.getSyncManager().wipeAllBoatContexts();
+            syncManager.wipeAllBoatContexts();
             for (Player player : Bukkit.getOnlinePlayers()) {
                 delivery.cleanupPlayer(player);
             }
         }
-        Wake.getServiceRegistry().unregister(OBUService.class);
+        getPlugin().getServiceRegistry().unregister(OBUService.class);
         dataTransfer = null;
         delivery = null;
+        syncManager = null;
+        packetSender = null;
+        active = null;
+        clients = null;
         contextManager = null;
         obuDao = null;
     }
@@ -140,6 +153,18 @@ public class OBUModule extends AbstractModule {
         return delivery;
     }
 
+    public @Nullable OBUSyncManager getSyncManager() {
+        return syncManager;
+    }
+
+    public @Nullable ActiveContexts getActiveContexts() {
+        return active;
+    }
+
+    public @Nullable ClientRegistry getClients() {
+        return clients;
+    }
+
     public void schedulePurgerSweep() {
         if (sandboxPurger == null) return;
         BukkitTask task = sandboxPurger.restart();
@@ -147,14 +172,13 @@ public class OBUModule extends AbstractModule {
     }
 
     @Override
-    @SuppressWarnings("RedundantThrows")
-    protected int onExportData(YamlConfiguration yaml) throws Exception {
+    protected int onExportData(YamlConfiguration yaml) {
         OBUDataTransfer transfer = this.dataTransfer;
         return transfer == null ? 0 : transfer.export(yaml);
     }
 
     @Override
-    protected int onImportData(YamlConfiguration yaml) throws Exception {
+    protected int onImportData(YamlConfiguration yaml) throws SQLException {
         OBUDataTransfer transfer = this.dataTransfer;
         return transfer == null ? 0 : transfer.importFrom(yaml);
     }

@@ -11,10 +11,10 @@ import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
+import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Boat;
 import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -65,13 +65,24 @@ final class SandboxCommandHelper {
         return OBUCommandHelper.suggestContexts(ctx, builder, plugin, OBUContext::isSandbox);
     }
 
-    static void enterSandbox(Player player, String name, @NonNull ContextDelivery service) {
-        service.setPlayerActiveSandbox(player, name);
-        service.getSyncManager().clearLocalOverrides(player.getUniqueId());
-        if (player.getVehicle() instanceof Boat boat) {
-            service.getSyncManager().broadcastSync(boat);
+    static void enterSandbox(Player player, String key, @NonNull ContextDelivery service, Wake plugin) {
+        OBUSyncManager sync = OBUCommandHelper.sync(plugin);
+        service.setPlayerActiveSandbox(player, key);
+        sync.clearLocalOverrides(player.getUniqueId());
+        sync.syncPlayer(player);
+    }
+
+    static @Nullable String claimSandbox(@NonNull Wake plugin, CommandSender sender, CommandSender subject, @NonNull String name, @NonNull ContextDelivery service) {
+        if (OBUContextManager.isReserved(name)) {
+            plugin.getMessageManager().send(sender, "commands.obu.sandbox.reserved", Placeholder.unparsed("sandbox", name));
+            return null;
         }
-        service.getSyncManager().syncPlayer(player);
+        String key = sandboxKeyFor(subject, name);
+        if (!service.createSandbox(key, ownerOf(subject))) {
+            plugin.getMessageManager().send(sender, "commands.obu.sandbox.exists", Placeholder.unparsed("sandbox", name));
+            return null;
+        }
+        return key;
     }
 
     static @NonNull String encodeShareCode(@NonNull String payload) throws IOException {

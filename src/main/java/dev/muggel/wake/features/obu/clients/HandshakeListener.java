@@ -15,6 +15,7 @@ import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUPlayerState;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
+import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
 import dev.muggel.wake.features.obu.clients.ClientRegistry.ClientState;
 import io.papermc.paper.event.player.PlayerTrackEntityEvent;
 import org.bukkit.entity.Boat;
@@ -37,9 +38,15 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     private final Map<User, HandshakeData> pendingHandshakes = new ConcurrentHashMap<>();
     private final Wake plugin;
     private final ContextDelivery delivery;
-    public HandshakeListener(Wake plugin, ContextDelivery delivery) {
+    private final OBUContextManager contextManager;
+    private final OBUSyncManager syncManager;
+    private final ClientRegistry clients;
+    public HandshakeListener(Wake plugin, ContextDelivery delivery, OBUContextManager contextManager, OBUSyncManager syncManager, ClientRegistry clients) {
         this.plugin = plugin;
         this.delivery = delivery;
+        this.contextManager = contextManager;
+        this.syncManager = syncManager;
+        this.clients = clients;
     }
 
     @Override
@@ -113,7 +120,7 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     @EventHandler
     public void onEntityTrack(@NonNull PlayerTrackEntityEvent event) {
         if (event.getEntity() instanceof Boat boat) {
-            delivery.getSyncManager().syncToViewer(boat, event.getPlayer());
+            syncManager.syncToViewer(boat, event.getPlayer());
         }
     }
 
@@ -121,9 +128,9 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     public void onVehicleEnter(@NonNull VehicleEnterEvent event) {
         if (event.getVehicle() instanceof Boat boat && event.getEntered() instanceof Player player) {
             Scheduling.onMain(plugin, () -> {
-                delivery.getSyncManager().syncPlayer(player);
+                syncManager.syncPlayer(player);
                 if (!(player.getVehicle() instanceof Boat)) {
-                    delivery.getSyncManager().broadcastSync(boat);
+                    syncManager.broadcastSync(boat);
                 }
             });
         }
@@ -132,7 +139,7 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     @EventHandler
     public void onVehicleExit(@NonNull VehicleExitEvent event) {
         if (event.getVehicle() instanceof Boat boat && event.getExited() instanceof Player) {
-            Scheduling.onMain(plugin, () -> delivery.getSyncManager().broadcastSync(boat));
+            Scheduling.onMain(plugin, () -> syncManager.broadcastSync(boat));
         }
     }
 
@@ -151,7 +158,7 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     private void handleOBUPlayer(@NonNull Player player, @NonNull User user, @NonNull HandshakeData handshake) {
         boolean rejected = OBUDefinition.REJECTED_VERSIONS.contains(handshake.versionId());
         ClientState verdict = rejected ? ClientState.UNSUPPORTED : ClientState.DRIVEN;
-        if (!delivery.clients().claim(player.getUniqueId(), verdict)) {
+        if (!clients.claim(player.getUniqueId(), verdict)) {
             return;
         }
         logVersion(user, handshake);
@@ -172,17 +179,16 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
             plugin.getMessageManager().send(player, "networking.obu.ahead");
         }
         if (state == null) {
-            delivery.getSyncManager().syncPlayer(player);
+            syncManager.syncPlayer(player);
         } else if (state.activeSandbox() == null && state.activeContext() == null) {
             delivery.applyDefaultContext(player);
         } else {
             restoreSelection(player, state);
         }
-        delivery.getSyncManager().syncTrackedBoats(player);
+        syncManager.syncTrackedBoats(player);
     }
 
     private void restoreSelection(@NonNull Player player, @NonNull OBUPlayerState state) {
-        OBUContextManager contextManager = delivery.getContextManager();
         String sandboxName = state.activeSandbox();
         if (sandboxName != null) {
             OBUContext sandbox = contextManager.getContext(sandboxName);
@@ -191,7 +197,7 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
             }
         }
         delivery.setPlayerActiveSandbox(player, sandboxName);
-        delivery.getSyncManager().clearLocalOverrides(player.getUniqueId());
+        syncManager.clearLocalOverrides(player.getUniqueId());
         String contextName = state.activeContext() != null ? state.activeContext() : OBUContextManager.DEFAULT_CONTEXT;
         OBUContext context = contextManager.getContext(contextName);
         if (context == null) {
@@ -200,6 +206,6 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
         if (context != null) {
             delivery.applyContext(player, context);
         }
-        delivery.getSyncManager().syncPlayer(player);
+        syncManager.syncPlayer(player);
     }
 }

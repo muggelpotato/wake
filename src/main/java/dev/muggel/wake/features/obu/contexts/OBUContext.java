@@ -11,9 +11,6 @@ public record OBUContext(String name, ContextType type, @Nullable UUID ownerUuid
     public OBUContext {
         settings = List.copyOf(settings);
     }
-    public OBUContext(String name, List<OBUSetting> settings) {
-        this(name, ContextType.SERVER, null, settings);
-    }
 
     public boolean isSandbox() {
         return type == ContextType.SANDBOX;

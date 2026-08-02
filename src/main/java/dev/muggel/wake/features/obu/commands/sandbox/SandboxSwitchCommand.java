@@ -31,7 +31,7 @@ public class SandboxSwitchCommand {
         if (context == null) {
             return 0;
         }
-        SandboxCommandHelper.enterSandbox(player, context.name(), service);
+        SandboxCommandHelper.enterSandbox(player, context.name(), service, plugin);
         plugin.getMessageManager().send(sender, "commands.obu.sandbox.switched", Placeholder.unparsed("sandbox", name));
         SandboxCommandHelper.sendHintIfEnabled(plugin, sender);
         return Command.SINGLE_SUCCESS;

@@ -13,7 +13,7 @@ import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
-import dev.muggel.wake.features.obu.delivery.ContextDelivery;
+import dev.muggel.wake.features.obu.delivery.ActiveContexts;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
@@ -54,11 +54,11 @@ public class DefaultsCommand {
         if (!(subject instanceof Player player)) {
             return Command.SINGLE_SUCCESS;
         }
-        ContextDelivery service = OBUCommandHelper.delivery(plugin);
+        ActiveContexts active = OBUCommandHelper.active(plugin);
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
-        String sandboxName = service.getPlayerActiveSandbox(player);
-        String baseName = service.getActiveContextName(player);
-        Map<String, OBUSetting> overrides = service.getSyncManager().getLocalOverrides(player.getUniqueId());
+        String sandboxName = active.sandboxOf(player.getUniqueId());
+        String baseName = active.contextOf(player.getUniqueId());
+        Map<String, OBUSetting> overrides = OBUCommandHelper.sync(plugin).getLocalOverrides(player.getUniqueId());
         OBUSetting effectiveSetting;
         boolean isServerDefault = false;
         int id = def.id();

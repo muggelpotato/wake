@@ -1,8 +1,33 @@
 package dev.muggel.wake.core;
 
+import org.bukkit.util.Vector;
+import org.jspecify.annotations.NonNull;
+
 /** Continuous collision math via raycasting */
 public final class CollisionGeometry {
+    private static final long MAX_SWEPT_BLOCKS = 4096;
     private CollisionGeometry() {}
+
+    public record BlockSweep(@NonNull Vector from, int minX, int maxX, int minY, int maxY, int minZ, int maxZ) {
+        public long blocks() {
+            return (long) (maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
+        }
+    }
+
+    public static @NonNull BlockSweep sweep(@NonNull Vector from, @NonNull Vector to, double reachX, double reachZ, double yOffset) {
+        BlockSweep swept = range(from, to, reachX, reachZ, yOffset);
+        return swept.blocks() <= MAX_SWEPT_BLOCKS ? swept : range(to, to, reachX, reachZ, yOffset);
+    }
+
+    private static @NonNull BlockSweep range(@NonNull Vector from, @NonNull Vector to, double reachX, double reachZ, double yOffset) {
+        return new BlockSweep(from,
+                (int) Math.floor(Math.min(from.getX(), to.getX()) - reachX),
+                (int) Math.floor(Math.max(from.getX(), to.getX()) + reachX),
+                (int) Math.floor(Math.min(from.getY(), to.getY()) + yOffset),
+                (int) Math.floor(Math.max(from.getY(), to.getY()) + yOffset),
+                (int) Math.floor(Math.min(from.getZ(), to.getZ()) - reachZ),
+                (int) Math.floor(Math.max(from.getZ(), to.getZ()) + reachZ));
+    }
 
     @SuppressWarnings("MathClampMigration")
     public static double intersectionFraction(

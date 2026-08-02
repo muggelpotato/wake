@@ -39,11 +39,6 @@ public class SandboxImportCommand {
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         String name = StringArgumentType.getString(ctx, "name");
         String code = StringArgumentType.getString(ctx, "shareCode");
-        String key = SandboxCommandHelper.sandboxKeyFor(subject, name);
-        if (contextManager.getContext(key) != null) {
-            plugin.getMessageManager().send(sender, "commands.obu.sandbox.exists", Placeholder.unparsed("sandbox", name));
-            return 0;
-        }
         String decodedStr;
         try {
             decodedStr = SandboxCommandHelper.decodeShareCode(code);
@@ -53,8 +48,8 @@ public class SandboxImportCommand {
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.import_fail", Placeholder.unparsed("error", reason));
             return 0;
         }
-        if (!service.createSandbox(key, SandboxCommandHelper.ownerOf(subject))) {
-            plugin.getMessageManager().send(sender, "commands.obu.sandbox.exists", Placeholder.unparsed("sandbox", name));
+        String key = SandboxCommandHelper.claimSandbox(plugin, sender, subject, name, service);
+        if (key == null) {
             return 0;
         }
         if (!decodedStr.isEmpty()) {
@@ -96,7 +91,7 @@ public class SandboxImportCommand {
         }
         plugin.getMessageManager().send(sender, "commands.obu.sandbox.imported", Placeholder.unparsed("sandbox", name));
         if (subject instanceof Player p) {
-            SandboxCommandHelper.enterSandbox(p, key, service);
+            SandboxCommandHelper.enterSandbox(p, key, service, plugin);
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.switched", Placeholder.unparsed("sandbox", name));
             SandboxCommandHelper.sendHintIfEnabled(plugin, sender);
         }

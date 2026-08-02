@@ -1,5 +1,7 @@
 package dev.muggel.wake;
 
+import dev.muggel.wake.core.TickClock;
+import dev.muggel.wake.core.VehiclePath;
 import dev.muggel.wake.core.commands.WakeCommandManager;
 import dev.muggel.wake.core.database.StateDao;
 import dev.muggel.wake.core.text.MessageManager;
@@ -24,13 +26,15 @@ import dev.muggel.wake.core.database.DatabaseManager;
 import java.util.logging.Level;
 
 public final class Wake extends JavaPlugin {
-    private static final ServiceRegistry serviceRegistry = new ServiceRegistry();
+    private final ServiceRegistry serviceRegistry = new ServiceRegistry();
     private ModuleManager moduleManager;
     private DatabaseManager databaseManager;
     private StateDao stateDao;
     private MessageManager messageManager;
     private SyncService syncService;
-    public static ServiceRegistry getServiceRegistry() {
+    private TickClock tickClock;
+    private VehiclePath vehiclePath;
+    public ServiceRegistry getServiceRegistry() {
         return serviceRegistry;
     }
 
@@ -49,6 +53,9 @@ public final class Wake extends JavaPlugin {
         }
         this.syncService = new SyncService(this);
         this.messageManager = new MessageManager(this);
+        this.tickClock = new TickClock();
+        this.vehiclePath = new VehiclePath(this);
+        getServer().getPluginManager().registerEvents(tickClock, this);
         WakeCommandManager.init(this);
         this.moduleManager = new ModuleManager(this);
         registerModules();
@@ -88,6 +95,10 @@ public final class Wake extends JavaPlugin {
                 syncService = null;
             }
             databaseManager = null;
+            stateDao = null;
+            messageManager = null;
+            tickClock = null;
+            vehiclePath = null;
             try {
                 PacketEvents.getAPI().terminate();
             } catch (IllegalStateException e) {
@@ -138,5 +149,13 @@ public final class Wake extends JavaPlugin {
 
     public @Nullable SyncService getSyncService() {
         return syncService;
+    }
+
+    public TickClock getTickClock() {
+        return tickClock;
+    }
+
+    public VehiclePath getVehiclePath() {
+        return vehiclePath;
     }
 }

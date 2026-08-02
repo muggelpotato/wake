@@ -10,6 +10,7 @@ import dev.muggel.wake.features.obu.protocol.SettingType;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
+import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
@@ -81,18 +82,11 @@ public class SettingsCommand {
         OBUSetting setting = new OBUSetting(def, Arrays.asList(args));
         CommandSender sender = ctx.getSource().getSender();
         if (def == OBUDefinition.reset) {
-            if (target instanceof Player p) {
-                delivery.applyDefaultContext(p);
-                plugin.getMessageManager().send(sender, "commands.obu.settings.reset");
-            } else if (target instanceof Boat b) {
-                delivery.getSyncManager().clearLocalOverrides(b.getUniqueId());
-                delivery.getSyncManager().broadcastSync(b);
-                plugin.getMessageManager().send(sender, "commands.obu.settings.success",
-                        Placeholder.parsed("setting", def.commandName()),
-                        Placeholder.unparsed("value", ""),
-                        Placeholder.component("target", plugin.getMessageManager().getComponent("words.target.boat")));
-            }
-            return Command.SINGLE_SUCCESS;
+            return executeReset(plugin, sender, target, delivery);
+        }
+        if (target instanceof Boat && def.isGlobalSetting()) {
+            plugin.getMessageManager().send(sender, "commands.obu.settings.global_only", Placeholder.parsed("setting", def.commandName()));
+            return 0;
         }
         if (!delivery.applySetting(target, setting)) {
             plugin.getMessageManager().send(sender, "commands.obu.context.invalid_target");
@@ -101,7 +95,7 @@ public class SettingsCommand {
         String valueStr = String.join(" ", OBUCommandHelper.displayArgs(setting));
         String sandbox = null;
         if (target instanceof Player p) {
-            sandbox = delivery.getPlayerActiveSandbox(p);
+            sandbox = OBUCommandHelper.active(plugin).sandboxOf(p.getUniqueId());
         }
         if (sandbox != null && def.isContextSetting()) {
             plugin.getMessageManager().send(sender, "commands.obu.settings.sandbox",
@@ -115,5 +109,25 @@ public class SettingsCommand {
                     Placeholder.component("target", OBUCommandHelper.targetName(plugin, target, sender)));
         }
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static int executeReset(Wake plugin, CommandSender sender, Entity target, @NonNull ContextDelivery delivery) {
+        if (target instanceof Player player) {
+            delivery.applyDefaultContext(player);
+            plugin.getMessageManager().send(sender, "commands.obu.settings.reset");
+            return Command.SINGLE_SUCCESS;
+        }
+        if (target instanceof Boat boat) {
+            OBUSyncManager sync = OBUCommandHelper.sync(plugin);
+            sync.clearLocalOverrides(boat.getUniqueId());
+            sync.broadcastSync(boat);
+            plugin.getMessageManager().send(sender, "commands.obu.settings.success",
+                    Placeholder.parsed("setting", OBUDefinition.reset.commandName()),
+                    Placeholder.unparsed("value", ""),
+                    Placeholder.component("target", plugin.getMessageManager().getComponent("words.target.boat")));
+            return Command.SINGLE_SUCCESS;
+        }
+        plugin.getMessageManager().send(sender, "commands.obu.context.invalid_target");
+        return 0;
     }
 }

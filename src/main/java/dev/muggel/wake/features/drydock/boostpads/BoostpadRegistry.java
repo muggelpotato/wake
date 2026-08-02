@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.HashMap;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 public class BoostpadRegistry {
     private final Wake plugin;
@@ -27,13 +28,24 @@ public class BoostpadRegistry {
         this.boostpads = dao.boostpads();
         boostpads.load();
         rebuildDerived();
+        awaitFirstLoad();
+    }
+
+    private void awaitFirstLoad() {
+        if (boostpads.isLoaded()) {
+            return;
+        }
+        boostpads.reloadAsync(changed -> {
+            rebuildDerived();
+            awaitFirstLoad();
+        });
     }
 
     public boolean isLoaded() {
         return boostpads.isLoaded();
     }
 
-    public void setOnReloadCallback(Runnable callback) {
+    public void setOnReloadCallback(@Nullable Runnable callback) {
         this.onReloadCallback = callback;
     }
 
@@ -41,7 +53,6 @@ public class BoostpadRegistry {
         if (plugin.getDatabaseManager().isDegraded()) {
             return;
         }
-        rebuildDerived();
         boostpads.reloadAsync(changed -> rebuildDerived());
     }
 

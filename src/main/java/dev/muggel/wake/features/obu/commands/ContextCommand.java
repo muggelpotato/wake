@@ -56,9 +56,7 @@ public class ContextCommand {
             OBUContext context = contextManager.getContext(contextName);
             if (context == null) continue;
             if (context.isSandbox()) {
-                if (subject instanceof Player p && p.getUniqueId().equals(context.ownerUuid())) {
-                    mySandboxes.add(context);
-                } else if (!(subject instanceof Player)) {
+                if (!(subject instanceof Player p) || p.getUniqueId().equals(context.ownerUuid())) {
                     mySandboxes.add(context);
                 }
             } else {
@@ -91,18 +89,17 @@ public class ContextCommand {
         }
         String shownName = OBUContextManager.displayName(context.name());
         if (target instanceof Player p) {
-            String previousSandbox = service.getPlayerActiveSandbox(p);
+            String previousSandbox = OBUCommandHelper.active(plugin).sandboxOf(p.getUniqueId());
             service.setPlayerActiveSandbox(p, null);
             service.applyContext(p, context);
-            service.getSyncManager().syncPlayer(p);
-            if (previousSandbox != null && !previousSandbox.equals(context.name())) {
+            OBUCommandHelper.sync(plugin).syncPlayer(p);
+            String leftSandbox = previousSandbox != null && !previousSandbox.equals(context.name()) ? previousSandbox : null;
+            if (leftSandbox != null) {
                 plugin.getMessageManager().send(p, "commands.obu.context.applied_from_sandbox",
-                        Placeholder.unparsed("sandbox", OBUContextManager.displayName(previousSandbox)),
+                        Placeholder.unparsed("sandbox", OBUContextManager.displayName(leftSandbox)),
                         Placeholder.unparsed("context", shownName));
-                if (!p.equals(sender)) {
-                    plugin.getMessageManager().send(sender, "commands.obu.context.applied", Placeholder.unparsed("context", shownName), Placeholder.component("target", OBUCommandHelper.targetName(plugin, p, sender)));
-                }
-            } else {
+            }
+            if (leftSandbox == null || !p.equals(sender)) {
                 plugin.getMessageManager().send(sender, "commands.obu.context.applied", Placeholder.unparsed("context", shownName), Placeholder.component("target", OBUCommandHelper.targetName(plugin, p, sender)));
             }
         } else if (target instanceof Boat boat) {
@@ -110,6 +107,7 @@ public class ContextCommand {
             plugin.getMessageManager().send(sender, "commands.obu.context.applied", Placeholder.unparsed("context", shownName), Placeholder.component("target", OBUCommandHelper.targetName(plugin, boat, sender)));
         } else {
             plugin.getMessageManager().send(sender, "commands.obu.context.invalid_target");
+            return 0;
         }
         return Command.SINGLE_SUCCESS;
     }

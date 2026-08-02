@@ -11,6 +11,7 @@ import dev.muggel.wake.features.drydock.boostpads.BoostpadRegistry;
 import dev.muggel.wake.features.drydock.integration.OBUBoostpadIntegration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.configuration.ConfigurationSection;
+import java.sql.SQLException;
 import java.util.Map;
 import java.util.logging.Level;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
@@ -33,7 +34,7 @@ public class DrydockModule extends AbstractModule {
         this.boostpads = new BoostpadRegistry(getPlugin(), drydockDao);
         this.detectorListener = new BoostpadDetectorListener(getPlugin(), boostpads);
         boostpads.setOnReloadCallback(this.detectorListener::updateRegistration);
-        registerListener(new OBUBoostpadIntegration());
+        registerListener(new OBUBoostpadIntegration(getPlugin()));
         seedDataIfEmpty(boostpads.isLoaded() ? boostpads.cachedBoostpads().isEmpty() : null, "defaults/drydock_default.yml", "Drydock");
     }
 
@@ -50,6 +51,9 @@ public class DrydockModule extends AbstractModule {
 
     @Override
     protected void onModuleDisable() {
+        if (boostpads != null) {
+            boostpads.setOnReloadCallback(null);
+        }
         if (detectorListener != null) {
             detectorListener.unregister();
             detectorListener = null;
@@ -81,7 +85,8 @@ public class DrydockModule extends AbstractModule {
             yaml.set(path + ".hitbox_percent", config.hitboxPercent());
             count++;
         }
-        return count;
+        yaml.set("boostpads_enabled", getPlugin().getStateDao().get(BoostpadCommand.STATE_KEY_ENABLED, BoostpadCommand.DEFAULT_ENABLED));
+        return count + 1;
     }
 
     @Override
@@ -105,8 +110,13 @@ public class DrydockModule extends AbstractModule {
                 }
             }
         }
-        if (yaml.contains("boostpads_enabled") && !getPlugin().getStateDao().has(BoostpadCommand.STATE_KEY_ENABLED)) {
-            getPlugin().getStateDao().set(BoostpadCommand.STATE_KEY_ENABLED, yaml.getBoolean("boostpads_enabled"));
+        if (yaml.contains("boostpads_enabled")) {
+            try {
+                getPlugin().getStateDao().importValue(BoostpadCommand.STATE_KEY_ENABLED, yaml.getBoolean("boostpads_enabled"));
+                count++;
+            } catch (SQLException e) {
+                getPlugin().getLogger().log(Level.SEVERE, "Failed to import the boostpad switch", e);
+            }
         }
         reload();
         return count;

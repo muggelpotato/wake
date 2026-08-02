@@ -24,13 +24,12 @@ public class SandboxCreateCommand {
         CommandSender sender = ctx.getSource().getSender();
         ContextDelivery service = OBUCommandHelper.delivery(plugin);
         String name = StringArgumentType.getString(ctx, "name");
-        String key = SandboxCommandHelper.sandboxKeyFor(subject, name);
-        if (!service.createSandbox(key, SandboxCommandHelper.ownerOf(subject))) {
-            plugin.getMessageManager().send(sender, "commands.obu.sandbox.exists", Placeholder.unparsed("sandbox", name));
+        String key = SandboxCommandHelper.claimSandbox(plugin, sender, subject, name, service);
+        if (key == null) {
             return 0;
         }
         if (subject instanceof Player player) {
-            SandboxCommandHelper.enterSandbox(player, key, service);
+            SandboxCommandHelper.enterSandbox(player, key, service, plugin);
         }
         plugin.getMessageManager().send(sender, "commands.obu.sandbox.created", Placeholder.unparsed("sandbox", name));
         SandboxCommandHelper.sendHintIfEnabled(plugin, sender);

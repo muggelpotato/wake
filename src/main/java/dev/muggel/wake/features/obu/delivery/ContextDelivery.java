@@ -10,11 +10,9 @@ import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import dev.muggel.wake.features.obu.contexts.OBUPlayerState;
 import dev.muggel.wake.features.obu.protocol.PacketSender;
 import org.bukkit.Bukkit;
-import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.persistence.PersistentDataType;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -34,26 +32,23 @@ public class ContextDelivery implements OBUService {
     private final Wake plugin;
     private final PacketSender packetSender;
     private final OBUContextManager contextManager;
-    private final PlayerSelections selections = new PlayerSelections();
-    private final VehicleScaleCache scales = new VehicleScaleCache();
+    private final ActiveContexts active;
     private final OBUSyncManager syncManager;
     private final OBUDao dao;
     private final ClientRegistry clients;
-    private final NamespacedKey boatContextKey;
-    public ContextDelivery(Wake plugin, PacketSender packetSender, OBUContextManager contextManager, OBUDao dao, ClientRegistry clients) {
+    public ContextDelivery(Wake plugin, PacketSender packetSender, OBUContextManager contextManager, OBUDao dao, ClientRegistry clients, ActiveContexts active, OBUSyncManager syncManager) {
         this.plugin = plugin;
         this.packetSender = packetSender;
         this.contextManager = contextManager;
         this.dao = dao;
         this.clients = clients;
-        this.boatContextKey = new NamespacedKey(plugin, "obu_context");
-        this.syncManager = new OBUSyncManager(plugin, packetSender, contextManager, this);
+        this.active = active;
+        this.syncManager = syncManager;
     }
 
     public void cleanupPlayer(@NonNull Player player) {
         UUID uuid = player.getUniqueId();
-        selections.forget(uuid);
-        scales.forget(uuid);
+        active.forgetPlayer(uuid);
         clients.forget(uuid);
         syncManager.cleanup(uuid);
     }
@@ -61,14 +56,6 @@ public class ContextDelivery implements OBUService {
     public boolean isStale() {
         OBUModule module = plugin.getModule(OBUModule.class);
         return module == null || module.getDelivery() != this;
-    }
-
-    public @NonNull ClientRegistry clients() {
-        return clients;
-    }
-
-    public @NonNull PacketSender packetSender() {
-        return packetSender;
     }
 
     public void requestClientVersion(@NonNull Player player) {
@@ -81,17 +68,13 @@ public class ContextDelivery implements OBUService {
     }
 
     public void cleanupVehicle(@NonNull UUID uuid) {
-        scales.forget(uuid);
+        active.forgetVehicle(uuid);
         syncManager.cleanup(uuid);
     }
 
     public void applyDefaultContext(@NonNull Player player) {
         setPlayerActiveSandbox(player, null);
-        syncManager.clearLocalOverrides(player.getUniqueId());
-        OBUContext defaultContext = contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT);
-        if (defaultContext != null) {
-            applyContext(player, defaultContext);
-        }
+        applyContext(player.getUniqueId(), OBUContextManager.DEFAULT_CONTEXT);
         syncManager.syncPlayer(player);
     }
 
@@ -104,20 +87,20 @@ public class ContextDelivery implements OBUService {
             return true;
         }
         UUID uuid = player.getUniqueId();
-        String sandbox = selections.sandbox(uuid);
+        String sandbox = active.sandboxOf(uuid);
         if (sandbox != null && changedContexts.contains(sandbox.toLowerCase(Locale.ROOT))) {
             return true;
         }
-        if (changedContexts.contains(selections.context(uuid).toLowerCase(Locale.ROOT))) {
+        if (changedContexts.contains(active.contextOf(uuid).toLowerCase(Locale.ROOT))) {
             return true;
         }
-        String pinned = player.getVehicle() instanceof Boat boat ? getBoatContextName(boat) : null;
+        String pinned = player.getVehicle() instanceof Boat boat ? active.pinnedOn(boat) : null;
         return pinned != null && changedContexts.contains(pinned.toLowerCase(Locale.ROOT));
     }
 
     public void resyncActiveSelection(@NonNull Player player) {
         UUID uuid = player.getUniqueId();
-        String sandbox = selections.sandbox(uuid);
+        String sandbox = active.sandboxOf(uuid);
         if (sandbox != null) {
             OBUContext ctx = contextManager.getContext(sandbox);
             if (ctx == null || !ctx.isSandbox() || !uuid.equals(ctx.ownerUuid())) {
@@ -125,74 +108,63 @@ public class ContextDelivery implements OBUService {
                 sandbox = null;
             }
         }
-        if (sandbox == null && contextManager.getContext(selections.context(uuid)) == null) {
-            OBUContext def = contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT);
-            if (def != null) {
-                applyContext(player, def);
-            }
+        if (sandbox == null && contextManager.getContext(active.contextOf(uuid)) == null) {
+            applyContext(uuid, OBUContextManager.DEFAULT_CONTEXT);
         }
         syncManager.syncPlayer(player);
     }
 
     private void applyContext(@NonNull UUID uuid, @NonNull String contextName) {
-        selections.setContext(uuid, contextName);
+        active.selectContext(uuid, contextName);
         syncManager.clearLocalOverrides(uuid);
         refreshIfSandbox(contextName);
     }
 
     public boolean applySetting(@NonNull Entity target, @NonNull OBUSetting setting) {
-        if (!(target instanceof Player) && !(target instanceof Boat)) {
-            return false;
-        }
         if (setting.definition().isActionSetting()) {
-            try {
-                if (target instanceof Player player) {
-                    packetSender.sendRawSetting(player, setting);
-                } else {
-                    Boat boat = (Boat) target;
-                    if (!boat.getPassengers().isEmpty() && boat.getPassengers().getFirst() instanceof Player driver) {
-                        packetSender.sendRawSetting(driver, setting);
-                    }
-                }
-            } catch (Exception e) {
-                plugin.getLogger().log(Level.WARNING, "Failed to send raw action setting", e);
-            }
-            return true;
+            sendActionSetting(target, setting);
+            return target instanceof Player || target instanceof Boat;
         }
-
         if (target instanceof Player player) {
-            String sandboxName = selections.sandbox(player.getUniqueId());
+            String sandboxName = active.sandboxOf(player.getUniqueId());
             if (sandboxName != null) {
                 contextManager.updateSandboxSetting(sandboxName, setting);
             } else {
                 syncManager.addLocalOverride(player.getUniqueId(), setting);
             }
             syncManager.syncPlayer(player);
-        } else {
-            Boat boat = (Boat) target;
-            if (setting.definition().isGlobalSetting()) {
-                return false;
-            }
+            return true;
+        }
+        if (target instanceof Boat boat) {
             syncManager.addLocalOverride(boat.getUniqueId(), setting);
             syncManager.broadcastSync(boat);
+            return true;
         }
-        return true;
+        return false;
     }
 
-    public @Nullable String getBoatContextName(@NonNull Boat boat) {
-        return boat.getPersistentDataContainer().get(boatContextKey, PersistentDataType.STRING);
+    private void sendActionSetting(@NonNull Entity target, @NonNull OBUSetting setting) {
+        Player driver = OBUSyncManager.driverOf(target);
+        if (driver == null) {
+            return;
+        }
+        try {
+            packetSender.sendRawSetting(driver, setting);
+        } catch (Exception e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to send raw action setting", e);
+        }
     }
 
-    public void applyEntityContext(@NonNull Boat boat, String contextName) {
+    public void applyEntityContext(@NonNull Boat boat, @NonNull String contextName) {
         syncManager.clearLocalOverrides(boat.getUniqueId());
-        if (contextName == null || contextName.equalsIgnoreCase(OBUContextManager.DEFAULT_CONTEXT)) {
-            boat.getPersistentDataContainer().remove(boatContextKey);
+        if (contextName.equalsIgnoreCase(OBUContextManager.DEFAULT_CONTEXT)) {
+            active.pin(boat, null);
             syncManager.broadcastSync(boat);
             return;
         }
         OBUContext context = contextManager.getContext(contextName);
         if (context != null) {
-            boat.getPersistentDataContainer().set(boatContextKey, PersistentDataType.STRING, contextName);
+            active.pin(boat, contextName);
             refreshIfSandbox(context);
             syncManager.broadcastSync(boat);
         }
@@ -209,7 +181,7 @@ public class ContextDelivery implements OBUService {
         List<Player> evicted = new ArrayList<>();
         for (Player online : Bukkit.getOnlinePlayers()) {
             UUID uuid = online.getUniqueId();
-            if (lower.equals(selections.sandbox(uuid)) || lower.equalsIgnoreCase(selections.context(uuid))) {
+            if (lower.equals(active.sandboxOf(uuid)) || lower.equalsIgnoreCase(active.contextOf(uuid))) {
                 applyDefaultContext(online);
                 evicted.add(online);
             }
@@ -222,7 +194,7 @@ public class ContextDelivery implements OBUService {
         if (!contextManager.publishSandbox(lower)) {
             return false;
         }
-        for (UUID uuid : selections.clearSandbox(lower)) {
+        for (UUID uuid : active.clearSandbox(lower)) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
                 syncManager.syncPlayer(player);
@@ -232,7 +204,7 @@ public class ContextDelivery implements OBUService {
     }
 
     public void setPlayerActiveSandbox(@NonNull Player player, @Nullable String sandboxName) {
-        selections.setSandbox(player.getUniqueId(), sandboxName);
+        active.selectSandbox(player.getUniqueId(), sandboxName);
         refreshIfSandbox(sandboxName);
     }
 
@@ -248,37 +220,9 @@ public class ContextDelivery implements OBUService {
         }
     }
 
-    public @Nullable String getPlayerActiveSandbox(@NonNull Player player) {
-        return selections.sandbox(player.getUniqueId());
-    }
-
-    public @Nullable String getPlayerActiveSandbox(@NonNull UUID uuid) {
-        return selections.sandbox(uuid);
-    }
-
-    public @NonNull String getActiveContextName(@NonNull Player player) {
-        return selections.context(player.getUniqueId());
-    }
-
-    public @NonNull String getActiveContextName(@NonNull UUID uuid) {
-        return selections.context(uuid);
-    }
-
-    public OBUSyncManager getSyncManager() {
-        return syncManager;
-    }
-
-    public OBUContextManager getContextManager() {
-        return contextManager;
-    }
-
     @Override
     public double getVehicleScale(@NonNull UUID uuid) {
-        return scales.scaleOf(uuid);
-    }
-
-    public void updateVehicleScaleCache(@NonNull UUID uuid, @NonNull List<OBUSetting> truth) {
-        scales.update(uuid, truth);
+        return active.scaleOf(uuid);
     }
 
     @Override
@@ -295,11 +239,11 @@ public class ContextDelivery implements OBUService {
 
     public void saveSelection(@NonNull Player player) {
         UUID uuid = player.getUniqueId();
-        if (!clients.isDriven(uuid) || !selections.hasSelection(uuid)) {
+        if (!clients.isDriven(uuid) || !active.hasSelection(uuid)) {
             return;
         }
-        String sandbox = selections.sandbox(uuid);
-        String context = selections.context(uuid);
+        String sandbox = active.sandboxOf(uuid);
+        String context = active.contextOf(uuid);
         boolean keep = plugin.getStateDao().get(STATE_KEY_PERSISTENT_STATES, true)
                 && (sandbox != null || !OBUContextManager.DEFAULT_CONTEXT.equals(context));
         dao.savePlayerState(uuid, keep ? sandbox : null, keep ? context : null);

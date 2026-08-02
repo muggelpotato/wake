@@ -5,6 +5,8 @@ import dev.muggel.wake.core.commands.CommandNode;
 import org.jspecify.annotations.Nullable;
 
 import java.io.File;
+import java.io.IOException;
+import java.sql.SQLException;
 
 /**
  * The contract for every Wake module (enable, disable, reload, and the data hooks behind {@code /wake database}). <br>
@@ -33,12 +35,11 @@ public interface WakeModule {
         return null;
     }
 
-    int exportData(File exportDir) throws Exception;
+    int exportData(File exportDir) throws SQLException, IOException;
 
-    int importData(File importDir) throws Exception;
+    int importData(File importDir) throws SQLException;
 
-    @SuppressWarnings("RedundantThrows")
-    void resetDatabase() throws Exception;
+    void resetDatabase();
 
-    int seedData() throws Exception;
+    int seedData() throws SQLException, IOException;
 }

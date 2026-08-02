@@ -37,15 +37,14 @@ public class SandboxForkCommand {
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.missing", Placeholder.unparsed("sandbox", contextToLoad));
             return 0;
         }
-        String newKey = SandboxCommandHelper.sandboxKeyFor(subject, newName);
-        if (!service.createSandbox(newKey, SandboxCommandHelper.ownerOf(subject))) {
-            plugin.getMessageManager().send(sender, "commands.obu.sandbox.exists", Placeholder.unparsed("sandbox", newName));
+        String newKey = SandboxCommandHelper.claimSandbox(plugin, sender, subject, newName, service);
+        if (newKey == null) {
             return 0;
         }
         contextManager.addSettings(newKey, sourceContext.settings());
         plugin.getMessageManager().send(sender, "commands.obu.sandbox.forked", Placeholder.unparsed("source", OBUContextManager.displayName(sourceContext.name())), Placeholder.unparsed("sandbox", newName));
         if (subject instanceof Player p) {
-            SandboxCommandHelper.enterSandbox(p, newKey, service);
+            SandboxCommandHelper.enterSandbox(p, newKey, service, plugin);
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.switched", Placeholder.unparsed("sandbox", newName));
             SandboxCommandHelper.sendHintIfEnabled(plugin, sender);
         }

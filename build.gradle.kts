@@ -26,13 +26,20 @@ dependencies {
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
     withSourcesJar()
 }
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release = 21
+}
+
+val java21 = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
 
 tasks {
     runServer {
         minecraftVersion("1.21.11")
+        javaLauncher = java21
         jvmArgs("-Xms2G", "-Xmx6G")
         pluginJars.from(shadowJar)
     }

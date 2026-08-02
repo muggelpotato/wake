@@ -19,6 +19,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public class BoatLagInterceptor extends PacketListenerAbstract implements Listener {
     private final Set<UUID> boatDrivers = ConcurrentHashMap.newKeySet();
 
+    public void adoptDriver(@NonNull Player player) {
+        if (player.getVehicle() instanceof Boat) {
+            boatDrivers.add(player.getUniqueId());
+        }
+    }
+
     @EventHandler
     public void onVehicleEnter(@NonNull VehicleEnterEvent event) {
         if (event.getVehicle() instanceof Boat && event.getEntered() instanceof Player player) {

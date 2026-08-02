@@ -10,17 +10,20 @@ import org.jspecify.annotations.NonNull;
 import java.util.UUID;
 
 public class OBUBoostpadIntegration implements Listener {
-    public OBUBoostpadIntegration() {}
+    private final Wake plugin;
+    public OBUBoostpadIntegration(@NonNull Wake plugin) {
+        this.plugin = plugin;
+    }
 
-    public static double getVehicleScale(@NonNull UUID uuid) {
-        OBUService service = Wake.getServiceRegistry().get(OBUService.class);
+    public static double getVehicleScale(@NonNull Wake plugin, @NonNull UUID uuid) {
+        OBUService service = plugin.getServiceRegistry().get(OBUService.class);
         if (service == null) return 1.0;
         return service.getVehicleScale(uuid);
     }
 
     @EventHandler
     public void onBoostpadHit(@NonNull PlayerHitBoostpadEvent event) {
-        OBUService service = Wake.getServiceRegistry().get(OBUService.class);
+        OBUService service = plugin.getServiceRegistry().get(OBUService.class);
         if (service == null) return;
         service.applyRelativeImpulse(
                 event.getPlayer(),

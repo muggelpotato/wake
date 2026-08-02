@@ -13,7 +13,8 @@ import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
-import dev.muggel.wake.features.obu.delivery.ContextDelivery;
+import dev.muggel.wake.features.obu.delivery.ActiveContexts;
+import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
@@ -41,9 +42,9 @@ public class ClearCommand {
         if (!(CommandHelper.actingSender(ctx.getSource()) instanceof Player player)) {
             return builder.buildFuture();
         }
-        ContextDelivery service = OBUCommandHelper.delivery(plugin);
+        OBUSyncManager sync = OBUCommandHelper.sync(plugin);
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
-        String sandboxName = service.getPlayerActiveSandbox(player);
+        String sandboxName = OBUCommandHelper.active(plugin).sandboxOf(player.getUniqueId());
         Map<String, OBUSetting> active = new HashMap<>();
         if (sandboxName != null) {
             OBUContext base = contextManager.getContext(sandboxName);
@@ -51,13 +52,14 @@ public class ClearCommand {
                 for (OBUSetting s : base.settings()) active.put(s.getUniqueKey(), s);
             }
         }
-        active.putAll(service.getSyncManager().getLocalOverrides(player.getUniqueId()));
+        active.putAll(sync.getLocalOverrides(player.getUniqueId()));
         return CommandHelper.suggestMatching(builder,
                 active.values().stream().map(s -> s.definition().name()).distinct().toList());
     }
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, @NonNull Entity target, Wake plugin) {
-        ContextDelivery service = OBUCommandHelper.delivery(plugin);
+        ActiveContexts active = OBUCommandHelper.active(plugin);
+        OBUSyncManager sync = OBUCommandHelper.sync(plugin);
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         String settingKey = StringArgumentType.getString(ctx, "setting");
         CommandSender sender = ctx.getSource().getSender();
@@ -65,16 +67,16 @@ public class ClearCommand {
         Predicate<OBUSetting> matches = def != null
                 ? s -> s.definition() == def
                 : s -> s.getUniqueKey().equals(settingKey);
-        var overrides = service.getSyncManager().getLocalOverrides(target.getUniqueId());
+        var overrides = sync.getLocalOverrides(target.getUniqueId());
         boolean cleared = false;
         String defNameForMessage = def != null ? def.name() : settingKey;
         if (target instanceof Player player) {
-            String sandboxName = service.getPlayerActiveSandbox(player);
+            String sandboxName = active.sandboxOf(player.getUniqueId());
             List<OBUSetting> matchedOverrides = overrides.values().stream().filter(matches).toList();
             if (!matchedOverrides.isEmpty()) {
                 defNameForMessage = matchedOverrides.getFirst().definition().name();
                 for (OBUSetting s : matchedOverrides) {
-                    service.getSyncManager().removeLocalOverride(player.getUniqueId(), s.getUniqueKey());
+                    sync.removeLocalOverride(player.getUniqueId(), s.getUniqueKey());
                 }
                 plugin.getMessageManager().send(sender, "commands.obu.clear.temp", Placeholder.unparsed("setting", defNameForMessage), Placeholder.component("target", OBUCommandHelper.targetPossessive(plugin, player, sender)));
                 cleared = true;
@@ -95,7 +97,7 @@ public class ClearCommand {
                     }
                 }
             } else if (!cleared) {
-                String baseName = service.getActiveContextName(player);
+                String baseName = active.contextOf(player.getUniqueId());
                 boolean isBase = false;
                 OBUContext base = contextManager.getContext(baseName);
                 if (base != null) {
@@ -113,20 +115,20 @@ public class ClearCommand {
                 }
             }
             if (cleared) {
-                service.getSyncManager().syncPlayer(player);
+                sync.syncPlayer(player);
             }
         } else if (target instanceof Boat boat) {
             List<OBUSetting> matchedOverrides = overrides.values().stream().filter(matches).toList();
             if (!matchedOverrides.isEmpty()) {
                 defNameForMessage = matchedOverrides.getFirst().definition().name();
                 for (OBUSetting s : matchedOverrides) {
-                    service.getSyncManager().removeLocalOverride(boat.getUniqueId(), s.getUniqueKey());
+                    sync.removeLocalOverride(boat.getUniqueId(), s.getUniqueKey());
                 }
                 plugin.getMessageManager().send(sender, "commands.obu.clear.temp", Placeholder.unparsed("setting", defNameForMessage), Placeholder.component("target", OBUCommandHelper.targetPossessive(plugin, boat, sender)));
                 cleared = true;
             }
             if (cleared) {
-                service.getSyncManager().broadcastSync(boat);
+                sync.broadcastSync(boat);
             }
         }
         if (!cleared) {

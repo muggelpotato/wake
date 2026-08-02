@@ -12,8 +12,12 @@ ignores:
   - "**/AbstractModule.java"
   # Conditional self-registration for a hot event; owns its own unregister().
   - "**/BoostpadDetectorListener.java"
+  # Records player moves only while a feature claims it; release() unregisters, called from the consumer's unregister().
+  - "**/VehiclePath.java"
   # Core plumbing that outlives every module: the outage notice must reach players with base disabled.
   # Unregisters itself in shutdown().
   - "**/DatabaseManager.java"
+  # The plugin's own bootstrap: core listeners live as long as Wake does and Bukkit drops them on disable.
+  - "**/Wake.java"
 rule:
   pattern: $P.getPluginManager().registerEvents($$$)
