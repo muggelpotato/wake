@@ -43,7 +43,7 @@ public class BoostpadListCommand {
                         Placeholder.unparsed("y", String.format(Locale.ROOT, "%.2f", config.forceY())),
                         Placeholder.unparsed("z", String.format(Locale.ROOT, "%.2f", config.forceZ())),
                         Placeholder.unparsed("delay", String.valueOf(config.delayMs())),
-                        Placeholder.unparsed("hitbox", String.valueOf(config.hitboxPercent()))
+                        Placeholder.unparsed("padding", String.format(Locale.ROOT, "%.2f", config.padding()))
                 );
                 blocksComp = blocksComp.append(itemComp);
             }

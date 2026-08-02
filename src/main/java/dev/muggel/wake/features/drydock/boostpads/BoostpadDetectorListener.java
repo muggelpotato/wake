@@ -20,7 +20,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.player.PlayerInputEvent;
 import org.bukkit.event.vehicle.VehicleMoveEvent;
-import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 import org.jspecify.annotations.NonNull;
 
@@ -36,6 +35,8 @@ import java.util.UUID;
 public class BoostpadDetectorListener implements Listener {
     private static final double SURFACE_BAND = 0.15;
     private static final double SURFACE_DROP = 0.5;
+    private static final double HULL_HALF = 0.6875;
+    private static final double GRAZE_MARGIN = 0.01; // boats clip slightly into walls, an issue when colliding with a wall made of boostpads
     private final Wake plugin;
     private final BoostpadRegistry boostpads;
     private final Map<UUID, Map<String, Long>> lastBoostTimes = new HashMap<>();
@@ -106,19 +107,17 @@ public class BoostpadDetectorListener implements Listener {
     }
 
     private @NonNull List<PadHit> findHits(@NonNull Boat boat, @NonNull Legs legs, @NonNull Map<Material, BoostpadConfig> materialConfigs) {
-        BoundingBox box = boat.getBoundingBox();
         double scale = OBUBoostpadIntegration.getVehicleScale(plugin, boat.getUniqueId());
         double sizing = scale > 0 ? scale : 1.0;
-        double halfWidth = (box.getMaxX() - box.getMinX()) / 2.0 * sizing;
-        double halfLength = (box.getMaxZ() - box.getMinZ()) / 2.0 * sizing;
-        double reach = 1.0 + Math.max(0.0, boostpads.getMaxOffsetMultiplier());
+        double hull = HULL_HALF * sizing - GRAZE_MARGIN;
+        double reach = extent(boostpads.getMaxPadding(), hull);
         World world = boat.getWorld();
         int legCount = legs.count();
         Set<Long> seen = legCount > 1 ? new HashSet<>() : null;
         List<PadHit> hits = null;
         for (int leg = 0; leg < legCount; leg++) {
             Vector legEnd = legs.at(leg + 1);
-            BlockSweep sweep = CollisionGeometry.sweep(legs.at(leg), legEnd, halfWidth * reach, halfLength * reach, -SURFACE_DROP);
+            BlockSweep sweep = CollisionGeometry.sweep(legs.at(leg), legEnd, reach, reach, -SURFACE_DROP);
             Vector scanned = sweep.from();
             for (int y = sweep.minY(); y <= sweep.maxY(); y++) {
                 for (int x = sweep.minX(); x <= sweep.maxX(); x++) {
@@ -130,13 +129,12 @@ public class BoostpadDetectorListener implements Listener {
                         if (config == null) {
                             continue;
                         }
-                        double halfX = Math.max(0.0, halfWidth * (1.0 + config.offsetMultiplier()));
-                        double halfZ = Math.max(0.0, halfLength * (1.0 + config.offsetMultiplier()));
+                        double padding = extent(config.padding(), hull);
                         double fraction = CollisionGeometry.intersectionFraction(
                                 scanned.getX(), scanned.getY(), scanned.getZ(),
                                 legEnd.getX(), legEnd.getY(), legEnd.getZ(),
-                                x - halfX, y + 1 - SURFACE_BAND, z - halfZ,
-                                x + 1 + halfX, y + 1 + SURFACE_BAND, z + 1 + halfZ);
+                                x - padding, y + 1 - SURFACE_BAND, z - padding,
+                                x + 1 + padding, y + 1 + SURFACE_BAND, z + 1 + padding);
                         if (fraction < 0 || (seen != null && !seen.add(blockKey(x, y, z)))) {
                             continue;
                         }
@@ -174,6 +172,10 @@ public class BoostpadDetectorListener implements Listener {
             PlayerHitBoostpadEvent hitEvent = new PlayerHitBoostpadEvent(player, boat, hitBlock, config.forceX(), config.forceY(), config.forceZ());
             Bukkit.getPluginManager().callEvent(hitEvent);
         }
+    }
+
+    private static double extent(double padding, double hull) {
+        return Math.max(0.0, padding - 1.0 + hull);
     }
 
     private static long blockKey(int x, int y, int z) {

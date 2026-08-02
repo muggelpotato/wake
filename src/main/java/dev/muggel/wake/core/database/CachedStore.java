@@ -35,6 +35,7 @@ public final class CachedStore<V> {
     }
 
     private static final int MAX_KEYED_READ = 500;
+    private static final long[] TRANSIENT_RETRY_TICKS = {20, 100, 600};
     private final Wake plugin;
     private final String scope;
     private final String table;
@@ -48,6 +49,7 @@ public final class CachedStore<V> {
     private final List<Consumer<Set<String>>> waiting = new ArrayList<>();
     private long wholeTableServed;
     private long appliedRead;
+    private int failedReads;
     private boolean reading;
     private volatile boolean loaded;
     CachedStore(@NonNull Wake plugin, @NonNull String scope, @NonNull String table, @NonNull Loader<V> loader) {
@@ -166,13 +168,14 @@ public final class CachedStore<V> {
         try {
             rows = loader.load(null);
         } catch (RuntimeException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to load " + table, e);
+            plugin.getDatabaseManager().readFailed(table, e);
             rows = null;
         }
         if (rows == null) {
             Scheduling.onMain(plugin, () -> reloadAsync(null));
             return false;
         }
+        failedReads = 0;
         apply(rows, null, covered, readFrom, wholeTableAt, reads.incrementAndGet());
         spendGuards(readFrom);
         return true;
@@ -182,6 +185,7 @@ public final class CachedStore<V> {
         if (afterApply != null) {
             waiting.add(afterApply);
         }
+        failedReads = 0;
         startRead();
     }
 
@@ -204,13 +208,32 @@ public final class CachedStore<V> {
         reading = true;
         plugin.getDatabaseManager().readAsync(() -> loader.load(keys), rows -> {
             reading = false;
-            Set<String> changed = rows != null && ticket > appliedRead
+            if (rows == null) {
+                spendGuards(readFrom);
+                if (retryIfTransient()) {
+                    waiting.addAll(due);
+                } else {
+                    runAll(due, Set.of());
+                }
+                return;
+            }
+            failedReads = 0;
+            Set<String> changed = ticket > appliedRead
                     ? apply(rows, keys, covered, readFrom, wholeTableAt, ticket)
                     : Set.of();
             spendGuards(readFrom);
             startRead();
             runAll(due, changed);
         });
+    }
+
+    /** Gives a failed read a few scheduled attempts to self-heal */
+    private boolean retryIfTransient() {
+        if (failedReads >= TRANSIENT_RETRY_TICKS.length || !plugin.getDatabaseManager().readFailureWasTransient(table)) {
+            return false;
+        }
+        Scheduling.later(plugin, this::startRead, TRANSIENT_RETRY_TICKS[failedReads++]);
+        return true;
     }
 
     private void runAll(@NonNull List<Consumer<Set<String>>> due, @NonNull Set<String> changed) {

@@ -21,18 +21,18 @@ public class BoostpadAddCommand {
                         CommandNode.argument("y", DoubleArgumentType.doubleArg()),
                         CommandNode.argument("z", DoubleArgumentType.doubleArg()),
                         CommandNode.argument("delay_ms", IntegerArgumentType.integer(0))
-                                .executesSender((ctx, sender) -> execute(ctx, plugin, BoostpadConfig.DEFAULT_HITBOX_PERCENT)),
-                        CommandNode.argument("hitbox_percent", IntegerArgumentType.integer(0, BoostpadConfig.MAX_HITBOX_PERCENT))
-                                .executesSender((ctx, sender) -> execute(ctx, plugin, IntegerArgumentType.getInteger(ctx, "hitbox_percent"))));
+                                .executesSender((ctx, sender) -> execute(ctx, plugin, BoostpadConfig.DEFAULT_PADDING)),
+                        CommandNode.argument("padding", DoubleArgumentType.doubleArg(0.0, BoostpadConfig.MAX_PADDING))
+                                .executesSender((ctx, sender) -> execute(ctx, plugin, DoubleArgumentType.getDouble(ctx, "padding"))));
     }
 
-    private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin, int hitboxPercent) {
+    private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin, double padding) {
         String blockKey = ctx.getArgument("block", String.class);
         double forceX = DoubleArgumentType.getDouble(ctx, "x");
         double forceY = DoubleArgumentType.getDouble(ctx, "y");
         double forceZ = DoubleArgumentType.getDouble(ctx, "z");
         long delayMs = IntegerArgumentType.getInteger(ctx, "delay_ms");
-        BoostpadConfig newConfig = new BoostpadConfig(blockKey, true, forceX, forceY, forceZ, delayMs, hitboxPercent);
+        BoostpadConfig newConfig = new BoostpadConfig(blockKey, true, forceX, forceY, forceZ, delayMs, padding);
         DrydockCommandHelper.boostpads(plugin).saveBoostpadConfig(newConfig);
         plugin.getMessageManager().send(ctx.getSource().getSender(), "commands.drydock.boostpad.block_added");
         return Command.SINGLE_SUCCESS;

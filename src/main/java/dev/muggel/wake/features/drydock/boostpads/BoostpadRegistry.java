@@ -20,7 +20,7 @@ public class BoostpadRegistry {
     private final CachedStore<BoostpadConfig> boostpads;
     private volatile Map<Material, BoostpadConfig> materialConfigs = Collections.emptyMap();
     private volatile Map<String, BoostpadConfig> publishedConfigs = Collections.emptyMap();
-    private volatile double cachedMaxOffsetMultiplier = 0.0;
+    private volatile double cachedMaxPadding = 0.0;
     private Runnable onReloadCallback;
     public BoostpadRegistry(Wake plugin, @NonNull DrydockDao dao) {
         this.plugin = plugin;
@@ -28,17 +28,9 @@ public class BoostpadRegistry {
         this.boostpads = dao.boostpads();
         boostpads.load();
         rebuildDerived();
-        awaitFirstLoad();
-    }
-
-    private void awaitFirstLoad() {
-        if (boostpads.isLoaded()) {
-            return;
+        if (!boostpads.isLoaded()) {
+            boostpads.reloadAsync(changed -> rebuildDerived());
         }
-        boostpads.reloadAsync(changed -> {
-            rebuildDerived();
-            awaitFirstLoad();
-        });
     }
 
     public boolean isLoaded() {
@@ -59,7 +51,7 @@ public class BoostpadRegistry {
     private void rebuildDerived() {
         Map<String, BoostpadConfig> snapshot = Map.copyOf(boostpads.view());
         Map<Material, BoostpadConfig> newConfigs = new HashMap<>();
-        double maxOffset = 0.0;
+        double maxPadding = 0.0;
         for (Map.Entry<String, BoostpadConfig> entry : snapshot.entrySet()) {
             BoostpadConfig cfg = entry.getValue();
             if (cfg.enabled()) {
@@ -68,12 +60,12 @@ public class BoostpadRegistry {
                 if (mat != null) {
                     newConfigs.put(mat, cfg);
                 }
-                maxOffset = Math.max(maxOffset, cfg.offsetMultiplier());
+                maxPadding = Math.max(maxPadding, cfg.padding());
             }
         }
         this.publishedConfigs = snapshot;
         this.materialConfigs = Map.copyOf(newConfigs);
-        this.cachedMaxOffsetMultiplier = maxOffset;
+        this.cachedMaxPadding = maxPadding;
         if (this.onReloadCallback != null) {
             this.onReloadCallback.run();
         }
@@ -83,8 +75,8 @@ public class BoostpadRegistry {
         return materialConfigs;
     }
 
-    public double getMaxOffsetMultiplier() {
-        return cachedMaxOffsetMultiplier;
+    public double getMaxPadding() {
+        return cachedMaxPadding;
     }
 
     public void saveBoostpadConfig(@NonNull BoostpadConfig config) {

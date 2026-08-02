@@ -15,7 +15,9 @@ import org.jspecify.annotations.Nullable;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -40,6 +42,8 @@ public class DatabaseManager {
     private final MirrorRegistry mirrors;
     private final AtomicInteger pendingWrites = new AtomicInteger();
     private final AtomicLong completedWrites = new AtomicLong();
+    private final Set<String> failingReads = ConcurrentHashMap.newKeySet();
+    private final Set<String> transientReads = ConcurrentHashMap.newKeySet();
     private long lastPublishMillis;
     private volatile @Nullable UUID currentActor;
     private @Nullable DegradedNoticeListener noticeListener;
@@ -145,6 +149,28 @@ public class DatabaseManager {
         }
     }
 
+    void readFailed(@NonNull String subject, @NonNull Throwable failure) {
+        if (OutageMonitor.isRetryableFailure(failure)) {
+            transientReads.add(subject);
+        } else {
+            transientReads.remove(subject);
+        }
+        if (failingReads.add(subject)) {
+            plugin.getLogger().log(Level.SEVERE, "Failed to read " + subject + " (repeats stay silent until it succeeds)", failure);
+        }
+    }
+
+    void readSucceeded(@NonNull String subject) {
+        transientReads.remove(subject);
+        if (failingReads.remove(subject)) {
+            plugin.getLogger().info("Reading " + subject + " works again");
+        }
+    }
+
+    boolean readFailureWasTransient(@NonNull String subject) {
+        return transientReads.contains(subject);
+    }
+
     /** The standard shape for a cache reload (Drain queued writes -> read on async thread -> apply results on main thread) */
     public <T> void readAsync(@NonNull Supplier<@Nullable T> read, @NonNull Consumer<@Nullable T> applyOnMain) {
         Scheduling.async(plugin, () -> {
@@ -153,7 +179,7 @@ public class DatabaseManager {
                 awaitWrites();
                 result = read.get();
             } catch (RuntimeException e) {
-                plugin.getLogger().log(Level.SEVERE, "Database read failed", e);
+                readFailed("the database", e);
                 result = null;
             }
             T settled = result;
@@ -185,6 +211,10 @@ public class DatabaseManager {
 
     public void markRemoteChange(@NonNull String scope, @Nullable String table, @Nullable Collection<String> keys) {
         mirrors.markRemoteChange(scope, table, keys);
+    }
+
+    public void invalidateAllMirrors() {
+        mirrors.markRemoteChange(SyncService.SCOPE_FULL, null, null);
     }
 
     void registerMirror(@NonNull CachedStore<?> mirror) {

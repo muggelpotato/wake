@@ -38,7 +38,7 @@ public class BoostpadToggleCommand {
             return 0;
         }
         boolean newState = !existing.enabled();
-        BoostpadConfig newConfig = new BoostpadConfig(existing.blockKey(), newState, existing.forceX(), existing.forceY(), existing.forceZ(), existing.delayMs(), existing.hitboxPercent());
+        BoostpadConfig newConfig = new BoostpadConfig(existing.blockKey(), newState, existing.forceX(), existing.forceY(), existing.forceZ(), existing.delayMs(), existing.padding());
         boostpads.saveBoostpadConfig(newConfig);
         String stateKey = newState ? "commands.drydock.boostpad.block_enabled" : "commands.drydock.boostpad.block_disabled";
         plugin.getMessageManager().send(ctx.getSource().getSender(), stateKey, Placeholder.unparsed("block", MessageManager.stripNamespace(blockKey)));

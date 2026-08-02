@@ -11,7 +11,6 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.logging.Level;
 
 public class AxiomDao extends WakeDao {
     private final CachedStore<String> displays = mirror("wake_axiom_displays", this::readDisplays);
@@ -38,17 +37,14 @@ public class AxiomDao extends WakeDao {
     }
 
     private @Nullable Map<String, String> readDisplays(@Nullable Set<String> keys) {
-        Map<String, String> models = new HashMap<>();
-        try {
+        return read("wake_axiom_displays", () -> {
+            Map<String, String> models = new HashMap<>();
             selectByKeys("SELECT model_key FROM wake_axiom_displays", "model_key", keys, row -> {
                 String key = row.getString("model_key");
                 models.put(key, key);
             });
-        } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to load axiom displays from database", e);
-            return null;
-        }
-        return models;
+            return models;
+        });
     }
 
     public void importDisplay(String modelKey) throws SQLException {

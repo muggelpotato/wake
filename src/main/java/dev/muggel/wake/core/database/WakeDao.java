@@ -129,6 +129,23 @@ public abstract class WakeDao {
         mirrors.clear();
     }
 
+    protected final <T> @Nullable T read(@NonNull String subject, @NonNull SqlRead<T> body) {
+        DatabaseManager database = plugin.getDatabaseManager();
+        try {
+            T result = body.run();
+            database.readSucceeded(subject);
+            return result;
+        } catch (Exception e) {
+            database.readFailed(subject, e);
+            return null;
+        }
+    }
+
+    @FunctionalInterface
+    protected interface SqlRead<T> {
+        @NonNull T run() throws SQLException;
+    }
+
     protected static void selectByKeys(@NonNull String query, @NonNull String keyColumn, @Nullable Set<String> keys, @NonNull RowConsumer consumer) throws SQLException {
         if (keys == null) {
             for (DbRow row : DB.getResults(query)) {

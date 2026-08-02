@@ -16,7 +16,7 @@
 #   <gradient:$secondary:$primary>...</gradient>
 #
 # Dynamic placeholders are filled by the plugin per message and only work in the message they already appear in (moving them to other keys does nothing):
-#   <aliases> <amount> <block> <blocks> <boat> <button> <code> <command> <context> <count> <delay> <description> <duration> <error> <hitbox> <input> <module> <name> <sandbox> <setting> <source> <sub> <subcommands> <target> <value> <variant> <x> <y> <z>
+#   <aliases> <amount> <block> <blocks> <boat> <button> <code> <command> <context> <count> <delay> <description> <duration> <error> <input> <module> <name> <padding> <sandbox> <setting> <source> <sub> <subcommands> <target> <value> <variant> <x> <y> <z>
 #
 # <prefix> inserts the `prefix` value you can modify below
 # ─────────────────────────────────────────────────────────────────────────────
@@ -84,8 +84,8 @@ commands:
       block_not_found: "<prefix><danger>Block is not in the boostpad list</danger>"
       status_enabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><br>  <muted>●</muted> <neutral>Status: <primary>enabled</primary></neutral><br><blocks>"
       status_disabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><br>  <muted>●</muted> <neutral>Status: <danger>disabled</danger></neutral><br><blocks>"
-      item_enabled: "  <muted>●</muted> <accent><block></accent> <muted>→</muted> <neutral><primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><hitbox>%</primary> hitbox</neutral>"
-      item_disabled: "  <muted>●</muted> <danger><block></danger> <muted>→</muted> <neutral><primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><hitbox>%</primary> hitbox</neutral>"
+      item_enabled: "  <muted>●</muted> <accent><block></accent> <muted>→</muted> <neutral><primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><padding></primary> padding</neutral>"
+      item_disabled: "  <muted>●</muted> <danger><block></danger> <muted>→</muted> <neutral><primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><padding></primary> padding</neutral>"
       empty: "  <muted>●</muted> <muted_dark>(none configured)</muted_dark>"
       enabled: "<prefix><neutral>Boostpads <primary>enabled</primary></neutral>"
       disabled: "<prefix><neutral>Boostpads <danger>disabled</danger></neutral>"

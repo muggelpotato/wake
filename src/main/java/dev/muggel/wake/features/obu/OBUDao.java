@@ -89,17 +89,12 @@ public class OBUDao extends WakeDao {
     }
 
     public @Nullable Boolean hasAnyContexts() {
-        try {
-            return DB.getFirstColumn("SELECT name FROM wake_obu_contexts LIMIT 1") != null;
-        } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to probe OBU contexts", e);
-            return null;
-        }
+        return read("wake_obu_contexts", () -> DB.getFirstColumn("SELECT name FROM wake_obu_contexts LIMIT 1") != null);
     }
 
     public @Nullable Map<String, OBUContext> loadContexts(@Nullable Set<String> keys) {
-        Map<String, OBUContext> found = new HashMap<>();
-        try {
+        return read("wake_obu_contexts", () -> {
+            Map<String, OBUContext> found = new HashMap<>();
             Map<String, List<OBUSetting>> settingsByContext = new HashMap<>();
             List<DbRow> contextRows = new ArrayList<>();
             selectByKeys("SELECT * FROM wake_obu_contexts", "name", keys, contextRows::add);
@@ -125,13 +120,10 @@ public class OBUDao extends WakeDao {
                 found.put(name, new OBUContext(name, type, owner,
                         settingsByContext.getOrDefault(name, List.of())));
             }
-        } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to load OBU contexts", e);
-            return null;
-        }
-        found.put(OBUDefinition.CONTEXT_EMPTY,
-                new OBUContext(OBUDefinition.CONTEXT_EMPTY, ContextType.SERVER, null, List.of()));
-        return found;
+            found.put(OBUDefinition.CONTEXT_EMPTY,
+                    new OBUContext(OBUDefinition.CONTEXT_EMPTY, ContextType.SERVER, null, List.of()));
+            return found;
+        });
     }
 
     public void saveContext(@NonNull OBUContext context, @NonNull List<SqlStatement> extraStatements) {
@@ -212,15 +204,12 @@ public class OBUDao extends WakeDao {
         if (plugin.getDatabaseManager().isDegraded()) {
             return null;
         }
-        try {
+        return read("player state", () -> {
             var row = DB.getFirstRow("SELECT active_sandbox, active_context FROM wake_obu_player_states WHERE player_uuid = ?", uuid.toString());
             return row == null
                     ? new OBUPlayerState(null, null)
                     : new OBUPlayerState(row.getString("active_sandbox"), row.getString("active_context"));
-        } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to load player state", e);
-            return null;
-        }
+        });
     }
 
     public void updateSandboxAccessTime(@NonNull String name) {
@@ -233,16 +222,13 @@ public class OBUDao extends WakeDao {
         if (plugin.getDatabaseManager().isDegraded()) {
             return null;
         }
-        List<String> oldSandboxes = new ArrayList<>();
-        try {
+        return read("old sandboxes", () -> {
+            List<String> oldSandboxes = new ArrayList<>();
             var results = DB.getResults("SELECT name FROM wake_obu_contexts WHERE type = 'SANDBOX' AND last_accessed_at < ?", cutoffTimeMillis);
             for (var row : results) {
                 oldSandboxes.add(row.getString("name"));
             }
-        } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to fetch old sandboxes", e);
-            return null;
-        }
-        return oldSandboxes;
+            return oldSandboxes;
+        });
     }
 }

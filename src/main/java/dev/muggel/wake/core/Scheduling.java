@@ -37,6 +37,17 @@ public final class Scheduling {
         }
     }
 
+    public static void later(@NonNull Wake plugin, @NonNull Runnable task, long delayTicks) {
+        if (!plugin.isEnabled()) {
+            return;
+        }
+        try {
+            Bukkit.getScheduler().runTaskLater(plugin, task, delayTicks);
+        } catch (IllegalPluginAccessException disabledMidSubmit) {
+            // dropped
+        }
+    }
+
     public static @Nullable BukkitTask laterAsync(@NonNull Wake plugin, @NonNull Runnable task, long delayTicks) {
         if (!plugin.isEnabled()) {
             return null;

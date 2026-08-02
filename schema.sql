@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS wake_drydock_boostpads (
     force_y DOUBLE NOT NULL,
     force_z DOUBLE NOT NULL,
     delay_ms BIGINT NOT NULL,
-    hitbox_percent INT NOT NULL
+    padding DOUBLE NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS wake_obu_contexts (

@@ -113,6 +113,9 @@ public final class Wake extends JavaPlugin {
         if (messageManager != null) {
             messageManager.reload();
         }
+        if (databaseManager != null) {
+            databaseManager.invalidateAllMirrors();
+        }
         List<Component> feedback = Collections.emptyList();
         if (moduleManager != null) {
             feedback = moduleManager.syncModules();

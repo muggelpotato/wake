@@ -15,10 +15,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Level;
 
 public class DrydockDao extends WakeDao {
-    private static final String UPSERT_BOOSTPAD = "REPLACE INTO wake_drydock_boostpads (block_key, enabled, force_x, force_y, force_z, delay_ms, hitbox_percent) VALUES (?, ?, ?, ?, ?, ?, ?)";
+    private static final String UPSERT_BOOSTPAD = "REPLACE INTO wake_drydock_boostpads (block_key, enabled, force_x, force_y, force_z, delay_ms, padding) VALUES (?, ?, ?, ?, ?, ?, ?)";
     private final CachedStore<BoostpadConfig> boostpads = mirror("wake_drydock_boostpads", this::readBoostpads);
     public DrydockDao(Wake plugin) {
         super(plugin);
@@ -39,7 +38,7 @@ public class DrydockDao extends WakeDao {
                     force_y DOUBLE NOT NULL,
                     force_z DOUBLE NOT NULL,
                     delay_ms BIGINT NOT NULL,
-                    hitbox_percent INT NOT NULL
+                    padding DOUBLE NOT NULL
                 );
                 """);
     }
@@ -49,8 +48,8 @@ public class DrydockDao extends WakeDao {
     }
 
     private @Nullable Map<String, BoostpadConfig> readBoostpads(@Nullable Set<String> keys) {
-        Map<String, BoostpadConfig> pads = new ConcurrentHashMap<>();
-        try {
+        return read("wake_drydock_boostpads", () -> {
+            Map<String, BoostpadConfig> pads = new ConcurrentHashMap<>();
             selectByKeys("SELECT * FROM wake_drydock_boostpads", "block_key", keys, row -> {
                 String key = row.getString("block_key");
                 pads.put(key, new BoostpadConfig(
@@ -60,14 +59,11 @@ public class DrydockDao extends WakeDao {
                         ((Number) row.get("force_y")).doubleValue(),
                         ((Number) row.get("force_z")).doubleValue(),
                         ((Number) row.get("delay_ms")).longValue(),
-                        ((Number) row.get("hitbox_percent")).intValue()
+                        ((Number) row.get("padding")).doubleValue()
                 ));
             });
-        } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to load boostpads from database", e);
-            return null;
-        }
-        return pads;
+            return pads;
+        });
     }
 
     private static boolean toBoolean(Object raw) {
@@ -91,6 +87,6 @@ public class DrydockDao extends WakeDao {
 
     private static Object @NonNull [] upsertParams(@NonNull BoostpadConfig config) {
         return new Object[]{config.blockKey(), config.enabled(), config.forceX(), config.forceY(),
-                config.forceZ(), config.delayMs(), config.hitboxPercent()};
+                config.forceZ(), config.delayMs(), config.padding()};
     }
 }

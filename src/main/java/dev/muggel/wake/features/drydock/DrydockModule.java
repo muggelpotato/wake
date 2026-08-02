@@ -82,7 +82,7 @@ public class DrydockModule extends AbstractModule {
             yaml.set(path + ".force_y", config.forceY());
             yaml.set(path + ".force_z", config.forceZ());
             yaml.set(path + ".delay_ms", config.delayMs());
-            yaml.set(path + ".hitbox_percent", config.hitboxPercent());
+            yaml.set(path + ".padding", config.padding());
             count++;
         }
         yaml.set("boostpads_enabled", getPlugin().getStateDao().get(BoostpadCommand.STATE_KEY_ENABLED, BoostpadCommand.DEFAULT_ENABLED));
@@ -100,8 +100,8 @@ public class DrydockModule extends AbstractModule {
                 double forceY = padsSec.getDouble(key + ".force_y", 0);
                 double forceZ = padsSec.getDouble(key + ".force_z", 0);
                 long delayMs = padsSec.getLong(key + ".delay_ms", 1000);
-                int hitboxPercent = padsSec.getInt(key + ".hitbox_percent", BoostpadConfig.DEFAULT_HITBOX_PERCENT);
-                BoostpadConfig config = new BoostpadConfig(key, enabled, forceX, forceY, forceZ, delayMs, hitboxPercent);
+                double padding = padsSec.getDouble(key + ".padding", BoostpadConfig.DEFAULT_PADDING);
+                BoostpadConfig config = new BoostpadConfig(key, enabled, forceX, forceY, forceZ, delayMs, padding);
                 try {
                     drydockDao.importBoostpad(config);
                     count++;

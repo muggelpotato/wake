@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.logging.Level;
 
 /**
  * Key-value store for runtime flags and settings (cached in memory, persisted asynchronously). <br>
@@ -59,19 +58,16 @@ public class StateDao extends WakeDao {
     }
 
     private @Nullable Map<String, Object> readState(@Nullable Set<String> keys) {
-        Map<String, Object> loaded = new HashMap<>();
-        try {
+        return read("wake_state", () -> {
+            Map<String, Object> loaded = new HashMap<>();
             selectByKeys("SELECT state_key, state_value FROM wake_state", "state_key", keys, row -> {
                 Object value = gson.fromJson(row.getString("state_value"), Object.class);
                 if (value != null) {
                     loaded.put(row.getString("state_key"), value);
                 }
             });
-        } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to load state from database", e);
-            return null;
-        }
-        return loaded;
+            return loaded;
+        });
     }
 
     @SuppressWarnings("unchecked")
