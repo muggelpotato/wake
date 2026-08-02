@@ -10,7 +10,7 @@ modules:
   axiom:
     enabled: true
 database:
-  type: "sqlite" # sqlite, mariadb (or mysql)
+  type: "sqlite" # sqlite, mariadb
   host: "localhost"
   port: 3306
   database: "wake"

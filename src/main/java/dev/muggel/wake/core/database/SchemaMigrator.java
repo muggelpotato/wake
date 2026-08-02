@@ -10,16 +10,24 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.logging.Level;
 
 /**
  * Runs versioned schema upgrades at boot, before any cache loads. <br>
  * Each {@link WakeDao} declares its target schema version and the SQL steps to upgrade one version to the next. <br>
- * Failed migrations abort module loading.
+ * Failed migrations abort module loading. <br>
+ * On a shared database only the first server gets to migrate {@link #underSchemaLock}
  */
 public class SchemaMigrator {
     private static final String STAMP_VERSION = "REPLACE INTO wake_schema_version (module, version) VALUES (?, ?)";
+    private static final String ACQUIRE_LOCK = "SELECT GET_LOCK(?, ?)";
+    private static final String RELEASE_LOCK = "SELECT RELEASE_LOCK(?)";
+    private static final int LOCK_TIMEOUT_SECONDS = 30;
     private final Wake plugin;
     private final Dialect dialect;
     private boolean backedUp = false;
@@ -35,6 +43,56 @@ public class SchemaMigrator {
                     """);
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to initialize schema version table", e);
+        }
+    }
+
+    public void underSchemaLock(@NonNull String schemaId, @NonNull Runnable body) {
+        if (dialect != Dialect.MARIADB) {
+            body.run();
+            return;
+        }
+        try (Connection connection = DB.getGlobalDatabase().getConnection()) {
+            String lock = "wake_schema_" + connection.getCatalog() + "_" + schemaId;
+            if (!acquire(connection, lock, schemaId)) {
+                throw new IllegalStateException("Waited " + LOCK_TIMEOUT_SECONDS + "s for another server to finish migrating schema '" + schemaId + "', giving up");
+            }
+            try {
+                body.run();
+            } finally {
+                release(connection, lock);
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to lock schema '" + schemaId + "' for migration", e);
+        }
+    }
+
+    private boolean acquire(@NonNull Connection connection, @NonNull String lock, @NonNull String schemaId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(ACQUIRE_LOCK)) {
+            statement.setString(1, lock);
+            statement.setInt(2, 1);
+            for (int attempt = 0; attempt < LOCK_TIMEOUT_SECONDS; attempt++) {
+                try (ResultSet result = statement.executeQuery()) {
+                    if (result.next() && result.getInt(1) == 1) {
+                        if (attempt > 0) {
+                            plugin.getLogger().info("Schema '" + schemaId + "' released after " + attempt + "s, continuing");
+                        }
+                        return true;
+                    }
+                }
+                if (attempt == 0) {
+                    plugin.getLogger().info("Another server is migrating schema '" + schemaId + "', waiting up to " + LOCK_TIMEOUT_SECONDS + "s");
+                }
+            }
+            return false;
+        }
+    }
+
+    private void release(@NonNull Connection connection, @NonNull String lock) {
+        try (PreparedStatement statement = connection.prepareStatement(RELEASE_LOCK)) {
+            statement.setString(1, lock);
+            statement.execute();
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to release schema lock '" + lock + "' (it drops when this connection closes)", e);
         }
     }
 

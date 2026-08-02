@@ -55,17 +55,24 @@ public abstract class WakeDao {
         SchemaMigrator migrator = plugin.getDatabaseManager().getSchemaMigrator();
         String schemaId = schemaId();
         int target = targetSchemaVersion();
-        Integer stored = migrator.storedVersion(schemaId);
-        if (stored != null && stored > target) {
-            throw new IllegalStateException("Database schema '" + schemaId + "' is v" + stored + " but this build supports v" + target + ": update the Wake jar on this server");
+        Integer current = migrator.storedVersion(schemaId);
+        if (current != null && current == target) {
+            createTables();
+            return;
         }
-        if (stored != null && stored < target) {
-            migrator.migrate(this, schemaId, stored, target);
-        }
-        createTables();
-        if (stored == null) {
-            migrator.stamp(schemaId, target);
-        }
+        migrator.underSchemaLock(schemaId, () -> {
+            Integer stored = migrator.storedVersion(schemaId);
+            if (stored != null && stored > target) {
+                throw new IllegalStateException("Database schema '" + schemaId + "' is v" + stored + " but this build supports v" + target + ": update the Wake jar on this server");
+            }
+            if (stored != null && stored < target) {
+                migrator.migrate(this, schemaId, stored, target);
+            }
+            createTables();
+            if (stored == null) {
+                migrator.stamp(schemaId, target);
+            }
+        });
     }
 
     private void createTables() {

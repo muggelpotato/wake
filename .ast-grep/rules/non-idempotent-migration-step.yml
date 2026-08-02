@@ -1,0 +1,25 @@
+id: non-idempotent-migration-step
+language: Java
+severity: error
+message: Migration step is not re-runnable — write it with IF NOT EXISTS.
+note: |
+  MariaDB commits DDL implicitly, so a migration cannot be a transaction there: a step that fails
+  partway, or a server killed mid-migration, leaves the schema ahead of `wake_schema_version`.
+  The retry then dies on the half that already applied and the module stays off until someone
+  repairs the database by hand.
+  Written with `IF NOT EXISTS` every step is re-runnable, so the next server to boot takes the
+  schema lock and converges the database on its own with no manual repair.
+  `ALTER TABLE t ADD COLUMN IF NOT EXISTS c ...`, `CREATE TABLE IF NOT EXISTS ...`,
+  `CREATE INDEX IF NOT EXISTS ...`.
+rule:
+  all:
+    - kind: string_literal
+    - regex: "(?i)\\b(ADD|CREATE)\\b"
+    - not:
+        regex: "(?i)\\bIF\\s+NOT\\s+EXISTS\\b"
+    - inside:
+        kind: method_declaration
+        has:
+          field: name
+          regex: "^migrationSteps$"
+        stopBy: end

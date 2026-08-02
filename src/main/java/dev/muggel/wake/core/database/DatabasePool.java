@@ -13,7 +13,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.io.File;
 import java.lang.reflect.Field;
-import java.util.Locale;
 import java.util.logging.Level;
 
 /** Opens the connection pool everything else in the layer runs on at boot */
@@ -30,7 +29,7 @@ final class DatabasePool {
         if (config == null) {
             plugin.getLogger().warning("Database configuration missing, defaulting to SQLite");
             openSQLite(plugin);
-        } else if (isMySQLFamily(config.getString("type", "sqlite"))) {
+        } else if ("mariadb".equalsIgnoreCase(config.getString("type", "sqlite"))) {
             dialect = Dialect.MARIADB;
             openMariaDB(plugin, config);
         } else {
@@ -43,11 +42,6 @@ final class DatabasePool {
             throw new IllegalStateException("Database connection test failed", e);
         }
         return new Handle(dialect, dataSource);
-    }
-
-    private static boolean isMySQLFamily(@NonNull String type) {
-        String lower = type.toLowerCase(Locale.ROOT);
-        return "mariadb".equals(lower) || "mysql".equals(lower);
     }
 
     private static void openSQLite(@NonNull Wake plugin) {

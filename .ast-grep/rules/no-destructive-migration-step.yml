@@ -1,0 +1,21 @@
+id: no-destructive-migration-step
+language: Java
+severity: error
+message: Destructive DDL in a migration step — a migration may only add.
+note: |
+  CLAUDE.md (Data & persistence): assume another server shares the database. During a rolling
+  restart the backends still on the old jar keep writing against the old shape, and every write in
+  Wake names its columns explicitly — so a column you *add* is invisible to them, while one you
+  drop, rename or retype breaks their writes. Those failures are not retryable, so they are dropped
+  rather than journaled and the player-visible change silently reverts.
+  Add in one release; remove in a later one, once every backend is on the new jar.
+rule:
+  all:
+    - kind: string_literal
+    - regex: "(?i)\\b(DROP|RENAME|MODIFY|CHANGE|TRUNCATE)\\b"
+    - inside:
+        kind: method_declaration
+        has:
+          field: name
+          regex: "^migrationSteps$"
+        stopBy: end
