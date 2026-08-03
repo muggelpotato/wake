@@ -85,7 +85,6 @@ public class OBUModule extends AbstractModule {
                 .withModule(OBUModule.class)
                 .withPreset(PermissionPreset.BUILDER)
                 .withGate((source, target) -> OBUCommandHelper.requireClient(plugin, source, target))
-                .withDescription("OpenBoatUtils settings and configuration")
                 .aliases("wobu", "wo")
                 .addSubcommand(HelpCommand.getNode(plugin))
                 .addSubcommand(StatusCommand.getNode(plugin))

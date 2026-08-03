@@ -39,7 +39,7 @@ public final class PermissionManager {
         NODE_PRESETS.computeIfAbsent(permissionStr, ignored -> EnumSet.noneOf(PermissionPreset.class)).addAll(presets);
     }
 
-    /** Settles the bundles once the whole tree is compiled */
+    /** Settles the bundles once the whole tree is derived, then registers them */
     static void sealPresets() {
         NODE_PRESETS.keySet().retainAll(EXECUTABLE_NODES);
         for (Map.Entry<String, Set<PermissionPreset>> entry : NODE_PRESETS.entrySet()) {
@@ -54,6 +54,11 @@ public final class PermissionManager {
                 }
             }
         }
+        for (PermissionPreset preset : PermissionPreset.values()) {
+            if (Bukkit.getPluginManager().getPermission(preset.node()) == null) {
+                Bukkit.getPluginManager().addPermission(new Permission(preset.node(), PermissionDefault.FALSE));
+            }
+        }
     }
 
     private static @Nullable String enclosingCommand(@NonNull String permissionStr) {
@@ -64,14 +69,6 @@ public final class PermissionManager {
             }
         }
         return null;
-    }
-
-    static void registerPresets() {
-        for (PermissionPreset preset : PermissionPreset.values()) {
-            if (Bukkit.getPluginManager().getPermission(preset.node()) == null) {
-                Bukkit.getPluginManager().addPermission(new Permission(preset.node(), PermissionDefault.FALSE));
-            }
-        }
     }
 
     /** Registers the node so admins can discover it, and records the parent link {@link #canReach} walks */

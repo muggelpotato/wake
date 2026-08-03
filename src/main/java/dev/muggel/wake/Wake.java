@@ -56,10 +56,10 @@ public final class Wake extends JavaPlugin {
         this.tickClock = new TickClock();
         this.vehiclePath = new VehiclePath(this);
         getServer().getPluginManager().registerEvents(tickClock, this);
-        WakeCommandManager.init(this);
         this.moduleManager = new ModuleManager(this);
         registerModules();
         moduleManager.buildAllCommands();
+        WakeCommandManager.init(this);
         moduleManager.syncModules();
     }
 

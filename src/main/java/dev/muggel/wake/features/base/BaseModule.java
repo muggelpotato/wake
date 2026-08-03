@@ -30,7 +30,6 @@ public class BaseModule extends AbstractModule {
     public CommandNode buildCommands(Wake plugin) {
         return CommandNode.literal("wake")
                 .withModule(BaseModule.class)
-                .withDescription("Main command for Wake")
                 .aliases("wa")
                 .addSubcommand(HelpCommand.getNode(plugin))
                 .addSubcommand(ReloadCommand.getNode(plugin))

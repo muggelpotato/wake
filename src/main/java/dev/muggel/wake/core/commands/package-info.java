@@ -6,16 +6,28 @@
  * {@code literal(...)} for fixed words, {@code argument(...)} for typed values. <br>
  * Chain positional arguments with {@code arguments(...)}; use {@code addSubcommand(...)} only for real branches. <br>
  * A module returns its root node from {@code buildCommands(Wake)} and the framework does the rest. <br>
- * Declare {@code .withModule(...)} once, on the root (every child inherits it). <br>
- * Re-declare only on a node that belongs to a different module than its parent.
+ * Declare {@code .withModule(...)} on the root (every child inherits).
  *
  * <h2>What is automatic</h2>
  * <ul>
  *   <li><b>Permissions.</b> Each literal becomes a permission node {@code wake.<module>.commands.<literal>...} (a leading {@code -} is stripped). Arguments don't extend the path. The most specific rule wins, so {@code wake} grants everything and a {@code false} deeper down takes one command back, or the other way round. A command the sender may not run is never shown, and a group node lasts exactly as long as it still leads to a command they may run. Never declare permissions in {@code plugin.yml} or write permission strings by hand</li>
- *   <li><b>Permission bundles.</b> {@code .withPreset(...)} files a node and everything below it under a {@link dev.muggel.wake.core.commands.PermissionPreset}, and {@code .withoutPresets()} takes a sub-command back out of the bundles it inherited. A bundle is the floor that every handwritten permission outranks (it only grants). A command hides everything below it, so a bundle on a sub-command has to be on the commands above it too; the boot fails if it isn't. Whole branches need no bundle -> {@code wake} grants every command and {@code wake.<module>} one module's etc.</li>
- *   <li><b>Module gating:</b> A command whose module is disabled is hidden and blocked with a localized message before the executor runs. Command bodies never re-check module presence</li>
+ *   <li><b>Permission bundles.</b> {@code .withPreset(...)} files a node and everything below it under a {@link dev.muggel.wake.core.commands.PermissionPreset} (calls accumulate), and {@code .withoutPresets()} takes a sub-command back out of the bundles it inherited. A bundle is the floor that every handwritten permission outranks (it only grants). A command hides everything below it, so a bundle on a sub-command has to be on the commands above it too; the boot fails if it isn't. Whole branches need no bundle -> {@code wake} grants every command and {@code wake.<module>} one module's etc.</li>
+ *   <li><b>Module gating:</b> A command whose module is disabled is hidden. Command bodies never re-check module presence</li>
  *   <li><b>Gates.</b> {@code .withGate(...)} guards a whole branch (e.g. "needs the OBU client"), checked after the target is resolved. One declaration covers every command below it; {@code Gate.OPEN} lifts it again for a sub-branch that doesn't need it</li>
- *   <li><b>Errors.</b> Exceptions from executors are caught, logged, and reported to the sender</li>
+ *   <li><b>Errors.</b> An executor that throws is caught, logged and answered with {@code commands.error}. A suggester that throws is caught, logged and suggests nothing</li>
+ * </ul>
+ *
+ * <h2>What fails the boot</h2>
+ * The whole tree is derived and checked once, before Brigadier sees it, so a mistake here stops Wake from enabling instead of registering half a command tree. Wake refuses to start when:
+ * <ul>
+ *   <li>A root is an argument, declares no module, or declares a module that was never registered</li>
+ *   <li>A node below a root declares {@code .withModule(...)}</li>
+ *   <li>Two roots claim the same name or alias, or two literals derive the same permission</li>
+ *   <li>A literal is not {@code -?[a-z0-9][a-z0-9_-]*}</li>
+ *   <li>A node has neither an executor nor sub-commands, so nothing could ever reach it</li>
+ *   <li>A bundle names a sub-command the same bundle cannot reach, because a command above it is not in it</li>
+ *   <li>{@code .suggests(...)} is attached to a literal, which has nothing to suggest</li>
+ *   <li>one node declares {@code .withoutPresets()} and then {@code .withPreset(...)}, which would hand back what the first call took away</li>
  * </ul>
  *
  * <h2>Subject and audience</h2>
@@ -51,6 +63,7 @@
  *
  * <h2>Failure and text</h2>
  * Report failure to the sender as a localized message key, never an exception. <br>
- * All player-facing text follows the rules in {@code core/text}.
+ * All player-facing text follows the rules in {@code core/text}. <br>
+ * The database actor is only set while the executor runs: an executor that hands its writes to another thread or a later tick leaves them unattributed, so the player never hears that the database was down.
  */
 package dev.muggel.wake.core.commands;

@@ -56,7 +56,7 @@ public class StatusCommand {
         if (player.getVehicle() instanceof Boat ridden) {
             return ridden;
         }
-        Entity aimed = player.getTargetEntity(CommandNode.AIM_DISTANCE);
+        Entity aimed = player.getTargetEntity(CommandNode.TargetType.AIM_DISTANCE);
         return aimed instanceof Boat boat ? boat : null;
     }
 

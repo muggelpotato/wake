@@ -11,10 +11,12 @@ import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.Unmodifiable;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -23,13 +25,11 @@ import java.util.Set;
  * Fluent builder for a node in Wake's command tree. <br>
  * A node is either a {@link #literal(String) literal} (fixed sub-command word) or an {@link #argument(String, ArgumentType) argument} (typed value). <br>
  * Children are attached with {@link #arguments(CommandNode...)} for a positional chain or {@link #addSubcommand(CommandNode)} for a branch. <br>
- * {@link WakeCommandManager} compiles the tree and derives each permission from the chain of literal names and owning module. <br>
+ * {@link WakeCommandManager} derives each permission from the chain of literal names and the owning module, then compiles the tree. <br>
  * An executor picks what it receives through the {@code executes...} flavor it is attached with (see {@link TargetType}). <br>
  * See the package documentation for the full command-authoring convention.
  */
 public class CommandNode {
-    public static final int AIM_DISTANCE = 16;
-
     /** How the framework resolves the object handed to an executor */
     public enum TargetType {
         /** player or console, or the entity behind {@code /execute as} (never fails) */
@@ -73,6 +73,9 @@ public class CommandNode {
             }
         };
 
+        /** How far {@link #ENTITY_OR_AIMED_BOAT} looks for a boat, and the reach every other aimed lookup matches */
+        public static final int AIM_DISTANCE = 16;
+
         abstract @Nullable Object resolve(@NonNull CommandSourceStack source, @NonNull Wake plugin);
     }
 
@@ -100,9 +103,9 @@ public class CommandNode {
     private final ArgumentType<?> argumentType;
     private final List<CommandNode> children = new ArrayList<>();
     private final List<String> aliases = new ArrayList<>();
-    private String description = "";
     private String helpKey;
     private Class<? extends WakeModule> moduleClass;
+    private String moduleId = "";
     private String permission = "";
     private Set<PermissionPreset> presets;
     private Gate gate;
@@ -126,16 +129,13 @@ public class CommandNode {
         return new CommandNode(name, true, argumentType);
     }
 
-    public CommandNode withDescription(String description) {
-        this.description = description;
-        return this;
-    }
-
+    /** The lang key a module's own help command prints for this node */
     public CommandNode withHelpKey(String helpKey) {
         this.helpKey = helpKey;
         return this;
     }
 
+    /** Declared once, on the root: the module the whole tree belongs to */
     public CommandNode withModule(Class<? extends WakeModule> moduleClass) {
         this.moduleClass = moduleClass;
         return this;
@@ -143,11 +143,17 @@ public class CommandNode {
 
     /** Files this node and everything below it under bundles, on top of the ones it inherited */
     public CommandNode withPreset(@NonNull PermissionPreset preset, PermissionPreset @NonNull ... more) {
-        this.presets = EnumSet.of(preset, more);
+        if (presets != null && presets.isEmpty()) {
+            throw new IllegalStateException("Node '" + name + "' declares withoutPresets() and then withPreset(): the second hands back what the first took away");
+        }
+        Set<PermissionPreset> declared = presets == null ? EnumSet.noneOf(PermissionPreset.class) : presets;
+        declared.add(preset);
+        Collections.addAll(declared, more);
+        this.presets = declared;
         return this;
     }
 
-    /** Takes this node and everything below it back out of every bundle its parent filed it under */
+    /** Takes this node and everything below it back out of every bundle above it, and out of any declared before the call */
     public CommandNode withoutPresets() {
         this.presets = EnumSet.noneOf(PermissionPreset.class);
         return this;
@@ -178,13 +184,17 @@ public class CommandNode {
         return this;
     }
 
+    /** Suggestions belong to the value being typed, so only an argument can carry them */
     public CommandNode suggests(SuggestionProvider<CommandSourceStack> provider) {
+        if (!isArgument) {
+            throw new IllegalStateException("Literal '" + name + "' cannot carry suggestions: attach them to the argument below it");
+        }
         this.customSuggester = provider;
         return this;
     }
 
     @SuppressWarnings("unchecked")
-    public <T> CommandNode executes(TargetType targetType, CommandExecution<T> execution) {
+    private <T> CommandNode executes(TargetType targetType, CommandExecution<T> execution) {
         this.targetType = targetType;
         this.executor = (target, ctx) -> execution.run(ctx, (T) target);
         return this;
@@ -209,11 +219,12 @@ public class CommandNode {
     public @NonNull String getName() { return name; }
     public boolean isArgument() { return isArgument; }
     public @Nullable ArgumentType<?> getArgumentType() { return argumentType; }
-    public @NonNull List<CommandNode> getChildren() { return children; }
-    public @NonNull List<String> getAliases() { return aliases; }
-    public @NonNull String getDescription() { return description; }
+    public @NonNull @Unmodifiable List<CommandNode> getChildren() { return Collections.unmodifiableList(children); }
+    public @NonNull @Unmodifiable List<String> getAliases() { return Collections.unmodifiableList(aliases); }
     public @Nullable String getHelpKey() { return helpKey; }
     public @Nullable Class<? extends WakeModule> getModuleClass() { return moduleClass; }
+    @NonNull String getModuleId() { return moduleId; }
+    void setModuleId(@NonNull String moduleId) { this.moduleId = moduleId; }
     public @NonNull String getPermission() { return permission; }
     void setPermission(@NonNull String permission) { this.permission = permission; }
     @Nullable Set<PermissionPreset> getPresets() { return presets; }

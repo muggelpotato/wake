@@ -5,7 +5,6 @@ import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.muggel.wake.Wake;
-import dev.muggel.wake.core.text.MessageManager;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
@@ -78,9 +77,7 @@ public final class CommandHelper {
                 Placeholder.component("name", plugin.getMessageManager().getComponent(featureKey)));
     }
 
-    public static @NonNull Component moduleDescription(@NonNull Wake plugin, @NonNull String moduleId, @NonNull CommandNode root) {
-        String key = "commands.help.module." + moduleId;
-        MessageManager mm = plugin.getMessageManager();
-        return mm.hasKey(key) ? mm.getComponent(key) : Component.text(root.getDescription());
+    public static @NonNull Component moduleDescription(@NonNull Wake plugin, @NonNull CommandNode root) {
+        return plugin.getMessageManager().getComponent("commands.help.module." + root.getModuleId());
     }
 }

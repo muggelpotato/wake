@@ -35,12 +35,14 @@ public final class ModuleManager {
     }
 
     public void buildAllCommands() {
+        List<CommandNode> roots = new ArrayList<>();
         for (WakeModule module : registeredModules) {
             CommandNode root = module.buildCommands(plugin);
             if (root != null) {
-                WakeCommandManager.register(root);
+                roots.add(root);
             }
         }
+        WakeCommandManager.declare(plugin, roots);
     }
 
     public @NonNull List<Component> syncModules() {

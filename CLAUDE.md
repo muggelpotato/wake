@@ -32,7 +32,9 @@ Modules today: `base` (plugin chrome + shared commands), `obu` (OpenBoatUtils in
    the provider never learns the consumer exists.
 2. **Clean lifecycle.** A module must fully reverse itself: anything registered on enable is undone
    on disable, so it can be toggled off and back on without leaks or duplicates. Use the framework's
-   registration helpers so teardown is automatic rather than hand-rolled.
+   registration helpers so teardown is automatic rather than hand-rolled. Commands are the one thing
+   that does not reverse: the tree is declared once at boot and stays declared, and a disabled
+   module's commands are hidden at query time rather than unregistered.
 3. **Optional integrations.** Every third-party plugin or mod is optional. Gate on a runtime
    capability check and reach it by reflection — never a hard import or hard dependency. Wake must
    start and run correctly with none of them present.
@@ -61,7 +63,9 @@ Modules today: `base` (plugin chrome + shared commands), `obu` (OpenBoatUtils in
 Register commands through the project's command framework, never Bukkit `CommandExecutor`.
 Permissions are derived from command structure automatically — don't declare them in `plugin.yml`
 or hand-write permission strings. Command handlers report failure to the user as a localized
-message, never an exception.
+message, never an exception. A tree that cannot work — a name that collides, a permission two nodes
+both claim, a node nothing can reach — is rejected at boot with a message naming it, never skipped
+quietly and never half-registered.
 
 File layout and helper conventions live in `core/commands/package-info.java` and are non-negotiable:
 one class per command node (`getNode` builds the tree, private methods hold the logic); sub-commands

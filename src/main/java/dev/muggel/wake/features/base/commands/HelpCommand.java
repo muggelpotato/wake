@@ -8,7 +8,6 @@ import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.PermissionManager;
 import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.core.commands.WakeCommandManager;
-import dev.muggel.wake.core.module.WakeModule;
 import dev.muggel.wake.core.text.MessageManager;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
@@ -34,21 +33,13 @@ public class HelpCommand {
         MessageManager mm = plugin.getMessageManager();
         mm.send(sender, "commands.help.header");
         for (CommandNode root : WakeCommandManager.getRegisteredRoots()) {
-            String moduleId = WakeCommandManager.moduleIdOf(plugin, root);
-            if (moduleId == null) {
-                continue;
-            }
-            Class<? extends WakeModule> moduleClass = root.getModuleClass();
-            if (moduleClass != null && plugin.getModule(moduleClass) == null) {
-                continue;
-            }
-            if (!PermissionManager.canReach(sender, root.getPermission())) {
+            if (!WakeCommandManager.isModuleActive(plugin, root) || !PermissionManager.canReach(sender, root.getPermission())) {
                 continue;
             }
             mm.send(sender, "commands.help.entry",
                     Placeholder.parsed("command", root.getName()),
                     Placeholder.unparsed("aliases", aliasText(root)),
-                    Placeholder.component("description", CommandHelper.moduleDescription(plugin, moduleId, root)),
+                    Placeholder.component("description", CommandHelper.moduleDescription(plugin, root)),
                     Placeholder.component("subcommands", subcommandHover(plugin, sender, root)));
         }
         return Command.SINGLE_SUCCESS;

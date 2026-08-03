@@ -42,7 +42,6 @@ public class DrydockModule extends AbstractModule {
         return CommandNode.literal("drydock")
                 .withModule(DrydockModule.class)
                 .withPreset(PermissionPreset.BUILDER)
-                .withDescription("Commands for the Drydock server")
                 .aliases("dd")
                 .addSubcommand(BoostpadCommand.getNode(plugin))
                 .addSubcommand(GetBoatCommand.getNode(plugin));
