@@ -45,7 +45,7 @@ class OutageMonitor {
     private final AtomicBoolean watchdogActive = new AtomicBoolean();
     private volatile boolean degraded = false;
     private volatile @Nullable UUID lastPendingActor;
-    private volatile @Nullable HikariDataSource probeSource;
+    private volatile HikariDataSource probeSource;
     OutageMonitor(@NonNull Wake plugin, @NonNull IntSupplier pendingWrites, @NonNull LongSupplier completedWrites, @NonNull Consumer<Runnable> onWriterThread) {
         this.plugin = plugin;
         this.journal = new OutageJournal(plugin);
@@ -54,7 +54,7 @@ class OutageMonitor {
         this.onWriterThread = onWriterThread;
     }
 
-    void probeVia(@Nullable HikariDataSource dataSource) {
+    void probeVia(@NonNull HikariDataSource dataSource) {
         this.probeSource = dataSource;
     }
 
@@ -149,16 +149,7 @@ class OutageMonitor {
     }
 
     private boolean probeConnectionAlive() {
-        HikariDataSource dataSource = this.probeSource;
-        if (dataSource == null) {
-            try {
-                DB.getFirstColumn(DatabasePool.PROBE_QUERY);
-                return true;
-            } catch (Exception unreachable) {
-                return false;
-            }
-        }
-        try (Connection connection = dataSource.getConnection()) {
+        try (Connection connection = probeSource.getConnection()) {
             return connection.isValid(1);
         } catch (Exception unreachable) {
             return false;
