@@ -11,6 +11,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
+import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Locale;
@@ -54,11 +55,22 @@ public final class CommandHelper {
     public static @NonNull CompletableFuture<Suggestions> suggestMatching(@NonNull SuggestionsBuilder builder, @NonNull Iterable<String> options) {
         String remaining = builder.getRemaining().toLowerCase(Locale.ROOT);
         for (String option : options) {
-            if (option.toLowerCase(Locale.ROOT).startsWith(remaining)) {
+            if (suggestionMatches(remaining, option.toLowerCase(Locale.ROOT))) {
                 builder.suggest(option);
             }
         }
         return builder.buildFuture();
+    }
+
+    @Contract(pure = true)
+    public static boolean suggestionMatches(@NonNull String typed, @NonNull String candidate) {
+        for (int at = 0; !candidate.startsWith(typed, at); at++) {
+            at = candidate.indexOf('_', at);
+            if (at < 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static void toggle(@NonNull Wake plugin, @NonNull CommandSender sender, @NonNull String featureKey, boolean enabled) {

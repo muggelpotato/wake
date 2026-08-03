@@ -75,7 +75,6 @@ commands:
     getboat:
       success: "<prefix><neutral>Gave a <primary><boat></primary> item with variant <accent><variant></accent></neutral>"
       fail: "<prefix><danger>Failed to create the boat item</danger>"
-      invalid_boat: "<prefix><danger>Invalid boat type specified</danger>"
       variant_oars: 'parkour (with oars)'
       variant_no_oars: 'parkour (no oars)'
     boostpad:

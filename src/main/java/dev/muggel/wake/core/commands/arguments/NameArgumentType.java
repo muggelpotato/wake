@@ -58,10 +58,7 @@ public final class NameArgumentType implements CustomArgumentType<String, String
             input = reader.getRemaining();
             reader.setCursor(reader.getTotalLength());
         } else {
-            while (reader.canRead() && reader.peek() != ' ') {
-                reader.skip();
-            }
-            input = reader.getString().substring(start, reader.getCursor());
+            input = reader.readUnquotedString();
         }
         String name = input.trim().toLowerCase(Locale.ROOT);
         if (rule != null && !rule.pattern().matcher(name).matches()) {

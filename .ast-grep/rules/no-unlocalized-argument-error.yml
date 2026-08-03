@@ -1,0 +1,20 @@
+id: no-unlocalized-argument-error
+language: Java
+severity: error
+message: Hand-built Brigadier parse error — build it with ArgumentHelper.localizedException so the refusal is localized.
+note: |
+  CLAUDE.md (Commands): a handler reports failure to the user as a localized message, never an
+  exception. An argument type is the first thing that can refuse a player, and Brigadier's exception
+  types take a raw Message — so a hand-built one ships an English string no lang file can reach and
+  no translation can override. `ArgumentHelper.localizedException("commands.some_key")` resolves the
+  key through MessageManager at throw time and inserts the player's input with Placeholder.unparsed,
+  so the value cannot inject markup either. Add the key to lang/en_us.yml and use the helper.
+ignores:
+  # The helper itself: the one place a Brigadier exception type is built.
+  - "**/core/commands/arguments/ArgumentHelper.java"
+rule:
+  any:
+    - pattern: new SimpleCommandExceptionType($$$)
+    - pattern: new DynamicCommandExceptionType($$$)
+    - pattern: new Dynamic2CommandExceptionType($$$)
+    - pattern: new LiteralMessage($$$)

@@ -5,13 +5,12 @@ import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.PermissionPreset;
-import dev.muggel.wake.core.commands.arguments.BoatTypeArgumentType;
+import dev.muggel.wake.core.commands.arguments.KeyArgumentType;
 import dev.muggel.wake.core.commands.arguments.WakeEnumArgumentType;
 import dev.muggel.wake.core.text.MessageManager;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.command.CommandSender;
@@ -30,7 +29,7 @@ public class GetBoatCommand {
         return CommandNode.literal("getboat")
                 .withPreset(PermissionPreset.PLAYER)
                 .arguments(
-                        CommandNode.argument("boat_type", BoatTypeArgumentType.boatType()),
+                        CommandNode.argument("boat_type", KeyArgumentType.boatType()),
                         CommandNode.argument("variant", WakeEnumArgumentType.wakeEnum(Variant.class))
                                 .executesPlayer((ctx, player) -> executeGive(ctx, player, plugin, false)),
                         CommandNode.argument("oars", WakeEnumArgumentType.wakeEnum(Oars.class))
@@ -52,12 +51,7 @@ public class GetBoatCommand {
             plugin.getMessageManager().send(audience, "commands.requires_version");
             return;
         }
-        Material mat = Material.matchMaterial(boatType);
-        if (mat == null) {
-            plugin.getMessageManager().send(audience, "commands.drydock.getboat.invalid_boat");
-            return;
-        }
-        String boatId = mat.getKey().getKey();
+        String boatId = MessageManager.stripNamespace(boatType); // the argument type only takes a boat material, so the namespace is always minecraft
         ItemStack item;
         try {
             String itemStr = String.format(Locale.ROOT, "minecraft:%s[minecraft:entity_data={id:\"minecraft:%s\",Air:%d},minecraft:enchantment_glint_override=true]", boatId, boatId, variant);
@@ -68,7 +62,7 @@ public class GetBoatCommand {
             return;
         }
         player.getInventory().addItem(item);
-        plugin.getMessageManager().send(audience, "commands.drydock.getboat.success", Placeholder.unparsed("boat", MessageManager.stripNamespace(boatType)), Placeholder.component("variant", plugin.getMessageManager().getComponent(variantKey(variant))));
+        plugin.getMessageManager().send(audience, "commands.drydock.getboat.success", Placeholder.unparsed("boat", boatId), Placeholder.component("variant", plugin.getMessageManager().getComponent(variantKey(variant))));
     }
 
     private static @NonNull String variantKey(int variant) {

@@ -6,7 +6,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
-import dev.muggel.wake.core.commands.arguments.BlockArgumentType;
+import dev.muggel.wake.core.commands.arguments.KeyArgumentType;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
 import dev.muggel.wake.features.drydock.commands.DrydockCommandHelper;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -16,7 +16,7 @@ public class BoostpadAddCommand {
     static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("add")
                 .arguments(
-                        CommandNode.argument("block", BlockArgumentType.block()),
+                        CommandNode.argument("block", KeyArgumentType.block()),
                         CommandNode.argument("x", DoubleArgumentType.doubleArg()),
                         CommandNode.argument("y", DoubleArgumentType.doubleArg()),
                         CommandNode.argument("z", DoubleArgumentType.doubleArg()),

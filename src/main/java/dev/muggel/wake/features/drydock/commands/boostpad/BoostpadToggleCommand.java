@@ -9,7 +9,6 @@ import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadDetectorListener;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadRegistry;
 import dev.muggel.wake.features.drydock.commands.DrydockCommandHelper;
-import dev.muggel.wake.features.drydock.commands.arguments.BoostpadKeyArgumentType;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.jspecify.annotations.NonNull;
@@ -18,7 +17,7 @@ public class BoostpadToggleCommand {
     static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("toggle")
                 .executesSender((ctx, sender) -> executeGlobal(ctx, plugin))
-                .arguments(CommandNode.argument("block", BoostpadKeyArgumentType.boostpadKey())
+                .arguments(CommandNode.argument("block", DrydockCommandHelper.boostpadKey(plugin))
                         .executesSender((ctx, sender) -> executeBlock(ctx, plugin)));
     }
 

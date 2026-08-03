@@ -32,7 +32,7 @@
  * <ul>
  *   <li><b>Standalone command</b> &rarr; one flat class in {@code <module>/commands/} (e.g. {@code ReloadCommand})</li>
  *   <li><b>Command group</b> (several substantial sub-commands) &rarr; its own package {@code <module>/commands/<group>/} with a {@code <Group>Command} parent and one {@code <Group><Action>Command} per sub-command</li>
- *   <li><b>Argument types</b> &rarr; {@code <module>/commands/arguments/}, named {@code <Thing>ArgumentType}</li>
+ *   <li><b>Argument types</b> &rarr; {@code core/commands/arguments/}, named {@code <Thing>ArgumentType}</li>
  * </ul>
  *
  * <h2>Helpers ({@code ...CommandHelper})</h2>
@@ -46,7 +46,7 @@
  * <h2>Argument types</h2>
  * Prefer Brigadier/Paper built-ins (bool, integer, player, ...). <br>
  * For Wake's domain values use the core types in {@code core/commands/arguments/}. <br>
- * Write a module-local type only for module-owned data (e.g. drydock's {@code BoostpadKeyArgumentType}). <br>
+ * They are core infrastructure: a module holding its own values hands them to one ({@code KeyArgumentType.of(...)} <br>
  * A good argument type validates at parse time with a localized error and suggests as you type, so executors never re-validate.
  *
  * <h2>Failure and text</h2>

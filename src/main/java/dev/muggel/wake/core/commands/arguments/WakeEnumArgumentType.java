@@ -15,28 +15,26 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 /**
  * Any enum as an argument (case-insensitive input). <br>
- * Parses to the uppercase name. <br>
+ * Parses to the constant's own name, so a call site can hand it straight to {@code valueOf}. <br>
  * Use for closed sets of choices instead of validating a raw word in the executor.
  */
-public class WakeEnumArgumentType<T extends Enum<T>> implements CustomArgumentType<String, String> {
-    private final List<String> validNames;
+public final class WakeEnumArgumentType implements CustomArgumentType<String, String> {
     private static final DynamicCommandExceptionType INVALID_ENUM = ArgumentHelper.localizedException("commands.invalid_option");
+    private final List<String> validNames;
 
-    private WakeEnumArgumentType(@NonNull Class<T> enumClass) {
+    private WakeEnumArgumentType(@NonNull Class<? extends Enum<?>> enumClass) {
         this.validNames = Arrays.stream(enumClass.getEnumConstants())
                 .map(Enum::name)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Contract(value = "_ -> new", pure = true)
-    public static <T extends Enum<T>> @NonNull WakeEnumArgumentType<T> wakeEnum(@NonNull Class<T> enumClass) {
-        return new WakeEnumArgumentType<>(enumClass);
+    public static @NonNull WakeEnumArgumentType wakeEnum(@NonNull Class<? extends Enum<?>> enumClass) {
+        return new WakeEnumArgumentType(enumClass);
     }
 
     @Override
@@ -48,13 +46,13 @@ public class WakeEnumArgumentType<T extends Enum<T>> implements CustomArgumentTy
     public @NonNull String parse(@NonNull StringReader reader) throws CommandSyntaxException {
         int start = reader.getCursor();
         String input = reader.readUnquotedString();
-
-        if (validNames.stream().noneMatch(n -> n.equalsIgnoreCase(input))) {
-            reader.setCursor(start);
-            throw INVALID_ENUM.createWithContext(reader, input);
+        for (String name : validNames) {
+            if (name.equalsIgnoreCase(input)) {
+                return name;
+            }
         }
-
-        return input.toUpperCase(Locale.ROOT);
+        reader.setCursor(start);
+        throw INVALID_ENUM.createWithContext(reader, input);
     }
 
     @Override

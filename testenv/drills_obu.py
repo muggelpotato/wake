@@ -69,6 +69,19 @@ def expect(label, command, needle):
     return reply
 
 
+def caret(label, command, pointed_at):
+    """The console prints ten characters of lead-in, then everything from the error cursor on, then
+    the marker -- so what the cursor points at is that line past its first ten characters"""
+    reply = run(command)
+    line = reply.split("\n")[-1].strip()
+    if not line.startswith("...") or not line.endswith("<--[HERE]"):
+        bad(label, f"{command!r} -> {reply}")
+    elif line[len("...") + 10:-len("<--[HERE]")] == pointed_at:
+        ok(label)
+    else:
+        bad(label, f"the cursor sits at {line!r}, not at {pointed_at!r}")
+
+
 def share(*entries):
     """A share code is gzipped, then url-safe base64 without padding. See SandboxCommandHelper"""
     payload = (";".join(entries) + ";").encode()
@@ -90,6 +103,19 @@ def drill_parsing():
     parses("three doubles", "wo applyimpulse 0.1 0.2 0.3")
     parses("no arguments", "wo clearslipperiness")
 
+    print("\nand a list argument takes every shape of the same list")
+    parses("uppercase", "wo removeblockslipperiness ICE")
+    parses("bare and namespaced mixed", "wo removeblockslipperiness minecraft:ice,packed_ice")
+    parses("repeated and mixed separators", "wo removeblockslipperiness ice,,  packed_ice")
+    parses("a leading separator", "wo removeblockslipperiness ,ice")
+    parses("duplicates", "wo removeblockslipperiness ice,ice")
+    parses("an entry that prefixes another", "wo removeblockslipperiness sand,sandstone")
+    parses("an entry whose text appears earlier", "wo removeblockslipperiness sandstone,sand")
+    parses("a trailing separator", "wo removeblockslipperiness ice,")
+    parses("an empty namespace", "wo removeblockslipperiness :ice")
+    parses("a short-form uuid", "wo addcollisionfilter 1-1-1-1-1")
+    parses("a list far longer than any real one", "wo removeblockslipperiness " + ",".join(["ice"] * 200))  # rcon caps the packet at ~1.4kB
+
     print("\nand still refuses what it should")
     rejects("byte above 255", "wo setcollisionresolution 300")
     rejects("byte below 0", "wo setcollisionresolution -1")
@@ -98,6 +124,16 @@ def drill_parsing():
     rejects("non-numeric float", "wo stepsize abc")
     rejects("unknown block", "wo removeblockslipperiness not_a_block")
     rejects("unknown entity", "wo addcollisionfilter not_an_entity")
+    rejects("separators only", "wo removeblockslipperiness ,")
+    rejects("a bad entry behind good ones", "wo removeblockslipperiness ice,,  not_a_block")
+    rejects("an item that is not a block", "wo removeblockslipperiness stick")
+    rejects("two colons", "wo removeblockslipperiness a:b:c")
+    rejects("a namespace with no key", "wo addcollisionfilter minecraft:")
+    rejects("a non-ascii letter", "wo removeblockslipperiness İce")
+
+    print("\nand points at the entry that failed, not at the separators before it")
+    caret("a bad entry behind good ones", "wo removeblockslipperiness ice,,  not_a_block", "not_a_block")
+    caret("a bad entry with good ones behind it", "wo blockslipperiness 0.9 ice,not_a_block,stone", "not_a_block,stone")
 
 
 def drill_storage():

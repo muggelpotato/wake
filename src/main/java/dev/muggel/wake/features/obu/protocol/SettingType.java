@@ -5,8 +5,7 @@ import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
-import dev.muggel.wake.core.commands.arguments.BlockListArgumentType;
-import dev.muggel.wake.core.commands.arguments.EntityListArgumentType;
+import dev.muggel.wake.core.commands.arguments.KeyListArgumentType;
 import dev.muggel.wake.core.commands.arguments.WakeEnumArgumentType;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition.CollisionMode;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition.PerBlockSetting;
@@ -14,10 +13,6 @@ import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.UUID;
 import java.util.function.Supplier;
 
 public enum SettingType {
@@ -37,8 +32,8 @@ public enum SettingType {
         }
         buf.writeByte((byte) value);
     }),
-    BLOCK_LIST(BlockListArgumentType::blockList, (buf, arg) -> buf.writeString(namespacedBlocks(arg))),
-    ENTITY_LIST(EntityListArgumentType::entityList, (buf, arg) -> buf.writeString(namespacedEntities(arg))),
+    BLOCK_LIST(KeyListArgumentType::blockList, (buf, arg) -> buf.writeString(KeyListArgumentType.blockList().normalize(arg))),
+    ENTITY_LIST(KeyListArgumentType::entityList, (buf, arg) -> buf.writeString(KeyListArgumentType.entityList().normalize(arg))),
     SETTING_ENUM(() -> WakeEnumArgumentType.wakeEnum(PerBlockSetting.class), (buf, arg) -> buf.writeShort(resolve(PerBlockSetting.parse(arg), "per-block setting", arg))),
     COLLISION_ENUM(() -> WakeEnumArgumentType.wakeEnum(CollisionMode.class), (buf, arg) -> buf.writeShort(resolve(CollisionMode.parse(arg), "collision mode", arg)));
 
@@ -73,38 +68,5 @@ public enum SettingType {
             throw new IllegalArgumentException("Unknown " + what + ": " + arg);
         }
         return id;
-    }
-
-    private static @NonNull String namespacedBlocks(@NonNull String raw) {
-        List<String> blocks = new ArrayList<>();
-        for (String entry : raw.split("[\\s,]+")) {
-            if (!entry.isEmpty()) {
-                blocks.add(namespaced(entry.trim()));
-            }
-        }
-        return String.join(",", blocks);
-    }
-
-    private static @NonNull String namespacedEntities(@NonNull String raw) {
-        List<String> entities = new ArrayList<>();
-        for (String entry : raw.split("[\\s,]+")) {
-            if (entry.isEmpty()) continue;
-            String trimmed = entry.trim();
-            entities.add(isUuid(trimmed) ? trimmed : namespaced(trimmed));
-        }
-        return String.join(",", entities);
-    }
-
-    private static @NonNull String namespaced(@NonNull String entry) {
-        return entry.contains(":") ? entry : "minecraft:" + entry.toLowerCase(Locale.ROOT);
-    }
-
-    private static boolean isUuid(@NonNull String entry) {
-        try {
-            UUID.fromString(entry);
-            return true;
-        } catch (IllegalArgumentException notAUuid) {
-            return false;
-        }
     }
 }
