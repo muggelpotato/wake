@@ -5,7 +5,6 @@ import dev.muggel.wake.core.CollisionGeometry;
 import dev.muggel.wake.core.CollisionGeometry.BlockSweep;
 import dev.muggel.wake.core.VehiclePath.Legs;
 import dev.muggel.wake.features.drydock.api.PlayerHitBoostpadEvent;
-import dev.muggel.wake.features.drydock.commands.boostpad.BoostpadCommand;
 import dev.muggel.wake.features.drydock.integration.OBUBoostpadIntegration;
 import com.destroystokyo.paper.event.server.ServerTickEndEvent;
 import org.bukkit.Bukkit;
@@ -33,6 +32,14 @@ import java.util.Set;
 import java.util.UUID;
 
 public class BoostpadDetectorListener implements Listener {
+    public static final String STATE_KEY_ENABLED = "drydock.boostpads_enabled";
+    public static final boolean DEFAULT_ENABLED = false;
+    public static final String STATE_KEY_EARLY_OUT_X = "drydock.boostpads_early_out_x";
+    public static final String STATE_KEY_EARLY_OUT_Y = "drydock.boostpads_early_out_y";
+    public static final String STATE_KEY_EARLY_OUT_Z = "drydock.boostpads_early_out_z";
+    public static final boolean DEFAULT_EARLY_OUT_X = false;
+    public static final boolean DEFAULT_EARLY_OUT_Y = true;
+    public static final boolean DEFAULT_EARLY_OUT_Z = false;
     private static final double SURFACE_BAND = 0.15;
     private static final double SURFACE_DROP = 0.5;
     private static final double HULL_HALF = 0.6875;
@@ -49,7 +56,7 @@ public class BoostpadDetectorListener implements Listener {
     }
 
     public void updateRegistration() {
-        boolean enabled = plugin.getStateDao().get(BoostpadCommand.STATE_KEY_ENABLED, BoostpadCommand.DEFAULT_ENABLED);
+        boolean enabled = plugin.getStateDao().get(STATE_KEY_ENABLED, DEFAULT_ENABLED);
         boolean shouldBeRegistered = enabled && !boostpads.getBoostpadConfigs().isEmpty();
         if (shouldBeRegistered && !isRegistered) {
             Bukkit.getPluginManager().registerEvents(this, plugin);
@@ -153,10 +160,20 @@ public class BoostpadDetectorListener implements Listener {
         hits.sort(Comparator.comparingDouble(PadHit::progress));
         Map<String, Long> boatCooldowns = lastBoostTimes.computeIfAbsent(boat.getUniqueId(), key -> new HashMap<>(4));
         World world = boat.getWorld();
-        boolean firedJumpPad = false;
+        boolean cancelX = jumping && plugin.getStateDao().get(STATE_KEY_EARLY_OUT_X, DEFAULT_EARLY_OUT_X);
+        boolean cancelY = jumping && plugin.getStateDao().get(STATE_KEY_EARLY_OUT_Y, DEFAULT_EARLY_OUT_Y);
+        boolean cancelZ = jumping && plugin.getStateDao().get(STATE_KEY_EARLY_OUT_Z, DEFAULT_EARLY_OUT_Z);
+        boolean firedBoostPad = false;
         for (PadHit hit : hits) {
             BoostpadConfig config = hit.config();
-            if (config.forceY() > 0 && (firedJumpPad || jumping || !boat.isOnGround())) {
+            boolean boostPad = config.forceY() > 0;
+            if (boostPad && (firedBoostPad || !boat.isOnGround())) {
+                continue;
+            }
+            double forceX = cancelX ? 0.0 : config.forceX();
+            double forceY = cancelY ? 0.0 : config.forceY();
+            double forceZ = cancelZ ? 0.0 : config.forceZ();
+            if (forceX == 0.0 && forceY == 0.0 && forceZ == 0.0) {
                 continue;
             }
             long crossedNanos = plugin.getTickClock().at(hit.progress());
@@ -165,11 +182,11 @@ public class BoostpadDetectorListener implements Listener {
                 continue;
             }
             boatCooldowns.put(config.blockKey(), crossedNanos);
-            if (config.forceY() > 0) {
-                firedJumpPad = true;
+            if (boostPad) {
+                firedBoostPad = true;
             }
             Block hitBlock = world.getBlockAt(hit.x(), hit.y(), hit.z());
-            PlayerHitBoostpadEvent hitEvent = new PlayerHitBoostpadEvent(player, boat, hitBlock, config.forceX(), config.forceY(), config.forceZ());
+            PlayerHitBoostpadEvent hitEvent = new PlayerHitBoostpadEvent(player, boat, hitBlock, forceX, forceY, forceZ);
             Bukkit.getPluginManager().callEvent(hitEvent);
         }
     }

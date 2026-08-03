@@ -6,6 +6,7 @@ import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
+import dev.muggel.wake.features.drydock.boostpads.BoostpadDetectorListener;
 import dev.muggel.wake.features.drydock.commands.DrydockCommandHelper;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
@@ -24,7 +25,7 @@ public class BoostpadListCommand {
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        boolean globalEnabled = plugin.getStateDao().get(BoostpadCommand.STATE_KEY_ENABLED, BoostpadCommand.DEFAULT_ENABLED);
+        boolean globalEnabled = plugin.getStateDao().get(BoostpadDetectorListener.STATE_KEY_ENABLED, BoostpadDetectorListener.DEFAULT_ENABLED);
         Map<String, BoostpadConfig> configs = DrydockCommandHelper.boostpads(plugin).cachedBoostpads();
         Component blocksComp = Component.empty();
         if (configs.isEmpty()) {

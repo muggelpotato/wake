@@ -6,6 +6,7 @@ import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
+import dev.muggel.wake.features.drydock.boostpads.BoostpadDetectorListener;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadRegistry;
 import dev.muggel.wake.features.drydock.commands.DrydockCommandHelper;
 import dev.muggel.wake.features.drydock.commands.arguments.BoostpadKeyArgumentType;
@@ -22,7 +23,7 @@ public class BoostpadToggleCommand {
     }
 
     private static int executeGlobal(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
-        boolean newState = plugin.getStateDao().toggle(BoostpadCommand.STATE_KEY_ENABLED, BoostpadCommand.DEFAULT_ENABLED);
+        boolean newState = plugin.getStateDao().toggle(BoostpadDetectorListener.STATE_KEY_ENABLED, BoostpadDetectorListener.DEFAULT_ENABLED);
         DrydockCommandHelper.boostpads(plugin).refreshRegistration();
         String stateKey = newState ? "commands.drydock.boostpad.enabled" : "commands.drydock.boostpad.disabled";
         plugin.getMessageManager().send(ctx.getSource().getSender(), stateKey);

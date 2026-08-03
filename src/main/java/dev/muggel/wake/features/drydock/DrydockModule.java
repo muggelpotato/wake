@@ -11,7 +11,6 @@ import dev.muggel.wake.features.drydock.boostpads.BoostpadRegistry;
 import dev.muggel.wake.features.drydock.integration.OBUBoostpadIntegration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.configuration.ConfigurationSection;
-import java.sql.SQLException;
 import java.util.Map;
 import java.util.logging.Level;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
@@ -69,10 +68,10 @@ public class DrydockModule extends AbstractModule {
     @Override
     protected int onExportData(YamlConfiguration yaml) {
         BoostpadRegistry registry = this.boostpads;
+        int count = exportState(yaml);
         if (registry == null) {
-            return 0;
+            return count;
         }
-        int count = 0;
         for (Map.Entry<String, BoostpadConfig> entry : registry.cachedBoostpads().entrySet()) {
             String key = entry.getKey();
             BoostpadConfig config = entry.getValue();
@@ -85,8 +84,7 @@ public class DrydockModule extends AbstractModule {
             yaml.set(path + ".padding", config.padding());
             count++;
         }
-        yaml.set("boostpads_enabled", getPlugin().getStateDao().get(BoostpadCommand.STATE_KEY_ENABLED, BoostpadCommand.DEFAULT_ENABLED));
-        return count + 1;
+        return count + exportState(yaml);
     }
 
     @Override
@@ -110,14 +108,7 @@ public class DrydockModule extends AbstractModule {
                 }
             }
         }
-        if (yaml.contains("boostpads_enabled")) {
-            try {
-                getPlugin().getStateDao().importValue(BoostpadCommand.STATE_KEY_ENABLED, yaml.getBoolean("boostpads_enabled"));
-                count++;
-            } catch (SQLException e) {
-                getPlugin().getLogger().log(Level.SEVERE, "Failed to import the boostpad switch", e);
-            }
-        }
+        count += importState(yaml);
         reload();
         return count;
     }

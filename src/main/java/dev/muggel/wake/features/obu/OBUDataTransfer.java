@@ -3,8 +3,6 @@ package dev.muggel.wake.features.obu;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
-import dev.muggel.wake.features.obu.contexts.SandboxPurger;
-import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
@@ -56,13 +54,6 @@ final class OBUDataTransfer {
                             invocations.size() == 1 ? invocations.getFirst() : invocations));
             count++;
         }
-
-        boolean persistentStates = plugin.getStateDao().get(ContextDelivery.STATE_KEY_PERSISTENT_STATES, true);
-        yaml.set("config.persistent_player_states", persistentStates);
-        count++;
-        String keepUnused = plugin.getStateDao().get(SandboxPurger.STATE_KEY_KEEP_UNUSED, SandboxPurger.DEFAULT_KEEP);
-        yaml.set("config.keep_unused_sandboxes", keepUnused);
-        count++;
         return count;
     }
 
@@ -70,20 +61,6 @@ final class OBUDataTransfer {
         int count = 0;
         for (OBUContext.ContextType type : OBUContext.ContextType.values()) {
             count += importContexts(yaml.getConfigurationSection(sectionOf(type)), type);
-        }
-        ConfigurationSection configSec = yaml.getConfigurationSection("config");
-        if (configSec != null) {
-            for (String key : configSec.getKeys(false)) {
-                Object val = configSec.get(key);
-                if (val != null) {
-                    try {
-                        plugin.getStateDao().importValue("obu." + key, val);
-                        count++;
-                    } catch (Exception e) {
-                        plugin.getLogger().warning("Failed to import OBU config state " + key);
-                    }
-                }
-            }
         }
         contextManager.loadContexts();
         for (Player player : Bukkit.getOnlinePlayers()) {

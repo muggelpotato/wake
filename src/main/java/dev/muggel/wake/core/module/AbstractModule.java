@@ -13,6 +13,7 @@ import dev.muggel.wake.core.database.WakeDao;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -162,6 +163,35 @@ public abstract class AbstractModule implements WakeModule {
 
     protected int onImportData(YamlConfiguration yaml) throws SQLException {
         return 0;
+    }
+
+    /** Writes every state value the module owns */
+    protected final int exportState(YamlConfiguration yaml) {
+        Map<String, Object> entries = plugin.getStateDao().snapshot(getId() + ".");
+        entries.forEach(yaml::set);
+        return entries.size();
+    }
+
+    /** Restores every {@code <id>.} key the file carries */
+    protected final int importState(YamlConfiguration yaml) {
+        String prefix = getId() + ".";
+        int count = 0;
+        for (String key : yaml.getKeys(true)) {
+            if (yaml.isConfigurationSection(key) || !key.startsWith(prefix)) {
+                continue;
+            }
+            Object value = yaml.get(key);
+            if (value == null) {
+                continue;
+            }
+            try {
+                plugin.getStateDao().importValue(key, value);
+                count++;
+            } catch (Exception e) {
+                plugin.getLogger().log(Level.WARNING, "Failed to import state " + key, e);
+            }
+        }
+        return count;
     }
 
     protected final void registerDao(WakeDao dao) {

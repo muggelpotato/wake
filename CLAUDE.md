@@ -89,6 +89,11 @@ that can't inject markup. Speak database terms to admins ("saved to database", n
   transiently is journaled and replayed, never dropped; a read that fails leaves the cache alone,
   because an empty result is not an empty table. A cached table is a mirror: a change made here is
   announced, a change made elsewhere is read back. Never write as if this server were the only one.
+- **Everything settable in-game is in the export.** A value an admin can change with a command must
+  survive export → import, or the export is a trap: it looks like a backup and silently loses
+  settings. Never hand-enumerate keys in `onExportData` — that list drifts the moment a setting is
+  added. Sweep the module's state prefix (`exportState`/`importState`) so new settings are carried
+  for free, and adding one stays a change to exactly one file.
 - Ship factory defaults as bundled resources, applied only when the store is empty.
 
 ## Threading & memory — hard rules

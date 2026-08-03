@@ -197,3 +197,6 @@ words:
     hints: 'Hints'
     persistent_states: 'Persistent player states'
     auto_kill: 'Auto-kill boat'
+    boostpad_early_out_x: 'early-out (X)'
+    boostpad_early_out_y: 'early-out (Y)'
+    boostpad_early_out_z: 'early-out (Z)'

@@ -1,4 +1,4 @@
-config:
+obu:
   persistent_player_states: true
   keep_unused_sandboxes: "30d"
 server:

@@ -174,12 +174,12 @@ public class OBUModule extends AbstractModule {
     @Override
     protected int onExportData(YamlConfiguration yaml) {
         OBUDataTransfer transfer = this.dataTransfer;
-        return transfer == null ? 0 : transfer.export(yaml);
+        return exportState(yaml) + (transfer == null ? 0 : transfer.export(yaml));
     }
 
     @Override
     protected int onImportData(YamlConfiguration yaml) throws SQLException {
         OBUDataTransfer transfer = this.dataTransfer;
-        return transfer == null ? 0 : transfer.importFrom(yaml);
+        return importState(yaml) + (transfer == null ? 0 : transfer.importFrom(yaml));
     }
 }

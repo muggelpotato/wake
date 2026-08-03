@@ -13,10 +13,6 @@ import dev.muggel.wake.features.base.commands.database.DatabaseCommand;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.jspecify.annotations.NonNull;
 
-import java.util.logging.Level;
-
-import java.util.Map;
-
 public class BaseModule extends AbstractModule {
     public static final String STATE_KEY_KILL_BOAT_ON_EXIT = "base.killboatonexit";
     public BaseModule() {
@@ -57,28 +53,11 @@ public class BaseModule extends AbstractModule {
 
     @Override
     protected int onExportData(@NonNull YamlConfiguration yaml) {
-        Map<String, Object> entries = getPlugin().getStateDao().snapshot("base.");
-        entries.forEach(yaml::set);
-        return entries.size();
+        return exportState(yaml);
     }
 
     @Override
     protected int onImportData(@NonNull YamlConfiguration yaml) {
-        int count = 0;
-        String prefix = getId() + ".";
-        for (String key : yaml.getKeys(true)) {
-            if (yaml.isConfigurationSection(key)) continue;
-            if (!key.startsWith(prefix)) continue;
-            Object val = yaml.get(key);
-            if (val != null) {
-                try {
-                    getPlugin().getStateDao().importValue(key, val);
-                    count++;
-                } catch (Exception e) {
-                    getPlugin().getLogger().log(Level.WARNING, "Failed to import state " + key, e);
-                }
-            }
-        }
-        return count;
+        return importState(yaml);
     }
 }
