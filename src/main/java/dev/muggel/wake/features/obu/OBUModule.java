@@ -50,9 +50,8 @@ public class OBUModule extends AbstractModule {
 
     @Override
     protected void onModuleEnable() {
-        this.obuDao = new OBUDao(getPlugin());
+        this.obuDao = registerDao(new OBUDao(getPlugin()));
         obuDao.initTables();
-        registerDao(obuDao);
         Boolean hasContexts = obuDao.hasAnyContexts();
         this.clients = new ClientRegistry();
         this.packetSender = new PacketSender(clients);
@@ -133,7 +132,6 @@ public class OBUModule extends AbstractModule {
         ContextDelivery service = this.delivery;
         if (manager == null || service == null) return;
         schedulePurgerSweep();
-        if (getPlugin().getDatabaseManager().isDegraded()) return;
         manager.reloadAsync(changedContexts -> {
             if (service.isStale()) return;
             for (Player player : Bukkit.getOnlinePlayers()) {
@@ -171,7 +169,7 @@ public class OBUModule extends AbstractModule {
     }
 
     @Override
-    protected int onExportData(YamlConfiguration yaml) {
+    protected int onExportData(YamlConfiguration yaml) throws SQLException {
         OBUDataTransfer transfer = this.dataTransfer;
         return exportState(yaml) + (transfer == null ? 0 : transfer.export(yaml));
     }

@@ -22,9 +22,7 @@ final class DatabasePool {
     private static final int DEFAULT_MIN_IDLE = 1;
     private DatabasePool() {}
 
-    record Handle(@NonNull Dialect dialect, @NonNull HikariDataSource dataSource) {}
-
-    static @NonNull Handle open(@NonNull Wake plugin) {
+    static @NonNull Dialect open(@NonNull Wake plugin) {
         ConfigurationSection config = plugin.getConfig().getConfigurationSection("database");
         Dialect dialect = Dialect.SQLITE;
         if (config == null) {
@@ -36,13 +34,13 @@ final class DatabasePool {
         } else {
             openSQLite(plugin);
         }
-        HikariDataSource dataSource = tightenTimeouts();
+        tightenTimeouts();
         try {
             DB.getFirstColumn(PROBE_QUERY);
         } catch (Exception e) {
             throw new IllegalStateException("Database connection test failed", e);
         }
-        return new Handle(dialect, dataSource);
+        return dialect;
     }
 
     private static void openSQLite(@NonNull Wake plugin) {
@@ -76,15 +74,16 @@ final class DatabasePool {
 
     private static void openPool(@NonNull Wake plugin, @NonNull DatabaseOptions options) {
         FileConfiguration config = plugin.getConfig();
+        int maxConnections = Math.max(2, config.getInt("database.pool.maximum_connections", DEFAULT_MAX_CONNECTIONS));
         DB.setGlobalDatabase(new HikariPooledDatabase(PooledDatabaseOptions.builder()
                 .options(options)
-                .maxConnections(Math.max(1, config.getInt("database.pool.maximum_connections", DEFAULT_MAX_CONNECTIONS)))
-                .minIdleConnections(config.getInt("database.pool.minimum_idle", DEFAULT_MIN_IDLE))
+                .maxConnections(maxConnections)
+                .minIdleConnections(Math.clamp(config.getInt("database.pool.minimum_idle", DEFAULT_MIN_IDLE), 0, maxConnections))
                 .build()));
     }
 
     /** Hikari's defaults are too long for quick ingame feedback */
-    private static @NonNull HikariDataSource tightenTimeouts() {
+    private static void tightenTimeouts() {
         try {
             Field field = BaseDatabase.class.getDeclaredField("dataSource");
             field.setAccessible(true);
@@ -93,7 +92,6 @@ final class DatabasePool {
             }
             dataSource.setConnectionTimeout(5000);
             dataSource.setValidationTimeout(2500);
-            return dataSource;
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("IDB's data source is unreachable (its timeouts cannot be bounded)", e);
         }

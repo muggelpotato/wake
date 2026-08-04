@@ -11,6 +11,7 @@ import dev.muggel.wake.features.drydock.boostpads.BoostpadRegistry;
 import dev.muggel.wake.features.drydock.integration.OBUBoostpadIntegration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.configuration.ConfigurationSection;
+import java.sql.SQLException;
 import java.util.Map;
 import java.util.logging.Level;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
@@ -27,10 +28,9 @@ public class DrydockModule extends AbstractModule {
 
     @Override
     protected void onModuleEnable() {
-        this.drydockDao = new DrydockDao(getPlugin());
+        this.drydockDao = registerDao(new DrydockDao(getPlugin()));
         drydockDao.initTables();
-        registerDao(drydockDao);
-        this.boostpads = new BoostpadRegistry(getPlugin(), drydockDao);
+        this.boostpads = new BoostpadRegistry(drydockDao);
         this.detectorListener = new BoostpadDetectorListener(getPlugin(), boostpads);
         boostpads.setOnReloadCallback(this.detectorListener::updateRegistration);
         registerListener(new OBUBoostpadIntegration(getPlugin()));
@@ -65,8 +65,11 @@ public class DrydockModule extends AbstractModule {
     }
 
     @Override
-    protected int onExportData(YamlConfiguration yaml) {
+    protected int onExportData(YamlConfiguration yaml) throws SQLException {
         BoostpadRegistry registry = this.boostpads;
+        if (registry != null && !registry.isLoaded()) {
+            throw new SQLException("Drydock boostpads could not be read");
+        }
         int count = exportState(yaml);
         if (registry == null) {
             return count;
@@ -83,7 +86,7 @@ public class DrydockModule extends AbstractModule {
             yaml.set(path + ".padding", config.padding());
             count++;
         }
-        return count + exportState(yaml);
+        return count;
     }
 
     @Override

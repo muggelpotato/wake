@@ -48,6 +48,10 @@ public class OBUContextManager {
         }
     }
 
+    public boolean isLoaded() {
+        return contexts.isLoaded();
+    }
+
     public Set<String> getContextNames() {
         return contexts.keys();
     }

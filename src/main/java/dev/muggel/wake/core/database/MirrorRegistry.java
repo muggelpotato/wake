@@ -57,14 +57,17 @@ class MirrorRegistry {
 
     /** Announces everything collected since the last call. Writer thread only, like the batch it drains */
     void publishPending() {
-        SyncService sync = plugin.getSyncService();
-        if (sync == null || (dirtyScopes.isEmpty() && dirtyKeys.isEmpty())) {
+        if (dirtyScopes.isEmpty() && dirtyKeys.isEmpty()) {
             return;
         }
         List<String> scopes = List.copyOf(dirtyScopes);
         dirtyScopes.clear();
         Map<CachedStore<?>, Set<String>> keyed = Map.copyOf(dirtyKeys);
         dirtyKeys.clear();
+        SyncService sync = plugin.getSyncService();
+        if (sync == null) {
+            return;
+        }
         for (String scope : scopes) {
             sync.publish(scope);
         }

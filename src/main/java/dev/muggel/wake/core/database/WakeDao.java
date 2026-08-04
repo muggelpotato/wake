@@ -18,8 +18,8 @@ import java.util.UUID;
 /**
  * The base class for a module's data access. <br>
  * 1. Declare tables in {@code getTableSchemas()} <br>
- * 2. Mirror one with {@code mirror(table, loader)} and read/write to it only through {@link CachedStore} (it caches, persists and announces) <br>
- * 3. Unmirrored tables go through {@code asyncUpdate(...)}, or {@code asyncUpdateLocal(...)} if no other server cares <br>
+ * 2. Mirror one with {@code mirror(table, loader)} and read/write to it only through {@link CachedStore} (it caches, persists and announces). A loader throws rather than reporting a failed read itself <br>
+ * 3. Unmirrored tables go through {@code asyncUpdate(...)}, or {@code asyncUpdateLocal(...)} if no other server cares, and are read through {@code read(subject, body)} <br>
  * 4. Keep SQL parameterized and portable across SQLite and MariaDB <br>
  * 5. Register instances via the module's {@code registerDao(...)} so database reset covers them
  */

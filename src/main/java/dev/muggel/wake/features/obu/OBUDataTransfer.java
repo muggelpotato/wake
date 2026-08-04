@@ -33,7 +33,10 @@ final class OBUDataTransfer {
         this.syncManager = syncManager;
     }
 
-    int export(@NonNull YamlConfiguration yaml) {
+    int export(@NonNull YamlConfiguration yaml) throws SQLException {
+        if (!contextManager.isLoaded()) {
+            throw new SQLException("OBU contexts could not be read");
+        }
         int count = 0;
         for (String name : contextManager.getContextNames()) {
             if (OBUContextManager.isInternal(name)) continue;

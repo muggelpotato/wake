@@ -13,6 +13,8 @@ import dev.muggel.wake.features.base.commands.database.DatabaseCommand;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.jspecify.annotations.NonNull;
 
+import java.sql.SQLException;
+
 public class BaseModule extends AbstractModule {
     public static final String STATE_KEY_KILL_BOAT_ON_EXIT = "base.killboatonexit";
     public BaseModule() {
@@ -42,7 +44,6 @@ public class BaseModule extends AbstractModule {
 
     @Override
     public void reload() {
-        if (getPlugin().getDatabaseManager().isDegraded()) return;
         getPlugin().getStateDao().reloadAsync(null);
     }
 
@@ -51,7 +52,7 @@ public class BaseModule extends AbstractModule {
     }
 
     @Override
-    protected int onExportData(@NonNull YamlConfiguration yaml) {
+    protected int onExportData(@NonNull YamlConfiguration yaml) throws SQLException {
         return exportState(yaml);
     }
 

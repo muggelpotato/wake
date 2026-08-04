@@ -26,21 +26,21 @@ import java.util.logging.Level;
  * Write-ahead journal used while the database is unreachable. <br>
  * Replayed in order on recovery.
  */
-public class OutageJournal {
+class OutageJournal {
     private static final Gson GSON = new Gson();
     private final Wake plugin;
     private final File file;
-    private FileOutputStream writer;
-    public OutageJournal(@NonNull Wake plugin) {
+    private volatile @Nullable FileOutputStream writer;
+    OutageJournal(@NonNull Wake plugin) {
         this.plugin = plugin;
         this.file = new File(plugin.getDataFolder(), "outage-journal.jsonl");
     }
 
-    public boolean isEmpty() {
+    boolean isEmpty() {
         return !file.isFile() || file.length() == 0;
     }
 
-    public void append(String query, Object @NonNull ... params) {
+    boolean append(String query, Object @NonNull ... params) {
         JsonObject entry = new JsonObject();
         entry.addProperty("q", query);
         JsonArray encoded = new JsonArray();
@@ -49,17 +49,21 @@ public class OutageJournal {
         }
         entry.add("p", encoded);
         try {
-            if (writer == null) {
-                writer = new FileOutputStream(file, true);
+            FileOutputStream out = writer;
+            if (out == null) {
+                out = new FileOutputStream(file, true);
+                writer = out;
             }
-            writer.write((GSON.toJson(entry) + "\n").getBytes(StandardCharsets.UTF_8));
-            writer.getFD().sync();
+            out.write((GSON.toJson(entry) + "\n").getBytes(StandardCharsets.UTF_8));
+            out.getFD().sync();
+            return true;
         } catch (IOException e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to journal write for recovery (change will be lost): " + query, e);
+            return false;
         }
     }
 
-    public int replay() {
+    int replay() {
         closeWriter();
         if (isEmpty()) {
             return 0;
@@ -135,13 +139,14 @@ public class OutageJournal {
         }
     }
 
-    public void closeWriter() {
-        if (writer != null) {
+    void closeWriter() {
+        FileOutputStream out = writer;
+        writer = null;
+        if (out != null) {
             try {
-                writer.close();
+                out.close();
             } catch (IOException ignored) {
             }
-            writer = null;
         }
     }
 

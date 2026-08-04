@@ -1,6 +1,5 @@
 package dev.muggel.wake.features.drydock.boostpads;
 
-import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.database.CachedStore;
 import dev.muggel.wake.features.drydock.DrydockDao;
 import org.bukkit.NamespacedKey;
@@ -15,15 +14,13 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 public class BoostpadRegistry {
-    private final Wake plugin;
     private final DrydockDao dao;
     private final CachedStore<BoostpadConfig> boostpads;
     private volatile Map<Material, BoostpadConfig> materialConfigs = Collections.emptyMap();
     private volatile Map<String, BoostpadConfig> publishedConfigs = Collections.emptyMap();
     private volatile double cachedMaxPadding = 0.0;
     private Runnable onReloadCallback;
-    public BoostpadRegistry(Wake plugin, @NonNull DrydockDao dao) {
-        this.plugin = plugin;
+    public BoostpadRegistry(@NonNull DrydockDao dao) {
         this.dao = dao;
         this.boostpads = dao.boostpads();
         boostpads.load();
@@ -42,9 +39,6 @@ public class BoostpadRegistry {
     }
 
     public void reloadBoostpads() {
-        if (plugin.getDatabaseManager().isDegraded()) {
-            return;
-        }
         boostpads.reloadAsync(changed -> rebuildDerived());
     }
 

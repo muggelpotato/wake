@@ -25,9 +25,8 @@ public class AxiomModule extends AbstractModule {
 
     @Override
     protected void onModuleEnable() {
-        dao = new AxiomDao(getPlugin());
+        dao = registerDao(new AxiomDao(getPlugin()));
         dao.initTables();
-        registerDao(dao);
         axiomDisplays = new AxiomDisplays(getPlugin());
         CachedStore<String> displays = dao.displays();
         boolean read = displays.load();
@@ -49,7 +48,6 @@ public class AxiomModule extends AbstractModule {
         AxiomDao currentDao = this.dao;
         AxiomDisplays displays = this.axiomDisplays;
         if (currentDao == null || displays == null || !isCompatible()) return;
-        if (getPlugin().getDatabaseManager().isDegraded()) return;
         currentDao.displays().reloadAsync(ignored -> {
             if (this.dao != currentDao) return;
             displays.unregisterAll();
@@ -59,30 +57,34 @@ public class AxiomModule extends AbstractModule {
 
     @Override
     protected int onExportData(YamlConfiguration yaml) throws SQLException {
-        if (dao == null) return 0;
-        CachedStore<String> displays = dao.displays();
-        if (!displays.isLoaded()) {
+        AxiomDao currentDao = this.dao;
+        if (currentDao != null && !currentDao.displays().isLoaded()) {
             throw new SQLException("Axiom displays could not be read");
         }
-        List<String> models = List.copyOf(displays.keys());
+        int count = exportState(yaml);
+        if (currentDao == null) {
+            return count;
+        }
+        List<String> models = List.copyOf(currentDao.displays().keys());
         yaml.set("displays", models);
-        return models.size();
+        return count + models.size();
     }
 
     @Override
     protected int onImportData(@NonNull YamlConfiguration yaml) {
-        List<String> displays = yaml.getStringList("displays");
-        if (displays.isEmpty()) return 0;
-        if (dao == null) return 0;
+        AxiomDao currentDao = this.dao;
         int count = 0;
-        for (String display : displays) {
-            try {
-                dao.importDisplay(display);
-                count++;
-            } catch (SQLException e) {
-                getPlugin().getLogger().log(Level.SEVERE, "Failed to import axiom display " + display, e);
+        if (currentDao != null) {
+            for (String display : yaml.getStringList("displays")) {
+                try {
+                    currentDao.importDisplay(display);
+                    count++;
+                } catch (SQLException e) {
+                    getPlugin().getLogger().log(Level.SEVERE, "Failed to import axiom display " + display, e);
+                }
             }
         }
+        count += importState(yaml);
         reload();
         return count;
     }

@@ -1,7 +1,6 @@
 package dev.muggel.wake.core.database;
 
 import co.aikar.idb.DB;
-import com.zaxxer.hikari.HikariDataSource;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.Scheduling;
 import dev.muggel.wake.core.sync.SyncService;
@@ -45,7 +44,6 @@ class OutageMonitor {
     private final AtomicBoolean watchdogActive = new AtomicBoolean();
     private volatile boolean degraded = false;
     private volatile @Nullable UUID lastPendingActor;
-    private volatile HikariDataSource probeSource;
     OutageMonitor(@NonNull Wake plugin, @NonNull IntSupplier pendingWrites, @NonNull LongSupplier completedWrites, @NonNull Consumer<Runnable> onWriterThread) {
         this.plugin = plugin;
         this.journal = new OutageJournal(plugin);
@@ -54,20 +52,19 @@ class OutageMonitor {
         this.onWriterThread = onWriterThread;
     }
 
-    void probeVia(@NonNull HikariDataSource dataSource) {
-        this.probeSource = dataSource;
-    }
-
     /** Replays whatever the last run left behind. A replay that cannot get through means the database is still down */
     void replayOnBoot() {
         if (journal.isEmpty()) {
             return;
         }
         int replayed = journal.replay();
-        if (replayed >= 0) {
-            plugin.getLogger().info("Replayed " + replayed + " journaled writes from the last outage");
-        } else {
+        if (replayed < 0) {
             enterDegraded(null);
+            return;
+        }
+        plugin.getLogger().info("Replayed " + replayed + " journaled writes from the last outage");
+        if (replayed > 0) {
+            Scheduling.onMain(plugin, this::announceReplay);
         }
     }
 
@@ -75,10 +72,12 @@ class OutageMonitor {
         return degraded;
     }
 
-    void journal(@NonNull List<SqlStatement> statements) {
+    boolean journal(@NonNull List<SqlStatement> statements) {
+        boolean kept = true;
         for (SqlStatement statement : statements) {
-            journal.append(statement.sql(), statement.params());
+            kept &= journal.append(statement.sql(), statement.params());
         }
+        return kept;
     }
 
     void closeJournal() {
@@ -136,6 +135,9 @@ class OutageMonitor {
     private void watchdogCheck(long lastCompleted) {
         if (degraded || pendingWrites.getAsInt() == 0) {
             watchdogActive.set(false);
+            if (pendingWrites.getAsInt() > 0) {
+                armWatchdog();
+            }
             return;
         }
         long completed = completedWrites.getAsLong();
@@ -149,7 +151,7 @@ class OutageMonitor {
     }
 
     private boolean probeConnectionAlive() {
-        try (Connection connection = probeSource.getConnection()) {
+        try (Connection connection = DB.getGlobalDatabase().getConnection()) {
             return connection.isValid(1);
         } catch (Exception unreachable) {
             return false;
@@ -188,7 +190,14 @@ class OutageMonitor {
                 sendLater(actor, "database.replayed", Placeholder.unparsed("count", String.valueOf(replayed)));
             }
         }
-        if (replayed > 0 && sync != null) {
+        if (replayed > 0) {
+            announceReplay();
+        }
+    }
+
+    private void announceReplay() {
+        SyncService sync = plugin.getSyncService();
+        if (sync != null) {
             sync.publish(SyncService.SCOPE_FULL);
         }
     }

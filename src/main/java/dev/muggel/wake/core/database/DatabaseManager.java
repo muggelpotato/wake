@@ -15,7 +15,7 @@ import org.jspecify.annotations.Nullable;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -42,8 +42,7 @@ public class DatabaseManager {
     private final MirrorRegistry mirrors;
     private final AtomicInteger pendingWrites = new AtomicInteger();
     private final AtomicLong completedWrites = new AtomicLong();
-    private final Set<String> failingReads = ConcurrentHashMap.newKeySet();
-    private final Set<String> transientReads = ConcurrentHashMap.newKeySet();
+    private final Map<String, Boolean> failingReads = new ConcurrentHashMap<>();
     private long lastPublishMillis;
     private volatile @Nullable UUID currentActor;
     private @Nullable DegradedNoticeListener noticeListener;
@@ -57,10 +56,8 @@ public class DatabaseManager {
     }
 
     public void init() {
-        DatabasePool.Handle pool = DatabasePool.open(plugin);
-        this.dialect = pool.dialect();
+        this.dialect = DatabasePool.open(plugin);
         this.schemaMigrator = new SchemaMigrator(plugin, dialect);
-        outage.probeVia(pool.dataSource());
         this.noticeListener = new DegradedNoticeListener(this);
         Bukkit.getPluginManager().registerEvents(noticeListener, plugin);
         outage.replayOnBoot();
@@ -100,7 +97,9 @@ public class DatabaseManager {
         writeExecutor.execute(() -> {
             try {
                 if (outage.isDegraded()) {
-                    outage.journal(statements);
+                    if (!outage.journal(statements) && onLost != null) {
+                        onLost.run();
+                    }
                     return;
                 }
                 try {
@@ -112,8 +111,11 @@ public class DatabaseManager {
                             plugin.getLogger().log(Level.WARNING,
                                     errorMessage + " (database unreachable, journaling until it returns)", e);
                         }
-                        outage.journal(statements);
+                        boolean journaled = outage.journal(statements);
                         outage.enterDegraded(actor);
+                        if (!journaled && onLost != null) {
+                            onLost.run();
+                        }
                     } else {
                         plugin.getLogger().log(Level.SEVERE, errorMessage, e);
                         if (onLost != null) {
@@ -150,25 +152,19 @@ public class DatabaseManager {
     }
 
     void readFailed(@NonNull String subject, @NonNull Throwable failure) {
-        if (OutageMonitor.isRetryableFailure(failure)) {
-            transientReads.add(subject);
-        } else {
-            transientReads.remove(subject);
-        }
-        if (failingReads.add(subject)) {
+        if (failingReads.put(subject, OutageMonitor.isRetryableFailure(failure)) == null) {
             plugin.getLogger().log(Level.SEVERE, "Failed to read " + subject + " (repeats stay silent until it succeeds)", failure);
         }
     }
 
     void readSucceeded(@NonNull String subject) {
-        transientReads.remove(subject);
-        if (failingReads.remove(subject)) {
+        if (failingReads.remove(subject) != null) {
             plugin.getLogger().info("Reading " + subject + " works again");
         }
     }
 
     boolean readFailureWasTransient(@NonNull String subject) {
-        return transientReads.contains(subject);
+        return Boolean.TRUE.equals(failingReads.get(subject));
     }
 
     /** The standard shape for a cache reload (Drain queued writes -> read on async thread -> apply results on main thread) */
@@ -179,7 +175,7 @@ public class DatabaseManager {
                 awaitWrites();
                 result = read.get();
             } catch (RuntimeException e) {
-                readFailed("the database", e);
+                plugin.getLogger().log(Level.SEVERE, "Database read threw instead of reporting a failed read", e);
                 result = null;
             }
             T settled = result;
@@ -250,7 +246,7 @@ public class DatabaseManager {
         return currentActor;
     }
 
-    public SchemaMigrator getSchemaMigrator() {
+    SchemaMigrator getSchemaMigrator() {
         return schemaMigrator;
     }
 

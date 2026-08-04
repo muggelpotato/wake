@@ -92,38 +92,36 @@ public class OBUDao extends WakeDao {
         return read("wake_obu_contexts", () -> DB.getFirstColumn("SELECT name FROM wake_obu_contexts LIMIT 1") != null);
     }
 
-    public @Nullable Map<String, OBUContext> loadContexts(@Nullable Set<String> keys) {
-        return read("wake_obu_contexts", () -> {
-            Map<String, OBUContext> found = new HashMap<>();
-            Map<String, List<OBUSetting>> settingsByContext = new HashMap<>();
-            List<DbRow> contextRows = new ArrayList<>();
-            selectByKeys("SELECT * FROM wake_obu_contexts", "name", keys, contextRows::add);
-            selectByKeys("SELECT context_name, definition_name, args FROM wake_obu_settings", "context_name", keys, row -> {
-                OBUDefinition def = OBUDefinition.get(row.getString("definition_name"));
-                if (def == null) return;
-                List<String> argsList = GSON.fromJson(row.getString("args"), new TypeToken<List<String>>(){}.getType());
-                settingsByContext.computeIfAbsent(canonical(row.getString("context_name")), k -> new ArrayList<>())
-                        .add(new OBUSetting(def, argsList));
-            });
-            for (DbRow row : contextRows) {
-                String name = canonical(row.getString("name"));
-                String ownerStr = row.getString("owner_uuid");
-                UUID owner;
-                ContextType type;
-                try {
-                    owner = ownerStr != null ? UUID.fromString(ownerStr) : null;
-                    type = ContextType.valueOf(row.getString("type"));
-                } catch (IllegalArgumentException e) {
-                    plugin.getLogger().warning("Skipping malformed OBU context row '" + name + "': " + e.getMessage());
-                    continue;
-                }
-                found.put(name, new OBUContext(name, type, owner,
-                        settingsByContext.getOrDefault(name, List.of())));
-            }
-            found.put(OBUDefinition.CONTEXT_EMPTY,
-                    new OBUContext(OBUDefinition.CONTEXT_EMPTY, ContextType.SERVER, null, List.of()));
-            return found;
+    private @NonNull Map<String, OBUContext> loadContexts(@Nullable Set<String> keys) throws SQLException {
+        Map<String, OBUContext> found = new HashMap<>();
+        Map<String, List<OBUSetting>> settingsByContext = new HashMap<>();
+        List<DbRow> contextRows = new ArrayList<>();
+        selectByKeys("SELECT * FROM wake_obu_contexts", "name", keys, contextRows::add);
+        selectByKeys("SELECT context_name, definition_name, args FROM wake_obu_settings", "context_name", keys, row -> {
+            OBUDefinition def = OBUDefinition.get(row.getString("definition_name"));
+            if (def == null) return;
+            List<String> argsList = GSON.fromJson(row.getString("args"), new TypeToken<List<String>>(){}.getType());
+            settingsByContext.computeIfAbsent(canonical(row.getString("context_name")), k -> new ArrayList<>())
+                    .add(new OBUSetting(def, argsList));
         });
+        for (DbRow row : contextRows) {
+            String name = canonical(row.getString("name"));
+            String ownerStr = row.getString("owner_uuid");
+            UUID owner;
+            ContextType type;
+            try {
+                owner = ownerStr != null ? UUID.fromString(ownerStr) : null;
+                type = ContextType.valueOf(row.getString("type"));
+            } catch (IllegalArgumentException e) {
+                plugin.getLogger().warning("Skipping malformed OBU context row '" + name + "': " + e.getMessage());
+                continue;
+            }
+            found.put(name, new OBUContext(name, type, owner,
+                    settingsByContext.getOrDefault(name, List.of())));
+        }
+        found.put(OBUDefinition.CONTEXT_EMPTY,
+                new OBUContext(OBUDefinition.CONTEXT_EMPTY, ContextType.SERVER, null, List.of()));
+        return found;
     }
 
     public void saveContext(@NonNull OBUContext context, @NonNull List<SqlStatement> extraStatements) {

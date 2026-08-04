@@ -21,8 +21,10 @@
  * A {@link dev.muggel.wake.core.database.CachedStore} is the contract for a mirrored table. <br>
  * {@code save} and {@code delete} update the cache and queue the statements together. <br>
  * Once the write queue drains, touched keys are published for another server to re-read. <br>
- * The server gets the keys or {@code null} for the whole table and returns {@code null on a failed read (never empty results), empty table != unreachable. <br>
- * Requested key doesn't return = deleted key. <br>
+ * A loader is handed the keys to read, or {@code null} for the whole table, and lets its {@code SQLException} out rather than answering an empty result: an empty table is not an unreachable one. <br>
+ * The store turns that into the failed read it leaves the cache alone for, so no DAO has to remember the convention. <br>
+ * A key that was asked for and does not come back has been deleted. <br>
+ * An announcement that lands while a read is already in flight is not covered by that read, so the key stays dirty and is read again rather than lost. <br>
  *
  * <h2>Reloads</h2>
  * A cache reload (module {@code reload()}, cross-server sync) should never block the main thread. <br>
@@ -32,6 +34,7 @@
  *
  * <h2>Resilience</h2>
  * When the database is unreachable, {@link dev.muggel.wake.core.database.DatabaseManager} journals writes to disk and replays them on recovery. <br>
+ * A write the disk will not take either is disowned rather than left in the cache, and a replay announces a full resync because nothing told the other servers about the rows it just landed. <br>
  * After writes, dirty scopes are published for cross-server cache invalidation (see {@code core/sync}). <br>
  * DAOs get all of this just by using {@code asyncUpdate(...)} or a mirrored store.
  */

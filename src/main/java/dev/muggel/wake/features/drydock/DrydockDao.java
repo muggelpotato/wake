@@ -11,10 +11,10 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class DrydockDao extends WakeDao {
     private static final String UPSERT_BOOSTPAD = "REPLACE INTO wake_drydock_boostpads (block_key, enabled, force_x, force_y, force_z, delay_ms, padding) VALUES (?, ?, ?, ?, ?, ?, ?)";
@@ -47,23 +47,21 @@ public class DrydockDao extends WakeDao {
         return boostpads;
     }
 
-    private @Nullable Map<String, BoostpadConfig> readBoostpads(@Nullable Set<String> keys) {
-        return read("wake_drydock_boostpads", () -> {
-            Map<String, BoostpadConfig> pads = new ConcurrentHashMap<>();
-            selectByKeys("SELECT * FROM wake_drydock_boostpads", "block_key", keys, row -> {
-                String key = row.getString("block_key");
-                pads.put(key, new BoostpadConfig(
-                        key,
-                        toBoolean(row.get("enabled")),
-                        ((Number) row.get("force_x")).doubleValue(),
-                        ((Number) row.get("force_y")).doubleValue(),
-                        ((Number) row.get("force_z")).doubleValue(),
-                        ((Number) row.get("delay_ms")).longValue(),
-                        ((Number) row.get("padding")).doubleValue()
-                ));
-            });
-            return pads;
+    private @NonNull Map<String, BoostpadConfig> readBoostpads(@Nullable Set<String> keys) throws SQLException {
+        Map<String, BoostpadConfig> pads = new HashMap<>();
+        selectByKeys("SELECT * FROM wake_drydock_boostpads", "block_key", keys, row -> {
+            String key = row.getString("block_key");
+            pads.put(key, new BoostpadConfig(
+                    key,
+                    toBoolean(row.get("enabled")),
+                    ((Number) row.get("force_x")).doubleValue(),
+                    ((Number) row.get("force_y")).doubleValue(),
+                    ((Number) row.get("force_z")).doubleValue(),
+                    ((Number) row.get("delay_ms")).longValue(),
+                    ((Number) row.get("padding")).doubleValue()
+            ));
         });
+        return pads;
     }
 
     private static boolean toBoolean(Object raw) {

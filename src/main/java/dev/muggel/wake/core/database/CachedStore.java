@@ -5,6 +5,7 @@ import dev.muggel.wake.core.Scheduling;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -22,16 +23,18 @@ import java.util.logging.Level;
  * A DAO owns one per mirrored table and every read and write of that table goes through it. <br>
  * A write -> updates cache -> queues the statement -> announces the key once queue drains. <br>
  *
- * Three rules keep a reload from corrupting the cache: <br>
- * 1. a loader returns {@code null} for a failed read, never an empty result. The keys stay dirty and are retried <br>
+ * Four rules keep a reload from corrupting the cache: <br>
+ * 1. a loader that throws is a failed read, never an empty result. The keys stay dirty and are retried <br>
  * 2. a result older than one already merged is dropped whole <br>
  * 3. a key written while the read was in flight keeps its local value, and only that key <br>
+ * 4. a key announced again while the read was in flight stays dirty, because the read may predate the change <br>
  * A crash between the commit and the announcement leaves peers stale until they reload, restart, or reconnect.
  */
 public final class CachedStore<V> {
+    /** Reads the rows for {@code keys}, or the whole table when {@code keys} is {@code null} */
     @FunctionalInterface
     public interface Loader<V> {
-        @Nullable Map<String, V> load(@Nullable Set<String> keys);
+        @NonNull Map<String, V> load(@Nullable Set<String> keys) throws SQLException;
     }
 
     private static final int MAX_KEYED_READ = 500;
@@ -42,8 +45,9 @@ public final class CachedStore<V> {
     private final Loader<V> loader;
     private final Map<String, V> values = new ConcurrentHashMap<>();
     private final Map<String, Long> localWrites = new ConcurrentHashMap<>();
-    private final Set<String> staleKeys = ConcurrentHashMap.newKeySet();
+    private final Map<String, Long> staleKeys = new ConcurrentHashMap<>();
     private final AtomicLong wholeTableRequests = new AtomicLong();
+    private final AtomicLong staleClock = new AtomicLong();
     private final AtomicLong writeClock = new AtomicLong();
     private final AtomicLong reads = new AtomicLong();
     private final List<Consumer<Set<String>>> waiting = new ArrayList<>();
@@ -140,8 +144,10 @@ public final class CachedStore<V> {
     void markStale(@Nullable Collection<String> keys) {
         if (keys == null) {
             wholeTableRequests.incrementAndGet();
-        } else {
-            staleKeys.addAll(keys);
+            return;
+        }
+        for (String key : keys) {
+            staleKeys.put(key, staleClock.incrementAndGet());
         }
     }
 
@@ -159,19 +165,34 @@ public final class CachedStore<V> {
         localWrites.put(key, writeClock.incrementAndGet());
     }
 
-    /** Blocking whole-table load. {@code false} means the read failed and the cache was left untouched */
-    public boolean load() {
-        long wholeTableAt = wholeTableRequests.get();
-        Set<String> covered = Set.copyOf(staleKeys);
-        long readFrom = writeClock.get();
-        Map<String, V> rows;
+    /** Runs the loader and reports the outcome under this table */
+    private @Nullable Map<String, V> read(@Nullable Set<String> keys) {
+        DatabaseManager database = plugin.getDatabaseManager();
         try {
-            rows = loader.load(null);
-        } catch (RuntimeException e) {
-            plugin.getDatabaseManager().readFailed(table, e);
-            rows = null;
+            Map<String, V> rows = loader.load(keys);
+            database.readSucceeded(table);
+            return rows;
+        } catch (Exception e) {
+            database.readFailed(table, e);
+            return null;
         }
-        if (rows == null) {
+    }
+
+    private boolean readWouldRewind() {
+        return plugin.getDatabaseManager().isDegraded();
+    }
+
+    /** Blocking whole-table load. {@code false} means the read did not reach the cache, which was left untouched */
+    public boolean load() {
+        if (readWouldRewind()) {
+            return false;
+        }
+        plugin.getDatabaseManager().awaitWrites();
+        long wholeTableAt = wholeTableRequests.get();
+        Map<String, Long> covered = Map.copyOf(staleKeys);
+        long readFrom = writeClock.get();
+        Map<String, V> rows = read(null);
+        if (rows == null || readWouldRewind()) {
             Scheduling.onMain(plugin, () -> reloadAsync(null));
             return false;
         }
@@ -193,28 +214,31 @@ public final class CachedStore<V> {
         if (reading) {
             return;
         }
+        if (readWouldRewind()) {
+            runAll(drainWaiting(), Set.of());
+            return;
+        }
         long wholeTableAt = wholeTableRequests.get();
-        Set<String> covered = Set.copyOf(staleKeys);
+        Map<String, Long> covered = Map.copyOf(staleKeys);
         boolean whole = !loaded || wholeTableAt > wholeTableServed || covered.size() > MAX_KEYED_READ;
-        List<Consumer<Set<String>>> due = List.copyOf(waiting);
-        waiting.clear();
+        List<Consumer<Set<String>>> due = drainWaiting();
         if (!whole && covered.isEmpty()) {
             runAll(due, Set.of());
             return;
         }
-        Set<String> keys = whole ? null : covered;
+        Set<String> keys = whole ? null : covered.keySet();
         long readFrom = writeClock.get();
         long ticket = reads.incrementAndGet();
         reading = true;
-        plugin.getDatabaseManager().readAsync(() -> loader.load(keys), rows -> {
+        plugin.getDatabaseManager().readAsync(() -> read(keys), rows -> {
             reading = false;
-            if (rows == null) {
+            if (rows == null || readWouldRewind()) {
                 spendGuards(readFrom);
-                if (retryIfTransient()) {
-                    waiting.addAll(due);
-                } else {
-                    runAll(due, Set.of());
+                waiting.addAll(0, due);
+                if (rows == null && retryIfTransient()) {
+                    return;
                 }
+                runAll(drainWaiting(), Set.of());
                 return;
             }
             failedReads = 0;
@@ -234,6 +258,12 @@ public final class CachedStore<V> {
         }
         Scheduling.later(plugin, this::startRead, TRANSIENT_RETRY_TICKS[failedReads++]);
         return true;
+    }
+
+    private @NonNull List<Consumer<Set<String>>> drainWaiting() {
+        List<Consumer<Set<String>>> due = List.copyOf(waiting);
+        waiting.clear();
+        return due;
     }
 
     private void runAll(@NonNull List<Consumer<Set<String>>> due, @NonNull Set<String> changed) {
@@ -257,7 +287,7 @@ public final class CachedStore<V> {
     }
 
     /** Merges a settled read into the cache and answers with the keys it moved */
-    private @NonNull Set<String> apply(@NonNull Map<String, V> rows, @Nullable Set<String> keys, @NonNull Set<String> covered, long readFrom, long wholeTableAt, long ticket) {
+    private @NonNull Set<String> apply(@NonNull Map<String, V> rows, @Nullable Set<String> keys, @NonNull Map<String, Long> covered, long readFrom, long wholeTableAt, long ticket) {
         Set<String> changed = new HashSet<>();
         if (keys == null) {
             values.keySet().removeIf(key -> {
@@ -290,7 +320,7 @@ public final class CachedStore<V> {
             }
         }
         appliedRead = ticket;
-        staleKeys.removeAll(covered);
+        covered.forEach(staleKeys::remove);
         return changed;
     }
 

@@ -20,6 +20,7 @@ import struct
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -128,6 +129,47 @@ def state(key, mariadb=None):
     return row[0].strip('"') if row else None
 
 
+def write_state_raw(key, raw_value, mariadb=None):
+    """Puts raw text into wake_state behind the server's back, or drops the row when raw_value is None."""
+    if mariadb:
+        container, user, password, database = mariadb
+        sql = (f"DELETE FROM wake_state WHERE state_key = '{key}'" if raw_value is None
+               else f"REPLACE INTO wake_state (state_key, state_value) VALUES ('{key}', '{raw_value}')")
+        docker("exec", container, "mariadb", f"-u{user}", f"-p{password}", database, "-N", "-B", "-e", sql)
+        return
+    connection = sqlite3.connect(str(WAKE / "wake.db"), timeout=10)
+    try:
+        if raw_value is None:
+            connection.execute("DELETE FROM wake_state WHERE state_key = ?", (key,))
+        else:
+            connection.execute("REPLACE INTO wake_state (state_key, state_value) VALUES (?, ?)", (key, raw_value))
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def switch(text):
+    """The Status: line a listing prints, which is read out of the cache rather than the table."""
+    found = STATUS.search(CODES.sub("", text))
+    return found.group(1).lower() if found else None
+
+
+def state_keys(prefix, mariadb=None):
+    """Every state key under `prefix`, out of whichever backend the server is writing to."""
+    if mariadb:
+        container, user, password, database = mariadb
+        out = docker("exec", container, "mariadb", f"-u{user}", f"-p{password}", database, "-N", "-B",
+                     "-e", f"SELECT state_key FROM wake_state WHERE state_key LIKE '{prefix}%'")
+        return sorted(line.strip() for line in out.splitlines() if line.strip())
+    uri = "file:" + (WAKE / "wake.db").resolve().as_posix() + "?mode=ro"
+    connection = sqlite3.connect(uri, uri=True, timeout=5)
+    try:
+        rows = connection.execute("SELECT state_key FROM wake_state WHERE state_key LIKE ?", (prefix + "%",)).fetchall()
+    finally:
+        connection.close()
+    return sorted(row[0] for row in rows)
+
+
 def docker(*args):
     # rcon-cli echoes section-sign colour codes: decoding with the console default fails on Windows
     result = subprocess.run([os.environ.get("DOCKER", "docker"), *args], capture_output=True,
@@ -137,9 +179,52 @@ def docker(*args):
     return result.stdout
 
 
+@contextmanager
+def outage(mariadb: Optional[tuple]):
+    """Cuts the database off for the body: stops the container, or holds the sqlite write lock."""
+    if mariadb:
+        step(f"stopping {mariadb[0]}")
+        docker("stop", mariadb[0])
+    else:
+        # SQLite has no service to stop: hold the write lock so the plugin's writes fail busy
+        step("taking the sqlite write lock")
+        holder = sqlite3.connect(str(WAKE / "wake.db"), timeout=5, isolation_level=None)
+        holder.execute("BEGIN IMMEDIATE")
+    try:
+        yield
+    finally:
+        if mariadb:
+            step(f"starting {mariadb[0]}")
+            docker("start", mariadb[0])
+        else:
+            step("releasing the sqlite write lock")
+            holder.execute("ROLLBACK")
+            holder.close()
+
+
+def detect_backend(container) -> Optional[tuple]:
+    """The mariadb connection the server is configured for, or None when it is on sqlite."""
+    config = (WAKE / "config.yml").read_text(encoding="utf-8")
+    block = re.search(r"(?ms)^database:\n(?:[ \t]+.*\n?)*", config)
+    # match the setting, not the comment listing the options next to it
+    if not block or not re.search(r"""(?m)^\s*type:\s*["']?(mariadb|mysql)""", block.group(0)):
+        return None
+
+    def field(name, fallback):
+        found = re.search(rf"""(?m)^\s+{name}:\s*["']?([^"'#\r\n]+)""", block.group(0))
+        return found.group(1).strip() if found else fallback
+
+    return container, field("username", "root"), field("password", "password"), field("database", "wake")
+
+
 def drill_boot(rcon: Rcon):
     print("\nboot")
     text = LOG.read_text(encoding="utf-8", errors="replace")
+    # a drill run earlier in the same server session is not boot: reloads re-enable modules and the drills
+    # that feed the layer bad input log about it on purpose
+    done = text.find("]: Done (")
+    if done != -1:
+        text = text[:text.index("\n", done) + 1]
     if "Database ready" in text:
         ok("database came up")
     else:
@@ -171,21 +256,7 @@ def drill_outage(rcon: Rcon, log: Log, mariadb: Optional[tuple]):
     target = "false" if original == "true" else "true"
     log.reset()
 
-    if mariadb:
-        container = mariadb[0]
-        step(f"stopping {container}")
-        docker("stop", container)
-        release = lambda: docker("start", container)
-        step_back = f"starting {container}"
-    else:
-        # SQLite has no service to stop: hold the write lock so the plugin's writes fail busy
-        step("taking the sqlite write lock")
-        holder = sqlite3.connect(str(WAKE / "wake.db"), timeout=5, isolation_level=None)
-        holder.execute("BEGIN IMMEDIATE")
-        release = lambda: (holder.execute("ROLLBACK"), holder.close())
-        step_back = "releasing the sqlite write lock"
-
-    try:
+    with outage(mariadb):
         step(f"changing a setting while the database is unreachable (hints -> {target})")
         rcon.run(f"wake hints {target}")
         if await_file(JOURNAL, True, 45):
@@ -196,9 +267,6 @@ def drill_outage(rcon: Rcon, log: Log, mariadb: Optional[tuple]):
                 bad("journal is not one JSON object per line")
         else:
             bad("no outage journal appeared within 45s")
-    finally:
-        step(step_back)
-        release()
 
     if log.await_line("Database recovered", 90):
         ok("recovery detected and journal replayed")
@@ -234,10 +302,6 @@ def drill_sync(rcon: Rcon, log: Log, backend: str):
             f"-- `docker logs {backend}` will say why (a database that was not accepting connections when the "
             f"container started is the usual cause; `docker restart {backend}` fixes that one)")
         return
-
-    def switch(text):
-        found = STATUS.search(CODES.sub("", text))
-        return found.group(1).lower() if found else None
 
     def remote_switch():
         return switch(docker("exec", backend, "rcon-cli", "dd boostpad list"))
@@ -286,6 +350,78 @@ def drill_sync(rcon: Rcon, log: Log, backend: str):
         bad("no resync line within 60s of the bus returning")
 
 
+def drill_boot_replay(rcon: Rcon, log: Log, backend: str, mariadb: tuple):
+    """A journal replayed at boot has to reach the other server as well.
+
+    Nothing announced the writes the journal holds, because they never reached the table. The peer's own
+    recovery reads that table back, and at that point it still says what it said before the outage -- so
+    unless the replaying server announces what it just pushed in, the peer stays wrong indefinitely.
+    """
+    print("\nboot replay reaches the other server")
+    container = mariadb[0]
+
+    def remote_switch():
+        return switch(docker("exec", backend, "rcon-cli", "dd boostpad list"))
+
+    def await_local(expected, timeout):
+        deadline = time.monotonic() + timeout
+        seen = switch(rcon.run("dd boostpad list"))
+        while seen != expected and time.monotonic() < deadline:
+            time.sleep(2)
+            seen = switch(rcon.run("dd boostpad list"))
+        return seen
+
+    before = switch(rcon.run("dd boostpad list"))
+    if before is None or remote_switch() != before:
+        bad(f"the servers disagree before the drill starts ({before!r} vs {remote_switch()!r})")
+        return
+    hints = state("base.show_hints", mariadb) or "true"
+
+    step(f"stopping {container}")
+    docker("stop", container)
+    stopped_backend = False
+    try:
+        # the primary has to journal something of its own, or it never notices the outage and never recovers
+        rcon.run(f"wake hints {'false' if hints == 'true' else 'true'}")
+        step("flipping the switch on the other server, where it can only reach its journal")
+        docker("exec", backend, "rcon-cli", "dd boostpad toggle")
+        time.sleep(3)
+        expected = remote_switch()
+        if expected == before:
+            bad("the other server did not flip its own cache while the database was down")
+            return
+        step(f"stopping {backend} with that write still in its journal")
+        docker("stop", backend)
+        stopped_backend = True
+    finally:
+        step(f"starting {container}")
+        docker("start", container)
+        if not stopped_backend:
+            docker("start", backend)
+
+    if not log.await_line("Database recovered", 120):
+        bad("the primary never recovered, so the rest of this drill would prove nothing")
+        return
+    time.sleep(3)
+    settled = switch(rcon.run("dd boostpad list"))
+    if settled == before:
+        ok(f"the primary read the table back and still holds the pre-outage value ({before})")
+    else:
+        bad(f"the primary reports {settled!r} before the replay, expected {before!r}")
+
+    step(f"starting {backend}, which replays its journal before anything else")
+    docker("start", backend)
+    seen = await_local(expected, 240)
+    if seen == expected:
+        ok(f"the boot replay was announced and the primary took it ({before} -> {expected})")
+    else:
+        bad(f"the primary still reports {seen!r} after the replay, expected {expected!r}")
+
+    rcon.run(f"wake hints {hints}")
+    if switch(rcon.run("dd boostpad list")) != before:
+        rcon.run("dd boostpad toggle")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--host", default="127.0.0.1")
@@ -302,17 +438,7 @@ def main():
         raise SystemExit(f"cannot reach RCON at {args.host}:{args.port} ({error}). "
                          f"Start ./gradlew runServer first.")
 
-    config = (WAKE / "config.yml").read_text(encoding="utf-8")
-    block = re.search(r"(?ms)^database:\n(?:[ \t]+.*\n?)*", config)
-    # match the setting, not the comment listing the options next to it
-    mariadb = None
-    if block and re.search(r"""(?m)^\s*type:\s*["']?(mariadb|mysql)""", block.group(0)):
-        def field(name, fallback):
-            found = re.search(rf"""(?m)^\s+{name}:\s*["']?([^"'#\r\n]+)""", block.group(0))
-            return found.group(1).strip() if found else fallback
-
-        mariadb = (args.mariadb_container, field("username", "root"),
-                   field("password", "password"), field("database", "wake"))
+    mariadb = detect_backend(args.mariadb_container)
     print(f"backend: {'mariadb' if mariadb else 'sqlite'}")
     log = Log()
 
@@ -322,6 +448,7 @@ def main():
         if args.sync:
             if mariadb:
                 drill_sync(rcon, log, args.backend)
+                drill_boot_replay(rcon, log, args.backend, mariadb)
             else:
                 print("\ncross-server sync\n  skipped: needs database.type: mariadb")
     except RuntimeError as error:

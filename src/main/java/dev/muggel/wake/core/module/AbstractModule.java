@@ -9,6 +9,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.jspecify.annotations.Nullable;
+import dev.muggel.wake.core.database.StateDao;
 import dev.muggel.wake.core.database.WakeDao;
 
 import java.util.ArrayList;
@@ -166,8 +167,12 @@ public abstract class AbstractModule implements WakeModule {
     }
 
     /** Writes every state value the module owns */
-    protected final int exportState(YamlConfiguration yaml) {
-        Map<String, Object> entries = plugin.getStateDao().snapshot(getId() + ".");
+    protected final int exportState(YamlConfiguration yaml) throws SQLException {
+        StateDao stateDao = plugin.getStateDao();
+        if (!stateDao.isLoaded()) {
+            throw new SQLException("Module state could not be read");
+        }
+        Map<String, Object> entries = stateDao.snapshot(getId() + ".");
         entries.forEach(yaml::set);
         return entries.size();
     }
@@ -194,8 +199,9 @@ public abstract class AbstractModule implements WakeModule {
         return count;
     }
 
-    protected final void registerDao(WakeDao dao) {
+    protected final <T extends WakeDao> T registerDao(T dao) {
         daos.add(dao);
+        return dao;
     }
 
     @Override

@@ -23,7 +23,7 @@ import java.util.logging.Level;
  * Failed migrations abort module loading. <br>
  * On a shared database only the first server gets to migrate {@link #underSchemaLock}
  */
-public class SchemaMigrator {
+class SchemaMigrator {
     private static final String STAMP_VERSION = "REPLACE INTO wake_schema_version (module, version) VALUES (?, ?)";
     private static final String ACQUIRE_LOCK = "SELECT GET_LOCK(?, ?)";
     private static final String RELEASE_LOCK = "SELECT RELEASE_LOCK(?)";
@@ -31,7 +31,7 @@ public class SchemaMigrator {
     private final Wake plugin;
     private final Dialect dialect;
     private boolean backedUp = false;
-    public SchemaMigrator(@NonNull Wake plugin, @NonNull Dialect dialect) {
+    SchemaMigrator(@NonNull Wake plugin, @NonNull Dialect dialect) {
         this.plugin = plugin;
         this.dialect = dialect;
         try {
@@ -46,7 +46,7 @@ public class SchemaMigrator {
         }
     }
 
-    public void underSchemaLock(@NonNull String schemaId, @NonNull Runnable body) {
+    void underSchemaLock(@NonNull String schemaId, @NonNull Runnable body) {
         if (dialect != Dialect.MARIADB) {
             body.run();
             return;
@@ -96,7 +96,7 @@ public class SchemaMigrator {
         }
     }
 
-    public @Nullable Integer storedVersion(@NonNull String schemaId) {
+    @Nullable Integer storedVersion(@NonNull String schemaId) {
         try {
             Object value = DB.getFirstColumn("SELECT version FROM wake_schema_version WHERE module = ?", schemaId);
             return value == null ? null : ((Number) value).intValue();
@@ -105,7 +105,7 @@ public class SchemaMigrator {
         }
     }
 
-    public void stamp(@NonNull String schemaId, int version) {
+    void stamp(@NonNull String schemaId, int version) {
         try {
             DB.executeUpdate(STAMP_VERSION, schemaId, version);
         } catch (SQLException e) {
@@ -113,7 +113,7 @@ public class SchemaMigrator {
         }
     }
 
-    public void migrate(@NonNull WakeDao dao, @NonNull String schemaId, int fromVersion, int targetVersion) {
+    void migrate(@NonNull WakeDao dao, @NonNull String schemaId, int fromVersion, int targetVersion) {
         backupOnce();
         for (int version = fromVersion; version < targetVersion; version++) {
             List<String> steps = dao.migrationSteps(version, dialect);

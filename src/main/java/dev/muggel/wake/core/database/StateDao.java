@@ -2,6 +2,7 @@ package dev.muggel.wake.core.database;
 
 import co.aikar.idb.DB;
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.sync.SyncService;
 import org.jspecify.annotations.NonNull;
@@ -22,6 +23,7 @@ import java.util.function.Consumer;
  */
 public class StateDao extends WakeDao {
     private static final String UPSERT = "REPLACE INTO wake_state (state_key, state_value) VALUES (?, ?)";
+    private static final String DELETE_PREFIX = "DELETE FROM wake_state WHERE state_key LIKE ? ESCAPE '!'";
     private final Gson gson = new Gson();
     private final CachedStore<Object> state = mirror("wake_state", this::readState);
     public StateDao(@NonNull Wake plugin) {
@@ -57,17 +59,20 @@ public class StateDao extends WakeDao {
         state.reloadAsync(afterApply);
     }
 
-    private @Nullable Map<String, Object> readState(@Nullable Set<String> keys) {
-        return read("wake_state", () -> {
-            Map<String, Object> loaded = new HashMap<>();
-            selectByKeys("SELECT state_key, state_value FROM wake_state", "state_key", keys, row -> {
+    private @NonNull Map<String, Object> readState(@Nullable Set<String> keys) throws SQLException {
+        Map<String, Object> loaded = new HashMap<>();
+        selectByKeys("SELECT state_key, state_value FROM wake_state", "state_key", keys, row -> {
+            String key = row.getString("state_key");
+            try {
                 Object value = gson.fromJson(row.getString("state_value"), Object.class);
                 if (value != null) {
-                    loaded.put(row.getString("state_key"), value);
+                    loaded.put(key, value);
                 }
-            });
-            return loaded;
+            } catch (JsonSyntaxException e) {
+                plugin.getLogger().warning("Skipping malformed state row '" + key + "': " + e.getMessage());
+            }
         });
+        return loaded;
     }
 
     @SuppressWarnings("unchecked")
@@ -126,7 +131,7 @@ public class StateDao extends WakeDao {
                 state.forget(key);
             }
         }
-        state.announceWholeScope("Failed to clear state", List.of(
-                new SqlStatement("DELETE FROM wake_state WHERE state_key LIKE ?", new Object[]{prefix + "%"})));
+        String pattern = prefix.replaceAll("([!%_])", "!$1") + "%";
+        state.announceWholeScope("Failed to clear state", List.of(new SqlStatement(DELETE_PREFIX, new Object[]{pattern})));
     }
 }

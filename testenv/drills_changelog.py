@@ -414,6 +414,42 @@ def drill_write_storm(primary: Rcon, rounds=15):
     truthy("and on the final removal", "minecraft:ice" not in backend2_cache("drydock"), "")
 
 
+GAPS = [0.0, 0.02, 0.04, 0.06, 0.08, 0.10, 0.12, 0.14, 0.16, 0.20, 0.25, 0.30]
+
+
+def drill_second_edit_during_read(primary: Rcon):
+    """Two edits to one key from the other side, swept across the width of the primary's read.
+
+    The first edit sends the primary off to read that key back. The second announces the key again
+    while that read is still in flight, and the read may have run before the second edit committed,
+    so it cannot count as covering it. Retiring the key's dirty mark on the strength of that read
+    leaves the primary holding edit one for good: nothing names the key again, so nothing re-reads it.
+    The sweep is there because the window is one main-thread hop wide -- the gaps around 0.1s are the
+    ones that land inside it. A burst of edits hides this rather than showing it, because a later
+    announcement re-marks the key and covers up the swallowed one."""
+    step(f"a second edit to the same row {GAPS[0]}s-{GAPS[-1]}s behind the first, {len(GAPS)} gaps")
+    stale = []
+    for index, gap in enumerate(GAPS):
+        first, second = 700 + index * 2, 701 + index * 2
+        docker("exec", PAPER2, "sh", "-c",
+               f'rcon-cli "dd boostpad add minecraft:ice 0.5 0.0 0.0 {first}"; sleep {gap}; '
+               f'rcon-cli "dd boostpad add minecraft:ice 0.5 0.0 0.0 {second}"')
+        settle(1.3)
+        held = pad_fields(primary_cache(primary, "drydock"), "minecraft:ice")
+        if held != (0.5, second):
+            stale.append(f"{gap}s -> {held}, wanted delay_ms {second}")
+    truthy("the primary read back the second edit at every gap", not stale, " | ".join(stale))
+
+    step("and the same for a removal that follows an edit")
+    docker("exec", PAPER2, "sh", "-c",
+           'rcon-cli "dd boostpad add minecraft:ice 0.5 0.0 0.0 999"; sleep 0.1; '
+           'rcon-cli "dd boostpad remove minecraft:ice"')
+    settle(2)
+    truthy("the primary holds nothing, not the edit before it",
+           pad_fields(primary_cache(primary, "drydock"), "minecraft:ice") is None,
+           str(pad_fields(primary_cache(primary, "drydock"), "minecraft:ice")))
+
+
 def drill_state_prefix_clear(primary: Rcon):
     step("clearing a state prefix (a change no row names) reaches the other backend")
     before = pad_state(on_backend2("dd boostpad list"))
@@ -551,6 +587,7 @@ def main():
     drill_concurrent_same_key(primary)
     drill_concurrent_cross_writes(primary)
     drill_write_storm(primary)
+    drill_second_edit_during_read(primary)
     drill_reset(primary)
     drill_seed(primary)
     drill_state_prefix_clear(primary)

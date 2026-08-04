@@ -36,15 +36,13 @@ public class AxiomDao extends WakeDao {
         return displays;
     }
 
-    private @Nullable Map<String, String> readDisplays(@Nullable Set<String> keys) {
-        return read("wake_axiom_displays", () -> {
-            Map<String, String> models = new HashMap<>();
-            selectByKeys("SELECT model_key FROM wake_axiom_displays", "model_key", keys, row -> {
-                String key = row.getString("model_key");
-                models.put(key, key);
-            });
-            return models;
+    private @NonNull Map<String, String> readDisplays(@Nullable Set<String> keys) throws SQLException {
+        Map<String, String> models = new HashMap<>();
+        selectByKeys("SELECT model_key FROM wake_axiom_displays", "model_key", keys, row -> {
+            String key = row.getString("model_key");
+            models.put(key, key);
         });
+        return models;
     }
 
     public void importDisplay(String modelKey) throws SQLException {
