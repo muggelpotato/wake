@@ -5,7 +5,7 @@ import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.core.database.StateDao;
-import dev.muggel.wake.core.module.AbstractModule;
+import dev.muggel.wake.core.module.WakeModule;
 import dev.muggel.wake.features.base.commands.HelpCommand;
 import dev.muggel.wake.features.base.commands.KillEmptyBoatsCommand;
 import dev.muggel.wake.features.base.commands.ReloadCommand;
@@ -15,23 +15,22 @@ import org.jspecify.annotations.NonNull;
 
 import java.sql.SQLException;
 
-public class BaseModule extends AbstractModule {
+public class BaseModule extends WakeModule {
     public static final String STATE_KEY_KILL_BOAT_ON_EXIT = "base.killboatonexit";
-    public BaseModule() {
-        super("base");
+    public BaseModule(Wake plugin) {
+        super(plugin, "base");
     }
 
     @Override
     protected void onModuleEnable() {
         registerListener(new EmptyBoatListener(this));
-        StateDao stateDao = getPlugin().getStateDao();
-        seedDataIfEmpty(stateDao.isLoaded() ? stateDao.snapshot("base.").isEmpty() : null, "defaults/base_default.yml", "Base Configs");
+        StateDao stateDao = plugin.getStateDao();
+        seedDataIfEmpty(stateDao.isLoaded() && stateDao.snapshot(statePrefix).isEmpty());
     }
 
     @Override
-    public CommandNode buildCommands(Wake plugin) {
+    public CommandNode buildCommands() {
         return CommandNode.literal("wake")
-                .withModule(BaseModule.class)
                 .aliases("wa")
                 .addSubcommand(HelpCommand.getNode(plugin))
                 .addSubcommand(ReloadCommand.getNode(plugin))
@@ -44,11 +43,11 @@ public class BaseModule extends AbstractModule {
 
     @Override
     public void reload() {
-        getPlugin().getStateDao().reloadAsync(null);
+        plugin.getStateDao().reloadAsync(null);
     }
 
     public boolean isKillBoatOnExit() {
-        return getPlugin().getStateDao().get(STATE_KEY_KILL_BOAT_ON_EXIT, false);
+        return plugin.getStateDao().get(STATE_KEY_KILL_BOAT_ON_EXIT, false);
     }
 
     @Override
@@ -57,7 +56,7 @@ public class BaseModule extends AbstractModule {
     }
 
     @Override
-    protected int onImportData(@NonNull YamlConfiguration yaml) {
+    protected int onImportData(@NonNull YamlConfiguration yaml) throws SQLException {
         return importState(yaml);
     }
 }

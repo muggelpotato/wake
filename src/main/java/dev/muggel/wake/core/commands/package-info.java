@@ -5,8 +5,7 @@
  * A command is a tree of {@link dev.muggel.wake.core.commands.CommandNode}s: <br>
  * {@code literal(...)} for fixed words, {@code argument(...)} for typed values. <br>
  * Chain positional arguments with {@code arguments(...)}; use {@code addSubcommand(...)} only for real branches. <br>
- * A module returns its root node from {@code buildCommands(Wake)} and the framework does the rest. <br>
- * Declare {@code .withModule(...)} on the root (every child inherits).
+ * A module returns its root node from {@code buildCommands()} and the framework does the rest: the module that built a root owns it, so the tree needs no declaration of who it belongs to.
  *
  * <h2>What is automatic</h2>
  * <ul>
@@ -20,8 +19,7 @@
  * <h2>What fails the boot</h2>
  * The whole tree is derived and checked once, before Brigadier sees it, so a mistake here stops Wake from enabling instead of registering half a command tree. Wake refuses to start when:
  * <ul>
- *   <li>A root is an argument, declares no module, or declares a module that was never registered</li>
- *   <li>A node below a root declares {@code .withModule(...)}</li>
+ *   <li>A root is an argument rather than a literal</li>
  *   <li>Two roots claim the same name or alias, or two literals derive the same permission</li>
  *   <li>A literal is not {@code -?[a-z0-9][a-z0-9_-]*}</li>
  *   <li>A node has neither an executor nor sub-commands, so nothing could ever reach it</li>

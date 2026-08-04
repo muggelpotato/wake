@@ -23,12 +23,11 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import (JOURNAL, Log, Rcon, await_file, bad, detect_backend, failures, ok, outage, state,  # noqa: E402
-                    state_keys, step, write_state_raw)
+from drills import (JOURNAL, Log, Rcon, await_file, bad, detect_backend, failures, ok, outage,  # noqa: E402
+                    set_module_enabled, state, state_keys, step, write_state_raw)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPORTS = ROOT / "run" / "plugins" / "wake" / "exports"
-CONFIG = ROOT / "run" / "plugins" / "wake" / "config.yml"
 # the reply reaches the sender after the command returned, so the console line is what a script can read
 COMPLETED = re.compile(r"Database (\w+) completed for module (\w+) \((\d+) records\)")
 SETTLE = 1.5
@@ -51,16 +50,6 @@ def run(rcon: Rcon, log: Log, command, verb=None, module=None, timeout=20):
                 return int(count)
         time.sleep(0.5)
     return None
-
-
-def set_module_enabled(module, enabled):
-    """Flips `modules.<module>.enabled` in the live config, which is what a `/wake reload` acts on."""
-    text = CONFIG.read_text(encoding="utf-8")
-    swapped, count = re.subn(rf"(?ms)(^  {module}:\n    enabled: )(?:true|false)",
-                             rf"\g<1>{'true' if enabled else 'false'}", text, count=1)
-    if count != 1:
-        raise RuntimeError(f"could not find modules.{module}.enabled in {CONFIG}")
-    CONFIG.write_text(swapped, encoding="utf-8")
 
 
 def exported(module):

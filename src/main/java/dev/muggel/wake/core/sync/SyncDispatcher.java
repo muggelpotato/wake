@@ -42,7 +42,7 @@ class SyncDispatcher {
         if (scopes.contains(SyncService.SCOPE_STATE) || scopes.contains(SyncService.SCOPE_FULL)) {
             boolean everything = scopes.contains(SyncService.SCOPE_FULL);
             plugin.getStateDao().reloadAsync(changedKeys -> {
-                for (WakeModule module : plugin.getLoadedModules()) {
+                for (WakeModule module : plugin.getActiveModules()) {
                     if (everything || scopes.contains(module.getId()) || ownsAnyKey(module.getId(), changedKeys)) {
                         reloadQuietly(module);
                     }
@@ -50,7 +50,7 @@ class SyncDispatcher {
             });
             return;
         }
-        for (WakeModule module : plugin.getLoadedModules()) {
+        for (WakeModule module : plugin.getActiveModules()) {
             if (scopes.contains(module.getId())) {
                 reloadQuietly(module);
             }

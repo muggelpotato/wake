@@ -100,11 +100,11 @@ final class DatabaseCommandHelper {
 
     static @NonNull SuggestionProvider<CommandSourceStack> moduleSuggester(Wake plugin) {
         return (ctx, builder) -> CommandHelper.suggestMatching(builder,
-                plugin.getLoadedModules().stream().map(WakeModule::getId).toList());
+                plugin.getActiveModules().stream().map(WakeModule::getId).toList());
     }
 
     private static @Nullable WakeModule resolveModule(@NonNull Wake plugin, CommandSender sender, String moduleId) {
-        for (WakeModule m : plugin.getLoadedModules()) {
+        for (WakeModule m : plugin.getActiveModules()) {
             if (m.getId().equals(moduleId)) {
                 return m;
             }

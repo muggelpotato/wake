@@ -31,7 +31,7 @@ public class HelpCommand {
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, @NonNull Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
         MessageManager mm = plugin.getMessageManager();
-        CommandNode root = WakeCommandManager.rootOf(OBUModule.class);
+        CommandNode root = WakeCommandManager.rootOf(OBUModule.ID);
         mm.send(sender, KEY_PREFIX + "header");
         boolean settingsListed = false;
         for (CommandNode child : root == null ? List.<CommandNode>of() : root.getChildren()) {

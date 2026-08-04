@@ -9,7 +9,6 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.muggel.wake.Wake;
-import dev.muggel.wake.core.module.WakeModule;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
@@ -43,12 +42,14 @@ public final class WakeCommandManager {
     private static final Pattern LITERAL_NAME = Pattern.compile("-?[a-z0-9][a-z0-9_-]*");
     private WakeCommandManager() {}
 
-    /** Derives and validates every module's command tree. Called once at boot */
-    public static void declare(@NonNull Wake plugin, @NonNull List<CommandNode> declared) {
+    /** Derives and validates every module's command tree, keyed by the id of the module that built it. Called once at boot */
+    public static void declare(@NonNull Map<String, CommandNode> declared) {
         Map<String, CommandNode> labels = new HashMap<>();
         Map<String, CommandNode> permissionOwners = new HashMap<>();
-        for (CommandNode root : declared) {
-            String moduleId = validateRoot(plugin, root);
+        declared.forEach((moduleId, root) -> {
+            if (root.isArgument()) {
+                throw new IllegalStateException("Command '/" + root.getName() + "' is an argument; a root must be a literal");
+            }
             for (String label : allLabels(root)) {
                 CommandNode claimed = labels.putIfAbsent(label, root);
                 if (claimed != null) {
@@ -57,9 +58,9 @@ public final class WakeCommandManager {
             }
             root.setModuleId(moduleId);
             derive(root, "wake." + moduleId + ".commands", Set.of(), true, permissionOwners);
-        }
+        });
         PermissionManager.sealPresets();
-        roots = declared.stream().sorted(Comparator.comparing(CommandNode::getName)).toList();
+        roots = declared.values().stream().sorted(Comparator.comparing(CommandNode::getName)).toList();
     }
 
     public static void init(@NonNull Wake plugin) {
@@ -80,9 +81,9 @@ public final class WakeCommandManager {
     }
 
     /** The declared root a module registered, for reading its sub-commands back (their permissions included) */
-    public static @Nullable CommandNode rootOf(@NonNull Class<? extends WakeModule> moduleClass) {
+    public static @Nullable CommandNode rootOf(@NonNull String moduleId) {
         for (CommandNode root : roots) {
-            if (root.getModuleClass() == moduleClass) {
+            if (root.getModuleId().equals(moduleId)) {
                 return root;
             }
         }
@@ -91,23 +92,7 @@ public final class WakeCommandManager {
 
     /** Every command below a root owned by a module lives or dies with it */
     public static boolean isModuleActive(@NonNull Wake plugin, @NonNull CommandNode root) {
-        Class<? extends WakeModule> moduleClass = root.getModuleClass();
-        return moduleClass != null && plugin.getModule(moduleClass) != null;
-    }
-
-    private static @NonNull String validateRoot(@NonNull Wake plugin, @NonNull CommandNode root) {
-        if (root.isArgument()) {
-            throw new IllegalStateException("Command '/" + root.getName() + "' is an argument; a root must be a literal");
-        }
-        Class<? extends WakeModule> moduleClass = root.getModuleClass();
-        if (moduleClass == null) {
-            throw new IllegalStateException("Command '/" + root.getName() + "' declares no module: call .withModule(...) on the root");
-        }
-        WakeModule module = plugin.getRegisteredModule(moduleClass);
-        if (module == null) {
-            throw new IllegalStateException("Command '/" + root.getName() + "' is bound to unregistered module class " + moduleClass.getSimpleName());
-        }
-        return module.getId();
+        return plugin.isModuleActive(root.getModuleId());
     }
 
     private static @NonNull List<String> allLabels(@NonNull CommandNode root) {
@@ -124,9 +109,6 @@ public final class WakeCommandManager {
         List<CommandNode> children = node.getChildren();
         if (node.getExecutor() == null && children.isEmpty()) {
             throw new IllegalStateException("Node '" + node.getName() + "' under " + parentPath + " has neither an executor nor sub-commands");
-        }
-        if (!isRoot && node.getModuleClass() != null) {
-            throw new IllegalStateException("Node '" + node.getName() + "' under " + parentPath + " declares .withModule(...): only a root may");
         }
         if (!node.isArgument() && !LITERAL_NAME.matcher(node.getName()).matches()) {
             throw new IllegalStateException("Literal '" + node.getName() + "' under " + parentPath + " must match " + LITERAL_NAME.pattern() + ", or its permission would not be addressable");

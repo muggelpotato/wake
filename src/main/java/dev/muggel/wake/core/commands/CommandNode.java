@@ -4,7 +4,6 @@ import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.muggel.wake.Wake;
-import dev.muggel.wake.core.module.WakeModule;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Boat;
@@ -104,7 +103,6 @@ public class CommandNode {
     private final List<CommandNode> children = new ArrayList<>();
     private final List<String> aliases = new ArrayList<>();
     private String helpKey;
-    private Class<? extends WakeModule> moduleClass;
     private String moduleId = "";
     private String permission = "";
     private Set<PermissionPreset> presets;
@@ -132,12 +130,6 @@ public class CommandNode {
     /** The lang key a module's own help command prints for this node */
     public CommandNode withHelpKey(String helpKey) {
         this.helpKey = helpKey;
-        return this;
-    }
-
-    /** Declared once, on the root: the module the whole tree belongs to */
-    public CommandNode withModule(Class<? extends WakeModule> moduleClass) {
-        this.moduleClass = moduleClass;
         return this;
     }
 
@@ -222,7 +214,6 @@ public class CommandNode {
     public @NonNull @Unmodifiable List<CommandNode> getChildren() { return Collections.unmodifiableList(children); }
     public @NonNull @Unmodifiable List<String> getAliases() { return Collections.unmodifiableList(aliases); }
     public @Nullable String getHelpKey() { return helpKey; }
-    public @Nullable Class<? extends WakeModule> getModuleClass() { return moduleClass; }
     @NonNull String getModuleId() { return moduleId; }
     void setModuleId(@NonNull String moduleId) { this.moduleId = moduleId; }
     public @NonNull String getPermission() { return permission; }

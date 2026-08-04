@@ -1,7 +1,8 @@
 package dev.muggel.wake.features.axiom;
 
+import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.database.CachedStore;
-import dev.muggel.wake.core.module.AbstractModule;
+import dev.muggel.wake.core.module.WakeModule;
 import dev.muggel.wake.features.axiom.integration.AxiomDisplays;
 import org.jspecify.annotations.NonNull;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -11,11 +12,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
 
-public class AxiomModule extends AbstractModule {
+public class AxiomModule extends WakeModule {
     private AxiomDao dao;
     private AxiomDisplays axiomDisplays;
-    public AxiomModule() {
-        super("axiom");
+    public AxiomModule(Wake plugin) {
+        super(plugin, "axiom");
     }
 
     @Override
@@ -25,13 +26,13 @@ public class AxiomModule extends AbstractModule {
 
     @Override
     protected void onModuleEnable() {
-        dao = registerDao(new AxiomDao(getPlugin()));
+        dao = registerDao(new AxiomDao(plugin));
         dao.initTables();
-        axiomDisplays = new AxiomDisplays(getPlugin());
+        axiomDisplays = new AxiomDisplays(plugin);
         CachedStore<String> displays = dao.displays();
         boolean read = displays.load();
         axiomDisplays.register(Set.copyOf(displays.keys()));
-        seedDataIfEmpty(read ? displays.keys().isEmpty() : null, "defaults/axiom_default.yml", "Axiom Displays");
+        seedDataIfEmpty(read && displays.keys().isEmpty());
     }
 
     @Override
@@ -56,7 +57,7 @@ public class AxiomModule extends AbstractModule {
     }
 
     @Override
-    protected int onExportData(YamlConfiguration yaml) throws SQLException {
+    protected int onExportData(@NonNull YamlConfiguration yaml) throws SQLException {
         AxiomDao currentDao = this.dao;
         if (currentDao != null && !currentDao.displays().isLoaded()) {
             throw new SQLException("Axiom displays could not be read");
@@ -71,7 +72,7 @@ public class AxiomModule extends AbstractModule {
     }
 
     @Override
-    protected int onImportData(@NonNull YamlConfiguration yaml) {
+    protected int onImportData(@NonNull YamlConfiguration yaml) throws SQLException {
         AxiomDao currentDao = this.dao;
         int count = 0;
         if (currentDao != null) {
@@ -80,7 +81,7 @@ public class AxiomModule extends AbstractModule {
                     currentDao.importDisplay(display);
                     count++;
                 } catch (SQLException e) {
-                    getPlugin().getLogger().log(Level.SEVERE, "Failed to import axiom display " + display, e);
+                    plugin.getLogger().log(Level.SEVERE, "Failed to import axiom display " + display, e);
                 }
             }
         }

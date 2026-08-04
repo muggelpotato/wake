@@ -3,7 +3,7 @@ package dev.muggel.wake.features.drydock;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.PermissionPreset;
-import dev.muggel.wake.core.module.AbstractModule;
+import dev.muggel.wake.core.module.WakeModule;
 import dev.muggel.wake.features.drydock.commands.boostpad.BoostpadCommand;
 import dev.muggel.wake.features.drydock.commands.GetBoatCommand;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadDetectorListener;
@@ -18,29 +18,28 @@ import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-public class DrydockModule extends AbstractModule {
+public class DrydockModule extends WakeModule {
     private DrydockDao drydockDao;
     private BoostpadRegistry boostpads;
     private BoostpadDetectorListener detectorListener;
-    public DrydockModule() {
-        super("drydock");
+    public DrydockModule(Wake plugin) {
+        super(plugin, "drydock");
     }
 
     @Override
     protected void onModuleEnable() {
-        this.drydockDao = registerDao(new DrydockDao(getPlugin()));
+        this.drydockDao = registerDao(new DrydockDao(plugin));
         drydockDao.initTables();
         this.boostpads = new BoostpadRegistry(drydockDao);
-        this.detectorListener = new BoostpadDetectorListener(getPlugin(), boostpads);
+        this.detectorListener = new BoostpadDetectorListener(plugin, boostpads);
         boostpads.setOnReloadCallback(this.detectorListener::updateRegistration);
-        registerListener(new OBUBoostpadIntegration(getPlugin()));
-        seedDataIfEmpty(boostpads.isLoaded() ? boostpads.cachedBoostpads().isEmpty() : null, "defaults/drydock_default.yml", "Drydock");
+        registerListener(new OBUBoostpadIntegration(plugin));
+        seedDataIfEmpty(boostpads.isLoaded() && boostpads.cachedBoostpads().isEmpty());
     }
 
     @Override
-    public CommandNode buildCommands(Wake plugin) {
+    public CommandNode buildCommands() {
         return CommandNode.literal("drydock")
-                .withModule(DrydockModule.class)
                 .withPreset(PermissionPreset.BUILDER)
                 .aliases("dd")
                 .addSubcommand(BoostpadCommand.getNode(plugin))
@@ -65,7 +64,7 @@ public class DrydockModule extends AbstractModule {
     }
 
     @Override
-    protected int onExportData(YamlConfiguration yaml) throws SQLException {
+    protected int onExportData(@NonNull YamlConfiguration yaml) throws SQLException {
         BoostpadRegistry registry = this.boostpads;
         if (registry != null && !registry.isLoaded()) {
             throw new SQLException("Drydock boostpads could not be read");
@@ -90,7 +89,7 @@ public class DrydockModule extends AbstractModule {
     }
 
     @Override
-    protected int onImportData(@NonNull YamlConfiguration yaml) {
+    protected int onImportData(@NonNull YamlConfiguration yaml) throws SQLException {
         ConfigurationSection padsSec = yaml.getConfigurationSection("boostpads");
         int count = 0;
         if (padsSec != null) {
@@ -106,7 +105,7 @@ public class DrydockModule extends AbstractModule {
                     drydockDao.importBoostpad(config);
                     count++;
                 } catch (Exception e) {
-                    getPlugin().getLogger().log(Level.SEVERE, "Failed to import boostpad " + key, e);
+                    plugin.getLogger().log(Level.SEVERE, "Failed to import boostpad " + key, e);
                 }
             }
         }

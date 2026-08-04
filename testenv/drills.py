@@ -148,6 +148,17 @@ def write_state_raw(key, raw_value, mariadb=None):
         connection.close()
 
 
+def set_module_enabled(module, enabled):
+    """Flips `modules.<module>.enabled` in the live config, which is what a `/wake reload` acts on."""
+    config = WAKE / "config.yml"
+    text = config.read_text(encoding="utf-8")
+    swapped, count = re.subn(rf"(?ms)(^  {module}:\n    enabled: )(?:true|false)",
+                             rf"\g<1>{'true' if enabled else 'false'}", text, count=1)
+    if count != 1:
+        raise RuntimeError(f"could not find modules.{module}.enabled in {config}")
+    config.write_text(swapped, encoding="utf-8")
+
+
 def switch(text):
     """The Status: line a listing prints, which is read out of the cache rather than the table."""
     found = STATUS.search(CODES.sub("", text))
@@ -182,6 +193,7 @@ def docker(*args):
 @contextmanager
 def outage(mariadb: Optional[tuple]):
     """Cuts the database off for the body: stops the container, or holds the sqlite write lock."""
+    holder = None
     if mariadb:
         step(f"stopping {mariadb[0]}")
         docker("stop", mariadb[0])
@@ -193,7 +205,7 @@ def outage(mariadb: Optional[tuple]):
     try:
         yield
     finally:
-        if mariadb:
+        if holder is None:
             step(f"starting {mariadb[0]}")
             docker("start", mariadb[0])
         else:
@@ -363,13 +375,13 @@ def drill_boot_replay(rcon: Rcon, log: Log, backend: str, mariadb: tuple):
     def remote_switch():
         return switch(docker("exec", backend, "rcon-cli", "dd boostpad list"))
 
-    def await_local(expected, timeout):
+    def await_local(target, timeout):
         deadline = time.monotonic() + timeout
-        seen = switch(rcon.run("dd boostpad list"))
-        while seen != expected and time.monotonic() < deadline:
+        current = switch(rcon.run("dd boostpad list"))
+        while current != target and time.monotonic() < deadline:
             time.sleep(2)
-            seen = switch(rcon.run("dd boostpad list"))
-        return seen
+            current = switch(rcon.run("dd boostpad list"))
+        return current
 
     before = switch(rcon.run("dd boostpad list"))
     if before is None or remote_switch() != before:

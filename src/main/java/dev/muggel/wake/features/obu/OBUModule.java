@@ -3,7 +3,7 @@ package dev.muggel.wake.features.obu;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.PermissionPreset;
-import dev.muggel.wake.core.module.AbstractModule;
+import dev.muggel.wake.core.module.WakeModule;
 import dev.muggel.wake.features.obu.api.OBUService;
 import dev.muggel.wake.features.obu.commands.ClearCommand;
 import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
@@ -32,9 +32,11 @@ import org.bukkit.scheduler.BukkitTask;
 import java.sql.SQLException;
 import java.util.logging.Level;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-public class OBUModule extends AbstractModule {
+public class OBUModule extends WakeModule {
+    public static final String ID = "obu";
     private OBUDao obuDao;
     private OBUContextManager contextManager;
     private ClientRegistry clients;
@@ -44,24 +46,24 @@ public class OBUModule extends AbstractModule {
     private ContextDelivery delivery;
     private SandboxPurger sandboxPurger;
     private OBUDataTransfer dataTransfer;
-    public OBUModule() {
-        super("obu");
+    public OBUModule(Wake plugin) {
+        super(plugin, ID);
     }
 
     @Override
     protected void onModuleEnable() {
-        this.obuDao = registerDao(new OBUDao(getPlugin()));
+        this.obuDao = registerDao(new OBUDao(plugin));
         obuDao.initTables();
         Boolean hasContexts = obuDao.hasAnyContexts();
         this.clients = new ClientRegistry();
         this.packetSender = new PacketSender(clients);
         this.contextManager = new OBUContextManager(obuDao);
-        this.active = new ActiveContexts(getPlugin());
-        this.syncManager = new OBUSyncManager(getPlugin(), packetSender, contextManager, active, clients);
-        this.delivery = new ContextDelivery(getPlugin(), packetSender, contextManager, obuDao, clients, active, syncManager);
-        this.dataTransfer = new OBUDataTransfer(getPlugin(), obuDao, contextManager, syncManager);
-        getPlugin().getServiceRegistry().register(OBUService.class, delivery);
-        HandshakeListener handshakeListener = new HandshakeListener(getPlugin(), delivery, contextManager, syncManager, clients);
+        this.active = new ActiveContexts(plugin);
+        this.syncManager = new OBUSyncManager(plugin, packetSender, contextManager, active, clients);
+        this.delivery = new ContextDelivery(plugin, packetSender, contextManager, obuDao, clients, active, syncManager);
+        this.dataTransfer = new OBUDataTransfer(plugin, obuDao, contextManager, syncManager);
+        registerService(OBUService.class, delivery);
+        HandshakeListener handshakeListener = new HandshakeListener(plugin, delivery, contextManager, syncManager, clients);
         registerListener(handshakeListener);
         registerPacketListener(handshakeListener);
         BoatLagInterceptor boatLagInterceptor = new BoatLagInterceptor();
@@ -71,17 +73,16 @@ public class OBUModule extends AbstractModule {
             delivery.requestClientVersion(player);
             boatLagInterceptor.adoptDriver(player);
         }
-        this.sandboxPurger = new SandboxPurger(getPlugin(), obuDao, delivery, active);
+        this.sandboxPurger = new SandboxPurger(plugin, obuDao, delivery, active);
         schedulePurgerSweep();
 
         registerListener(new VehicleCleanupListener(delivery));
-        seedDataIfEmpty(hasContexts == null ? null : !hasContexts, "defaults/obu_default.yml", "OBU");
+        seedDataIfEmpty(Boolean.FALSE.equals(hasContexts));
     }
 
     @Override
-    public CommandNode buildCommands(Wake plugin) {
+    public CommandNode buildCommands() {
         CommandNode obuRootNode = CommandNode.literal("wakeobu")
-                .withModule(OBUModule.class)
                 .withPreset(PermissionPreset.BUILDER)
                 .withGate((source, target) -> OBUCommandHelper.requireClient(plugin, source, target))
                 .aliases("wobu", "wo")
@@ -107,7 +108,7 @@ public class OBUModule extends AbstractModule {
                 try {
                     packetSender.sendWipePlayer(player, OBUDefinition.CONTEXT_PERSONAL);
                 } catch (Exception e) {
-                    getPlugin().getLogger().log(Level.WARNING, "Failed to send wipe packet", e);
+                    plugin.getLogger().log(Level.WARNING, "Failed to send wipe packet", e);
                 }
             }
             syncManager.wipeAllBoatContexts();
@@ -115,7 +116,6 @@ public class OBUModule extends AbstractModule {
                 delivery.cleanupPlayer(player);
             }
         }
-        getPlugin().getServiceRegistry().unregister(OBUService.class);
         dataTransfer = null;
         delivery = null;
         syncManager = null;
@@ -169,13 +169,13 @@ public class OBUModule extends AbstractModule {
     }
 
     @Override
-    protected int onExportData(YamlConfiguration yaml) throws SQLException {
+    protected int onExportData(@NonNull YamlConfiguration yaml) throws SQLException {
         OBUDataTransfer transfer = this.dataTransfer;
         return exportState(yaml) + (transfer == null ? 0 : transfer.export(yaml));
     }
 
     @Override
-    protected int onImportData(YamlConfiguration yaml) throws SQLException {
+    protected int onImportData(@NonNull YamlConfiguration yaml) throws SQLException {
         OBUDataTransfer transfer = this.dataTransfer;
         return importState(yaml) + (transfer == null ? 0 : transfer.importFrom(yaml));
     }

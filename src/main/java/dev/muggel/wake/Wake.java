@@ -56,18 +56,10 @@ public final class Wake extends JavaPlugin {
         this.tickClock = new TickClock();
         this.vehiclePath = new VehiclePath(this);
         getServer().getPluginManager().registerEvents(tickClock, this);
-        this.moduleManager = new ModuleManager(this);
-        registerModules();
-        moduleManager.buildAllCommands();
+        this.moduleManager = new ModuleManager(this, List.of(new BaseModule(this), new OBUModule(this), new DrydockModule(this), new AxiomModule(this)));
+        moduleManager.declareCommands();
         WakeCommandManager.init(this);
         moduleManager.syncModules();
-    }
-
-    private void registerModules() {
-        moduleManager.registerModule(new BaseModule());
-        moduleManager.registerModule(new OBUModule());
-        moduleManager.registerModule(new DrydockModule());
-        moduleManager.registerModule(new AxiomModule());
     }
 
     @SuppressWarnings("UnstableApiUsage")
@@ -86,7 +78,6 @@ public final class Wake extends JavaPlugin {
                 moduleManager = null;
             }
         } finally {
-            serviceRegistry.unregisterAll();
             if (databaseManager != null) {
                 databaseManager.shutdown();
             }
@@ -130,11 +121,11 @@ public final class Wake extends JavaPlugin {
         return moduleManager != null ? moduleManager.getModule(clazz) : null;
     }
 
-    public <T extends WakeModule> @Nullable T getRegisteredModule(Class<T> clazz) {
-        return moduleManager != null ? moduleManager.getRegisteredModule(clazz) : null;
+    public boolean isModuleActive(String moduleId) {
+        return moduleManager != null && moduleManager.isActive(moduleId);
     }
 
-    public List<WakeModule> getLoadedModules() {
+    public List<WakeModule> getActiveModules() {
         return moduleManager != null ? moduleManager.getActiveModules() : Collections.emptyList();
     }
 
