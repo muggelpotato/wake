@@ -141,7 +141,7 @@ public final class Wake extends JavaPlugin {
         return messageManager;
     }
 
-    public @Nullable SyncService getSyncService() {
+    public SyncService getSyncService() {
         return syncService;
     }
 

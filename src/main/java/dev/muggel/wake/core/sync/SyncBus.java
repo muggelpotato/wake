@@ -3,7 +3,9 @@ package dev.muggel.wake.core.sync;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.Scheduling;
 import io.lettuce.core.ClientOptions;
+import io.lettuce.core.RedisChannelHandler;
 import io.lettuce.core.RedisClient;
+import io.lettuce.core.RedisConnectionStateListener;
 import io.lettuce.core.RedisFuture;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.SocketOptions;
@@ -41,15 +43,14 @@ class SyncBus {
     private final String resyncPayload;
     private final Consumer<String> inbound;
     private final Runnable onResubscribe;
+    private final ClientResources resources;
+    private final RedisClient client;
     private final AtomicBoolean retryScheduled = new AtomicBoolean();
     private volatile boolean running;
     private volatile boolean publishFailed = false;
-    private volatile @Nullable ClientResources resources;
-    private volatile @Nullable RedisClient client;
     private volatile @Nullable StatefulRedisConnection<String, String> pubConnection;
     private volatile @Nullable RedisFuture<Long> lastPublish;
-    private volatile boolean subscribedOnce = false;
-    private volatile boolean everFailedConnect = false;
+    private volatile boolean missedAnnouncements = false;
     private volatile @Nullable BukkitTask connectRetryTask;
     SyncBus(@NonNull Wake plugin, @NonNull String host, int port, @NonNull String password, @NonNull String resyncPayload, @NonNull Consumer<String> inbound, @NonNull Runnable onResubscribe) {
         this.plugin = plugin;
@@ -60,34 +61,43 @@ class SyncBus {
         if (!password.isEmpty()) {
             uri.withPassword(password.toCharArray());
         }
-        ClientResources clientResources = DefaultClientResources.builder().ioThreadPoolSize(2).computationThreadPoolSize(2).build();
-        this.resources = clientResources;
-        RedisClient redisClient = RedisClient.create(clientResources, uri.build());
-        redisClient.setOptions(ClientOptions.builder()
+        this.resources = DefaultClientResources.builder().ioThreadPoolSize(2).computationThreadPoolSize(2).build();
+        this.client = RedisClient.create(resources, uri.build());
+        client.setOptions(ClientOptions.builder()
                 .autoReconnect(true)
                 .disconnectedBehavior(ClientOptions.DisconnectedBehavior.REJECT_COMMANDS)
                 .socketOptions(SocketOptions.builder()
                         .connectTimeout(Duration.ofMillis(CONNECT_TIMEOUT_MILLIS))
                         .build())
                 .build());
-        this.client = redisClient;
-        this.running = true;
+    }
+
+    void start() {
+        running = true;
+        client.addListener(new RedisConnectionStateListener() {
+            @Override
+            public void onRedisDisconnected(RedisChannelHandler<?, ?> connection) {
+                missedAnnouncements = true;
+            }
+        });
         Scheduling.async(plugin, this::tryConnect);
     }
 
     private void tryConnect() {
-        RedisClient redisClient = this.client;
-        if (!running || redisClient == null) {
+        if (!running) {
             return;
         }
         StatefulRedisConnection<String, String> pub = null;
         StatefulRedisPubSubConnection<String, String> sub = null;
         try {
-            pub = redisClient.connect();
-            sub = redisClient.connectPubSub();
+            pub = client.connect();
+            sub = client.connectPubSub();
             sub.addListener(new RedisPubSubAdapter<>() {
                 @Override
                 public void message(String channel, String message) {
+                    if (!running) {
+                        return;
+                    }
                     String payload = SyncMessage.payloadFor(message, serverId);
                     if (payload != null) {
                         inbound.accept(payload);
@@ -96,15 +106,12 @@ class SyncBus {
 
                 @Override
                 public void subscribed(String channel, long count) {
-                    if (subscribedOnce) {
+                    if (missedAnnouncements) {
+                        missedAnnouncements = false;
                         onResubscribe.run();
                     }
-                    subscribedOnce = true;
                 }
             });
-            if (everFailedConnect) {
-                subscribedOnce = true;
-            }
             sub.async().subscribe(CHANNEL);
             this.pubConnection = pub;
         } catch (Exception e) {
@@ -114,13 +121,14 @@ class SyncBus {
             if (pub != null) {
                 pub.close();
             }
-            if (!everFailedConnect) {
-                everFailedConnect = true;
+            if (!running) {
+                return;
+            }
+            if (!missedAnnouncements) {
+                missedAnnouncements = true;
                 plugin.getLogger().log(Level.WARNING, "Sync bus unreachable, retrying every 5s: " + e.getMessage());
             }
-            if (running) {
-                connectRetryTask = Scheduling.laterAsync(plugin, this::tryConnect, CONNECT_RETRY_TICKS);
-            }
+            connectRetryTask = Scheduling.laterAsync(plugin, this::tryConnect, CONNECT_RETRY_TICKS);
         }
     }
 
@@ -128,9 +136,13 @@ class SyncBus {
         if (publishFailed) {
             return;
         }
+        send(payload);
+    }
+
+    private void send(@NonNull String payload) {
         StatefulRedisConnection<String, String> connection = pubConnection;
         if (connection == null) {
-            publishLost(new IllegalStateException("sync bus connection not established yet"));
+            scheduleResync();
             return;
         }
         try {
@@ -139,6 +151,9 @@ class SyncBus {
             sent.whenComplete((ignored, error) -> {
                 if (error != null) {
                     publishLost(error);
+                } else if (publishFailed) {
+                    publishFailed = false;
+                    plugin.getLogger().info("Sync publish works again: other servers have been told to resync");
                 }
             });
         } catch (Exception e) {
@@ -151,13 +166,16 @@ class SyncBus {
             publishFailed = true;
             plugin.getLogger().log(Level.WARNING, "Sync publish failed: other servers resync when it recovers", error);
         }
+        scheduleResync();
+    }
+
+    private void scheduleResync() {
         if (!retryScheduled.compareAndSet(false, true)) {
             return;
         }
         Scheduling.laterAsync(plugin, () -> {
             retryScheduled.set(false);
-            publishFailed = false;
-            publish(resyncPayload);
+            send(resyncPayload);
         }, PUBLISH_RETRY_TICKS);
     }
 
@@ -169,28 +187,20 @@ class SyncBus {
             this.connectRetryTask = null;
         }
         RedisFuture<Long> pending = this.lastPublish;
-        if (pending != null) {
+        if (pending != null && !publishFailed) {
             try {
                 pending.await(PUBLISH_DRAIN_MILLIS, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            this.lastPublish = null;
         }
+        this.lastPublish = null;
         this.pubConnection = null;
-        RedisClient redisClient = this.client;
-        if (redisClient != null) {
-            redisClient.shutdown(0, 2, TimeUnit.SECONDS);
-            this.client = null;
-        }
-        ClientResources clientResources = this.resources;
-        if (clientResources != null) {
-            try {
-                clientResources.shutdown(0, 1, TimeUnit.SECONDS).await(1500, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            this.resources = null;
+        client.shutdown(0, 2, TimeUnit.SECONDS);
+        try {
+            resources.shutdown(0, 1, TimeUnit.SECONDS).await(1500, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 }

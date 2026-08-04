@@ -361,6 +361,20 @@ def drill_sync(rcon: Rcon, log: Log, backend: str):
     else:
         bad("no resync line within 60s of the bus returning")
 
+    # the resync line only says the subscriber came back. What proves the bus works again is the next change
+    # riding it -- a publish connection left broken by the outage would still let the resync line print
+    before = remote_switch()
+    step(f"changing a setting again now the bus is back (both backends read {before})")
+    rcon.run("dd boostpad toggle")
+    local = switch(rcon.run("dd boostpad list"))
+    remote = await_remote(local, 60)
+    if local and local != before and remote == local:
+        ok(f"the change after the resync reaches the other backend too ({before} -> {remote})")
+    else:
+        bad(f"after the resync the other backend reports {remote!r}, the primary reports {local!r} (was {before!r})")
+    rcon.run("dd boostpad toggle")
+    await_remote(switch(rcon.run("dd boostpad list")), 60)
+
 
 def drill_boot_replay(rcon: Rcon, log: Log, backend: str, mariadb: tuple):
     """A journal replayed at boot has to reach the other server as well.

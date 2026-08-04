@@ -178,10 +178,7 @@ class OutageMonitor {
         }
         degraded = false;
         plugin.getLogger().info("Database recovered: replayed " + replayed + " journaled writes");
-        SyncService sync = plugin.getSyncService();
-        if (sync != null) {
-            sync.resyncAfterRecovery();
-        }
+        plugin.getSyncService().resyncAfterRecovery();
         List<UUID> warned = List.copyOf(notifiedActors);
         notifiedActors.clear();
         for (UUID actor : warned) {
@@ -196,10 +193,7 @@ class OutageMonitor {
     }
 
     private void announceReplay() {
-        SyncService sync = plugin.getSyncService();
-        if (sync != null) {
-            sync.publish(SyncService.SCOPE_FULL);
-        }
+        plugin.getSyncService().publish(SyncService.SCOPE_FULL);
     }
 
     private void sendLater(UUID actor, String messageKey, TagResolver... resolvers) {

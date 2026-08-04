@@ -197,12 +197,7 @@ public class DatabaseManager {
 
     /** Queued behind the writes it belongs to, so a scope is never announced ahead of the rows that moved in it */
     public void publishScope(String scope) {
-        writeExecutor.execute(() -> {
-            SyncService sync = plugin.getSyncService();
-            if (sync != null) {
-                sync.publish(scope);
-            }
-        });
+        writeExecutor.execute(() -> plugin.getSyncService().publish(scope));
     }
 
     public void markRemoteChange(@NonNull String scope, @Nullable String table, @Nullable Collection<String> keys) {

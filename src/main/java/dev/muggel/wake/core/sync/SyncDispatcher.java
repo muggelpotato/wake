@@ -5,6 +5,7 @@ import dev.muggel.wake.core.Scheduling;
 import dev.muggel.wake.core.module.WakeModule;
 import org.jspecify.annotations.NonNull;
 
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,18 +34,23 @@ class SyncDispatcher {
 
     /** Reloads every scope announced since last tick (multiple same scope announcements collapse into one reload) */
     private void flush() {
-        flushScheduled.set(false);
         if (plugin.getDatabaseManager().isDegraded()) {
+            flushScheduled.set(false);
             return;
         }
-        Set<String> scopes = Set.copyOf(pendingScopes);
-        pendingScopes.removeAll(scopes);
+        Set<String> scopes = new HashSet<>();
+        pendingScopes.removeIf(scopes::add);
+        flushScheduled.set(false);
+        if (!pendingScopes.isEmpty() && flushScheduled.compareAndSet(false, true)) {
+            Scheduling.onMain(plugin, this::flush);
+        }
+        boolean verbose = plugin.getConfig().getBoolean("sync.verbose_logging", false);
         if (scopes.contains(SyncService.SCOPE_STATE) || scopes.contains(SyncService.SCOPE_FULL)) {
             boolean everything = scopes.contains(SyncService.SCOPE_FULL);
             plugin.getStateDao().reloadAsync(changedKeys -> {
                 for (WakeModule module : plugin.getActiveModules()) {
                     if (everything || scopes.contains(module.getId()) || ownsAnyKey(module.getId(), changedKeys)) {
-                        reloadQuietly(module);
+                        reloadQuietly(module, verbose);
                     }
                 }
             });
@@ -52,7 +58,7 @@ class SyncDispatcher {
         }
         for (WakeModule module : plugin.getActiveModules()) {
             if (scopes.contains(module.getId())) {
-                reloadQuietly(module);
+                reloadQuietly(module, verbose);
             }
         }
     }
@@ -67,10 +73,10 @@ class SyncDispatcher {
         return false;
     }
 
-    private void reloadQuietly(WakeModule module) {
+    private void reloadQuietly(WakeModule module, boolean verbose) {
         try {
             module.reload();
-            if (plugin.getConfig().getBoolean("sync.verbose_logging", false)) {
+            if (verbose) {
                 plugin.getLogger().info("Synced module '" + module.getId() + "' from another server");
             }
         } catch (Exception e) {

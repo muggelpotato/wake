@@ -15,6 +15,8 @@ import java.util.regex.Pattern;
 record SyncMessage(@NonNull String scope, @Nullable String table, @Nullable List<String> keys) {
     private static final String FIELD = "|";
     private static final String KEY_SEPARATOR = "\037";
+    private static final Pattern FIELDS = Pattern.compile(Pattern.quote(FIELD));
+    private static final Pattern KEYS = Pattern.compile(Pattern.quote(KEY_SEPARATOR));
     private static final int MAX_KEYS_PER_MESSAGE = 500;
     SyncMessage {
         keys = keys == null ? null : List.copyOf(keys);
@@ -22,7 +24,7 @@ record SyncMessage(@NonNull String scope, @Nullable String table, @Nullable List
 
     /** The payload naming {@code keys} in {@code table}, or {@code scope} alone when it cannot carry them */
     static @NonNull String encode(@NonNull String scope, @NonNull String table, @NonNull Set<String> keys) {
-        if (keys.size() > MAX_KEYS_PER_MESSAGE || keys.stream().anyMatch(key -> key.contains(KEY_SEPARATOR))) {
+        if (keys.isEmpty() || keys.size() > MAX_KEYS_PER_MESSAGE || keys.stream().anyMatch(key -> key.contains(KEY_SEPARATOR))) {
             return scope;
         }
         return scope + FIELD + table + FIELD + String.join(KEY_SEPARATOR, keys);
@@ -30,11 +32,11 @@ record SyncMessage(@NonNull String scope, @Nullable String table, @Nullable List
 
     /** A payload without the table and keys is not malformed */
     static @NonNull SyncMessage parse(@NonNull String payload) {
-        String[] parts = payload.split(Pattern.quote(FIELD), 3);
+        String[] parts = FIELDS.split(payload, 3);
         if (parts.length < 3) {
             return new SyncMessage(parts[0], null, null);
         }
-        return new SyncMessage(parts[0], parts[1], List.of(parts[2].split(Pattern.quote(KEY_SEPARATOR), -1)));
+        return new SyncMessage(parts[0], parts[1], List.of(KEYS.split(parts[2], -1)));
     }
 
     /** Tags a payload with its sender to ignore own announcements */

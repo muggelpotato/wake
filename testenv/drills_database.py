@@ -274,6 +274,25 @@ def drill_journal_bad_line(rcon: Rcon, log: Log, mariadb):
            state("base.show_hints", mariadb) == "true", repr(state("base.show_hints", mariadb)))
 
 
+def settle_pending_resync(rcon: Rcon, timeout=30):
+    """Hands the server back with no recovery still working through it.
+
+    A drill that breaks the database on purpose ends when the recovery line prints, but the recovery
+    outlives that line: it announces a full resync, which re-reads every mirror and reloads every
+    module off an async read. A suite that returns inside that window leaves the next one taking its
+    first snapshot mid-reload -- which is what made `drills_module.py` fail behind this file while
+    passing on its own. Two identical reads a couple of seconds apart mean the caches have landed."""
+    deadline = time.monotonic() + timeout
+    previous = None
+    while time.monotonic() < deadline:
+        current = rcon.run("wobu -context") + rcon.run("dd boostpad list")
+        if current == previous:
+            return True
+        previous = current
+        time.sleep(2)
+    return False
+
+
 def drill_malformed_state_row(rcon: Rcon, log: Log, mariadb):
     """One state value nobody can parse costs that key, never the whole table.
 
@@ -454,6 +473,12 @@ def main():
             drill(rcon, log, mariadb)
     except RuntimeError as error:
         bad(str(error))
+
+    print("\nsettling")
+    if settle_pending_resync(rcon):
+        ok("the caches stopped moving before this suite handed the server on")
+    else:
+        bad("still reloading 30s after the last drill: a recovery here is not converging")
 
     print()
     if failures:

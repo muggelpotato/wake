@@ -3,6 +3,7 @@ package dev.muggel.wake.core.module;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.WakeCommandManager;
+import dev.muggel.wake.core.sync.SyncService;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -31,8 +32,12 @@ public final class ModuleManager {
         this.modules = List.copyOf(modules);
         Set<String> ids = new HashSet<>();
         for (WakeModule module : this.modules) {
-            if (!ids.add(module.getId())) {
-                throw new IllegalStateException("Two modules are registered as '" + module.getId() + "': an id is what config.yml, the command tree and every state key address");
+            String id = module.getId();
+            if (SyncService.SCOPE_STATE.equals(id) || SyncService.SCOPE_FULL.equals(id)) {
+                throw new IllegalStateException("Module '" + id + "' takes a reserved sync scope");
+            }
+            if (!ids.add(id)) {
+                throw new IllegalStateException("Two modules are registered as '" + id + "': an id is what config.yml, the command tree and every state key address");
             }
         }
     }

@@ -1,0 +1,26 @@
+id: no-lettuce-outside-sync
+language: Java
+severity: error
+message: Lettuce outside core/sync — announce the change instead of opening your own connection.
+note: |
+  CLAUDE.md (Architecture): the pub-sub bus is one seam, and `core/sync` is it. Everything else
+  reaches it through `SyncService.publish/publishKeys`, which is what keeps the wire format in
+  `SyncMessage` and the network threads inside the package that knows they are network threads. A
+  second connection means a second reconnect policy, a second resync rule and a second shutdown
+  budget — and a payload no peer's dispatcher knows how to read. A module that needs to hear about
+  a change observes an event or reloads with its scope; it does not subscribe.
+ignores:
+  # The seam itself.
+  - "**/core/sync/*.java"
+rule:
+  any:
+    - all:
+        - pattern: import $PATH;
+        - has:
+            regex: '^io\.lettuce\.'
+    - all:
+        - kind: field_access
+        - regex: '^io\.lettuce\.[a-z0-9_.]*\.[A-Z]'
+        - not:
+            inside:
+              kind: field_access

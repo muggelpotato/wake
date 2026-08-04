@@ -23,40 +23,49 @@ public class SyncService {
     private final @Nullable SyncBus bus;
     public SyncService(@NonNull Wake plugin) {
         this.dispatcher = new SyncDispatcher(plugin);
-        ConfigurationSection config = plugin.getConfig().getConfigurationSection("sync");
-        boolean wanted = config != null && config.getBoolean("enabled", false);
-        if (wanted && plugin.getDatabaseManager().dialect() != Dialect.MARIADB) {
-            plugin.getLogger().info("Cross-server sync inactive (needs a shared mariadb database)");
-            wanted = false;
+        this.bus = openBus(plugin, dispatcher);
+        if (bus != null) {
+            bus.start();
         }
-        if (!wanted) {
-            this.bus = null;
-            return;
+    }
+
+    private static @Nullable SyncBus openBus(@NonNull Wake plugin, @NonNull SyncDispatcher dispatcher) {
+        ConfigurationSection config = plugin.getConfig().getConfigurationSection("sync");
+        if (config == null || !config.getBoolean("enabled", false)) {
+            return null;
+        }
+        if (plugin.getDatabaseManager().dialect() != Dialect.MARIADB) {
+            plugin.getLogger().info("Cross-server sync inactive (needs a shared mariadb database)");
+            return null;
         }
         String host = config.getString("redis.host", "localhost");
         int port = config.getInt("redis.port", 6379);
-        this.bus = new SyncBus(plugin, host, port, config.getString("redis.password", ""),
-                SCOPE_FULL, dispatcher::accept, () -> {
-                    plugin.getLogger().info("Sync subscriber reconnected: running a full resync");
-                    dispatcher.accept(SCOPE_FULL);
-                });
-        plugin.getLogger().info("Cross-server sync enabled (redis " + host + ":" + port + ")");
-    }
-
-    public void publishKeys(String scope, String table, @NonNull Set<String> keys) {
-        if (bus == null) {
-            return;
+        try {
+            SyncBus opened = new SyncBus(plugin, host, port, config.getString("redis.password", ""),
+                    SCOPE_FULL, dispatcher::accept, () -> {
+                        plugin.getLogger().info("Sync subscriber reconnected: running a full resync");
+                        dispatcher.accept(SCOPE_FULL);
+                    });
+            plugin.getLogger().info("Cross-server sync enabled (redis " + host + ":" + port + ")");
+            return opened;
+        } catch (RuntimeException unusableSettings) {
+            plugin.getLogger().warning("Cross-server sync disabled: sync.redis in config.yml is unusable (" + unusableSettings.getMessage() + ")");
+            return null;
         }
-        bus.publish(SyncMessage.encode(scope, table, keys));
     }
 
-    public void publish(String scope) {
+    public void publishKeys(@NonNull String scope, @NonNull String table, @NonNull Set<String> keys) {
+        if (bus != null) {
+            bus.publish(SyncMessage.encode(scope, table, keys));
+        }
+    }
+
+    public void publish(@NonNull String scope) {
         if (bus != null) {
             bus.publish(scope);
         }
     }
 
-    // post database recovery
     public void resyncAfterRecovery() {
         dispatcher.accept(SCOPE_FULL);
     }

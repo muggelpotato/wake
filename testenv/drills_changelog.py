@@ -478,20 +478,39 @@ def drill_reload_command(primary: Rcon):
     truthy("backend2 still holds it", "obsidian" in theirs, theirs[:300])
 
 
+def await_backend2_up(timeout=180):
+    """Waits until paper2's Wake answers commands again after a restart."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            if "Boostpads" in on_backend2("dd boostpad list"):
+                return True
+        except RuntimeError:
+            pass
+        time.sleep(3)
+    return False
+
+
+PAPER2_CONFIG = ROOT / "testenv" / "paper2" / "plugins" / "wake" / "config.yml"
+
+
+def backend2_boot_config(before, after):
+    """Rewrites the config paper2 boots with.
+
+    Its container copies the mounted /plugins over /data/plugins on every start, so an edit meant to
+    survive a restart has to be made on the host side rather than inside the container."""
+    text = PAPER2_CONFIG.read_text(encoding="utf-8")
+    if before not in text:
+        raise RuntimeError(f"{PAPER2_CONFIG} does not hold {before!r}")
+    PAPER2_CONFIG.write_text(text.replace(before, after, 1), encoding="utf-8")
+
+
 def drill_cold_start(primary: Rcon):
     step("a backend restarted cold rebuilds its cache from the database alone")
     primary.run("dd boostpad add minecraft:sandstone 0.25 0.0 0.0 250")
     settle()
     docker("restart", PAPER2, timeout=300)
-    deadline = time.monotonic() + 180
-    while time.monotonic() < deadline:
-        try:
-            if "Boostpads" in on_backend2("dd boostpad list"):
-                break
-        except RuntimeError:
-            pass
-        time.sleep(3)
-    else:
+    if not await_backend2_up():
         bad("backend2 did not come back within 180s")
         return
     settle()
@@ -544,6 +563,143 @@ def drill_outage_both_sides(primary: Rcon):
     settle()
 
 
+def drill_scope_burst(primary: Rcon):
+    """Two scopes announced together, fast enough that many land inside one flush window.
+
+    The dispatcher batches everything announced since the last tick into one main-thread reload and
+    collapses repeats of a scope into one. A scope dropped by that collapse is not re-read by anything
+    afterwards -- nothing else names it -- so the peer holds the old row until the next write in it."""
+    step("a burst across two scopes: neither is lost when the batch collapses")
+    last = 811
+    docker("exec", PAPER2, "sh", "-c", "; ".join(
+        f'rcon-cli "dd boostpad add minecraft:ice 0.5 0.0 0.0 {delay}"; rcon-cli "dd boostpad toggle"'
+        for delay in range(800, last + 1)))
+    settle(3)
+    mine = primary_cache(primary, "drydock")
+    truthy("the primary ended on the last row write of the burst", str(last) in mine, mine[:300])
+    # an even number of toggles, so the switch is back where it started on the side that flipped it
+    truthy("and agrees with backend2 on the state scope that rode alongside it",
+           pad_state(primary.run("dd boostpad list")) == pad_state(on_backend2("dd boostpad list")),
+           f"{pad_state(primary.run('dd boostpad list'))!r} vs {pad_state(on_backend2('dd boostpad list'))!r}")
+    primary.run("dd boostpad remove minecraft:ice")
+    settle()
+
+
+def drill_unusable_redis_settings(primary: Rcon):
+    step("a sync address the client refuses to build costs the sync, never the server")
+    backend2_boot_config("port: 6379", "port: 70000")
+    mark = backend2_log_lines()
+    docker("restart", PAPER2, timeout=300)
+    try:
+        if not await_backend2_up():
+            bad("backend2 did not come back up with an unusable sync port -- a typo took the plugin down")
+            return
+        lines = docker("logs", PAPER2, timeout=180).splitlines()[mark:]
+        truthy("it said the sync settings are unusable",
+               any("Cross-server sync disabled" in line for line in lines), " | ".join(lines[-4:]))
+        truthy("and enabled its modules anyway",
+               any("has been enabled" in line for line in lines), " | ".join(lines[-4:]))
+        primary.run("dd boostpad add minecraft:andesite 0.15 0.0 0.0 150")
+        settle()
+        truthy("it just hears nothing, which is what a disabled sync means",
+               "andesite" not in backend2_cache("drydock"), "")
+        primary.run("dd boostpad remove minecraft:andesite")
+        settle()
+    finally:
+        backend2_boot_config("port: 70000", "port: 6379")
+        docker("restart", PAPER2, timeout=300)
+        await_backend2_up()
+
+
+def primary_log_since(mark):
+    log = ROOT / "run" / "logs" / "latest.log"
+    with log.open(encoding="utf-8", errors="replace") as handle:
+        handle.seek(min(mark, log.stat().st_size))
+        return CODES.sub("", handle.read())
+
+
+def drill_bus_down_is_quiet(primary: Rcon):
+    """A bus that stays down has to cost one warning, not one every retry.
+
+    The publish retry runs every 5s for as long as the bus is gone. If clearing the failure is what
+    re-arms the warning, a bus down for an afternoon fills the console with the same line and its
+    stack trace, and the one thing worth seeing -- that it came back -- is buried in it."""
+    step("a bus that stays down warns once, not once per retry")
+    log = ROOT / "run" / "logs" / "latest.log"
+    mark = log.stat().st_size if log.is_file() else 0
+    docker("stop", "wake-testenv-valkey-1")
+    try:
+        # well past several retry windows, writing throughout so every one of them has something to publish
+        for _ in range(6):
+            primary.run("dd boostpad toggle")
+            time.sleep(5)
+    finally:
+        docker("start", "wake-testenv-valkey-1")
+    warnings = primary_log_since(mark).count("Sync publish failed")
+    truthy("exactly one warning across ~30s of a dead bus", warnings == 1, f"{warnings} of them")
+    time.sleep(20)
+    text = primary_log_since(mark)
+    truthy("and one line saying it works again once the bus is back",
+           text.count("Sync publish works again") == 1, f"{text.count('Sync publish works again')} of them")
+    truthy("the resync that recovers it reaches the other backend",
+           pad_state(on_backend2("dd boostpad list")) == pad_state(primary.run("dd boostpad list")), "")
+
+
+def drill_bus_down_at_boot(primary: Rcon):
+    """A backend booted with no bus, writing into one that is not there yet.
+
+    The connect runs off the main thread while the modules come up, so a write reaches the publish
+    before there is anything to publish on -- at boot every time, not only with the bus stopped. That
+    is a boot state and not a publish failure: the connect path already reports whatever is worth
+    reporting, and the 5s retry carries the resync once a connection lands. A warning and an invented
+    stack trace for it reads as a broken install on every cold start, and buries the one line that
+    does mean something."""
+    step("a backend that boots with no bus resyncs once the bus turns up")
+    docker("stop", "wake-testenv-valkey-1")
+    try:
+        mark = backend2_log_lines()
+        docker("restart", PAPER2, timeout=300)
+        if not await_backend2_up():
+            bad("backend2 did not come back with the bus refused")
+            return
+        ok("it booted and answers commands with the bus refused")
+        primary.run("dd boostpad add minecraft:granite 0.35 0.0 0.0 350")
+        on_backend2("dd boostpad add minecraft:tuff 0.55 0.0 0.0 550")
+        settle()
+        truthy("it has not heard the change, because nothing carries it yet",
+               "granite" not in backend2_cache("drydock"), "")
+        truthy("nor has the primary heard its write", "tuff" not in primary_cache(primary, "drydock"), "")
+        lines = docker("logs", PAPER2, timeout=180).splitlines()[mark:]
+        truthy("it said the bus is unreachable, once",
+               sum("Sync bus unreachable" in line for line in lines) == 1, " | ".join(lines[-4:]))
+        blamed = [line for line in lines if "Sync publish failed" in line or "not established" in line]
+        truthy("and blamed the publish for nothing: a write with no connection yet is that same one line",
+               not blamed, " | ".join(blamed[:3]))
+    finally:
+        docker("start", "wake-testenv-valkey-1")
+    time.sleep(20)
+    theirs = backend2_cache("drydock")
+    truthy("a first subscribe that follows a refused connect resyncs, so it catches up",
+           "granite" in theirs, theirs[:300])
+    truthy("and the retry announces its own write, so the primary catches up too",
+           "tuff" in primary_cache(primary, "drydock"), "")
+    # the other half of the same lie: recovering from a publish failure it never had
+    lines = docker("logs", PAPER2, timeout=180).splitlines()[mark:]
+    truthy("and never claimed a publish recovered, having never lost one",
+           not any("Sync publish works again" in line for line in lines), " | ".join(lines[-4:]))
+    on_backend2("dd boostpad remove minecraft:tuff")
+    settle(2)
+
+    step("and the bus carries the next change to it without a restart")
+    primary.run("dd boostpad add minecraft:granite 0.45 0.0 0.0 450")
+    settle(2)
+    theirs = backend2_cache("drydock")
+    truthy("backend2 took the later edit", "450" in theirs, theirs[:300])
+    primary.run("dd boostpad remove minecraft:granite")
+    settle(2)
+    truthy("and the removal after it", "granite" not in backend2_cache("drydock"), "")
+
+
 def backend2_log_lines():
     return len(docker("logs", PAPER2, timeout=180).splitlines())
 
@@ -587,6 +743,7 @@ def main():
     drill_concurrent_same_key(primary)
     drill_concurrent_cross_writes(primary)
     drill_write_storm(primary)
+    drill_scope_burst(primary)
     drill_second_edit_during_read(primary)
     drill_reset(primary)
     drill_seed(primary)
@@ -598,6 +755,9 @@ def main():
     # before the drills that break things on purpose, so the log check means something
     drill_no_errors(since, backend_since)
     drill_cold_start(primary)
+    drill_unusable_redis_settings(primary)
+    drill_bus_down_at_boot(primary)
+    drill_bus_down_is_quiet(primary)
     drill_bus_down(primary)
     drill_bus_down_both_sides(primary)
     drill_outage(primary)

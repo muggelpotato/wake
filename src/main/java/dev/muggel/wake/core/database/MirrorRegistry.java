@@ -65,9 +65,6 @@ class MirrorRegistry {
         Map<CachedStore<?>, Set<String>> keyed = Map.copyOf(dirtyKeys);
         dirtyKeys.clear();
         SyncService sync = plugin.getSyncService();
-        if (sync == null) {
-            return;
-        }
         for (String scope : scopes) {
             sync.publish(scope);
         }
