@@ -51,6 +51,10 @@ public class StateDao extends WakeDao {
         return state.isLoaded();
     }
 
+    public boolean load() {
+        return state.load();
+    }
+
     /**
      * Reloads the cache without blocking the main thread. <br>
      * Cross-server sync uses the hook to reload modules only after they can observe the fresh state values.

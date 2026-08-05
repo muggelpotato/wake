@@ -107,6 +107,9 @@ public final class Wake extends JavaPlugin {
         if (databaseManager != null) {
             databaseManager.invalidateAllMirrors();
         }
+        if (stateDao != null) {
+            stateDao.load();
+        }
         List<Component> feedback = Collections.emptyList();
         if (moduleManager != null) {
             feedback = moduleManager.syncModules();
@@ -123,6 +126,12 @@ public final class Wake extends JavaPlugin {
 
     public boolean isModuleActive(String moduleId) {
         return moduleManager != null && moduleManager.isActive(moduleId);
+    }
+
+    public void seedDeferredModules() {
+        if (moduleManager != null) {
+            moduleManager.seedDeferred();
+        }
     }
 
     public List<WakeModule> getActiveModules() {

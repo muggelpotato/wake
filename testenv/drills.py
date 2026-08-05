@@ -284,6 +284,17 @@ def drill_outage(rcon: Rcon, log: Log, mariadb: Optional[tuple]):
         else:
             bad("no outage journal appeared within 45s")
 
+        # a reload reads the state table back before the modules re-derive from it, and that read must not
+        # sit on a database that is not answering: an admin reloading during an outage would hang the server
+        step("reloading while it is still unreachable")
+        started = time.monotonic()
+        reply = rcon.run("wake reload")
+        took = time.monotonic() - started
+        if took < 5 and "Reloaded configuration" in reply:
+            ok(f"the reload answered without waiting on the database ({took:.1f}s)")
+        else:
+            bad(f"reload took {took:.1f}s and answered {reply.strip()[:120]!r}")
+
     if log.await_line("Database recovered", 90):
         ok("recovery detected and journal replayed")
     else:

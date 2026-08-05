@@ -52,9 +52,9 @@ public class OBUModule extends WakeModule {
 
     @Override
     protected void onModuleEnable() {
-        this.obuDao = registerDao(new OBUDao(plugin));
+        OBUDao dao = registerDao(new OBUDao(plugin));
+        this.obuDao = dao;
         obuDao.initTables();
-        Boolean hasContexts = obuDao.hasAnyContexts();
         this.clients = new ClientRegistry();
         this.packetSender = new PacketSender(clients);
         this.contextManager = new OBUContextManager(obuDao);
@@ -77,7 +77,10 @@ public class OBUModule extends WakeModule {
         schedulePurgerSweep();
 
         registerListener(new VehicleCleanupListener(delivery));
-        seedDataIfEmpty(Boolean.FALSE.equals(hasContexts));
+        seedDataIfEmpty(() -> {
+            Boolean hasContexts = dao.hasAnyContexts();
+            return hasContexts == null ? null : !hasContexts;
+        });
     }
 
     @Override

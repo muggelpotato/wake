@@ -76,6 +76,12 @@ public final class ModuleManager {
         return feedback;
     }
 
+    public void seedDeferred() {
+        for (WakeModule module : activeModules.values()) {
+            attempt(module, "seed", module::seedIfDeferred);
+        }
+    }
+
     public void disableAll() {
         for (WakeModule module : modules.reversed()) {
             if (activeModules.containsKey(module.getId())) {

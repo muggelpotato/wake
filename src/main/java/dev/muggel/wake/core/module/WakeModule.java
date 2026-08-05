@@ -28,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 
 /**
@@ -48,6 +49,7 @@ public abstract class WakeModule {
     private final List<BukkitTask> tasks = new ArrayList<>();
     private final List<WakeDao> daos = new ArrayList<>();
     private final SequencedMap<Class<?>, Object> services = new LinkedHashMap<>();
+    private @Nullable Supplier<@Nullable Boolean> deferredSeed;
     protected WakeModule(@NonNull Wake plugin, @NonNull String id) {
         this.plugin = plugin;
         this.id = id;
@@ -91,6 +93,7 @@ public abstract class WakeModule {
         try {
             onModuleDisable();
         } finally {
+            deferredSeed = null;
             services.reversed().forEach(plugin.getServiceRegistry()::unregister);
             services.clear();
             for (BukkitTask task : tasks.reversed()) {
@@ -150,12 +153,21 @@ public abstract class WakeModule {
         }
     }
 
-    protected final void seedDataIfEmpty(boolean readAndEmpty) {
-        if (!readAndEmpty) return;
+    protected final void seedDataIfEmpty(@NonNull Supplier<@Nullable Boolean> storeIsEmpty) {
+        Boolean empty = storeIsEmpty.get();
+        deferredSeed = empty == null ? storeIsEmpty : null;
+        if (!Boolean.TRUE.equals(empty)) return;
         try {
             plugin.getLogger().info("Auto-seeded " + seedData() + " " + id + " records from jar");
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Failed to auto-seed " + id + " data", e);
+        }
+    }
+
+    final void seedIfDeferred() {
+        Supplier<@Nullable Boolean> deferred = deferredSeed;
+        if (deferred != null) {
+            seedDataIfEmpty(deferred);
         }
     }
 

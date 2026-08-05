@@ -53,6 +53,7 @@ class SyncDispatcher {
                         reloadQuietly(module, verbose);
                     }
                 }
+                plugin.seedDeferredModules();
             });
             return;
         }

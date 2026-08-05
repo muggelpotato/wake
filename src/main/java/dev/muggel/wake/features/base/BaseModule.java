@@ -16,16 +16,15 @@ import org.jspecify.annotations.NonNull;
 import java.sql.SQLException;
 
 public class BaseModule extends WakeModule {
-    public static final String STATE_KEY_KILL_BOAT_ON_EXIT = "base.killboatonexit";
     public BaseModule(Wake plugin) {
         super(plugin, "base");
     }
 
     @Override
     protected void onModuleEnable() {
-        registerListener(new EmptyBoatListener(this));
+        registerListener(new EmptyBoatListener(plugin));
         StateDao stateDao = plugin.getStateDao();
-        seedDataIfEmpty(stateDao.isLoaded() && stateDao.snapshot(statePrefix).isEmpty());
+        seedDataIfEmpty(() -> stateDao.isLoaded() ? stateDao.snapshot(statePrefix).isEmpty() : null);
     }
 
     @Override
@@ -34,20 +33,11 @@ public class BaseModule extends WakeModule {
                 .aliases("wa")
                 .addSubcommand(HelpCommand.getNode(plugin))
                 .addSubcommand(ReloadCommand.getNode(plugin))
-                .addSubcommand(CommandHelper.toggleCommand(plugin, "killboatonexit", STATE_KEY_KILL_BOAT_ON_EXIT, "words.feature.auto_kill")
+                .addSubcommand(CommandHelper.toggleCommand(plugin, "killboatonexit", EmptyBoatListener.STATE_KEY_KILL_BOAT_ON_EXIT, "words.feature.auto_kill")
                         .withPreset(PermissionPreset.BUILDER))
                 .addSubcommand(KillEmptyBoatsCommand.getNode(plugin))
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "hints", CommandHelper.STATE_KEY_SHOW_HINTS, "words.feature.hints"))
                 .addSubcommand(DatabaseCommand.getNode(plugin));
-    }
-
-    @Override
-    public void reload() {
-        plugin.getStateDao().reloadAsync(null);
-    }
-
-    public boolean isKillBoatOnExit() {
-        return plugin.getStateDao().get(STATE_KEY_KILL_BOAT_ON_EXIT, false);
     }
 
     @Override

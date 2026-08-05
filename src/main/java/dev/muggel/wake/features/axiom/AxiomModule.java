@@ -33,7 +33,7 @@ public class AxiomModule extends WakeModule {
         if (!read) {
             reload();
         }
-        seedDataIfEmpty(read && displays.keys().isEmpty());
+        seedDataIfEmpty(() -> displays.isLoaded() || displays.load() ? displays.keys().isEmpty() : null);
     }
 
     @Override

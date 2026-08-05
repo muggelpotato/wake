@@ -4,8 +4,9 @@
 Covers what `core/module` owns wherever a console reaches it: the config toggle in every direction,
 a module surviving repeated cycles without duplicating or losing what it registered, the hot listener
 a feature claims from core and has to give back, the store it is rebuilt from on the way back up, the
-bundled defaults an empty store seeds, the format stamp an export carries, the state prefix it sweeps,
-and the service seam between two modules.
+bundled defaults an empty store seeds, the seeding decision an outage postpones rather than settles,
+the format stamp an export carries, the state prefix it sweeps, and the service seam between two
+modules.
 
     python testenv/drills_module.py
 
@@ -37,8 +38,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import (Log, Rcon, bad, detect_backend, docker, failures, ok, set_module_enabled,  # noqa: E402
-                    state, state_keys, step, switch, write_state_raw)
+from drills import (Log, Rcon, bad, detect_backend, docker, failures, ok, outage,  # noqa: E402
+                    set_module_enabled, state, state_keys, step, switch, write_state_raw)
 
 WAKE = Path(__file__).resolve().parents[1] / "run" / "plugins" / "wake"
 CONFIG = WAKE / "config.yml"
@@ -251,6 +252,40 @@ def drill_reseeds_empty_store(rcon: Rcon, log: Log, mariadb):
     truthy("and the bundled pads are live without a setdefaults", "coral" in listing, listing[:200])
 
 
+def drill_seeds_after_recovery(rcon: Rcon, log: Log, mariadb):
+    """A store that could not be read when its module came up is not an empty store, and not a decided one either.
+
+    Coming up during an outage is the one case where "seed the defaults" cannot be answered: a mirror
+    refuses to read while the database is degraded rather than rewind the cache to nothing. Skipping the
+    seed there is right; leaving it skipped for good is not, because the module then runs on no defaults
+    at all until somebody restarts it. So the question has to come back once the database does.
+    """
+    step("emptying the store while the database still answers")
+    log.reset()
+    truthy("the drop ran", database(rcon, log, "wake database drop drydock confirm", "drop", "drydock") is not None,
+           "no completion line")
+    time.sleep(SETTLE)
+    cycle(rcon, "drydock", False)
+
+    with outage(mariadb):
+        step("making the database unreachable, then bringing the module up on it")
+        rcon.run("wake hints true")  # a write that cannot land is what puts the database into degraded mode
+        time.sleep(SETTLE)
+        log.reset()
+        truthy("it still enables", cycle(rcon, "drydock", True) == ["enabled"])
+        time.sleep(SETTLE)
+        truthy("but seeds nothing, because an unread store is not an empty one",
+               "Auto-seeded" not in log.read(), log.read()[-300:])
+        listing = rcon.run("dd boostpad list")
+        truthy("and it is running on no pads at all", "none configured" in listing, listing[:200])
+
+    step("and the database comes back")
+    truthy("recovery is reported", log.await_line("Database recovered", 90), log.read()[-300:])
+    truthy("the seeding decision it could not take is taken now", log.await_line("Auto-seeded", 30), log.read()[-300:])
+    listing = rcon.run("dd boostpad list")
+    truthy("the bundled pads are live without a restart or a setdefaults", "coral" in listing, listing[:200])
+
+
 def drill_export_every_module(rcon: Rcon, log: Log, mariadb):
     """Every module that is running exports and takes its own file back; one that is off is refused."""
     running = [module for module, outcome in reload_outcomes(rcon).items() if outcome == ["reloaded"]]
@@ -452,7 +487,8 @@ def main():
     try:
         for drill in [drill_toggle_directions, drill_repeated_cycles, drill_claimed_listener,
                       drill_state_survives_cycle,
-                      drill_reseeds_empty_store, drill_export_format_gate, drill_enable_failure,
+                      drill_reseeds_empty_store, drill_seeds_after_recovery,
+                      drill_export_format_gate, drill_enable_failure,
                       drill_failure_reaches_no_further, drill_export_every_module, drill_state_sweep,
                       drill_incompatible]:
             print(f"\n{drill.__name__.removeprefix('drill_').replace('_', ' ')}")

@@ -34,7 +34,8 @@ public class DrydockModule extends WakeModule {
         this.detectorListener = new BoostpadDetectorListener(plugin, boostpads);
         boostpads.setOnReloadCallback(this.detectorListener::updateRegistration);
         registerListener(new OBUBoostpadIntegration(plugin));
-        seedDataIfEmpty(boostpads.isLoaded() && boostpads.cachedBoostpads().isEmpty());
+        BoostpadRegistry registry = this.boostpads;
+        seedDataIfEmpty(() -> registry.isLoaded() || registry.load() ? registry.cachedBoostpads().isEmpty() : null);
     }
 
     @Override

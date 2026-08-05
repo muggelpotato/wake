@@ -23,11 +23,15 @@ public class BoostpadRegistry {
     public BoostpadRegistry(@NonNull DrydockDao dao) {
         this.dao = dao;
         this.boostpads = dao.boostpads();
-        boostpads.load();
-        rebuildDerived();
-        if (!boostpads.isLoaded()) {
+        if (!load()) {
             boostpads.reloadAsync(changed -> rebuildDerived());
         }
+    }
+
+    public boolean load() {
+        boolean read = boostpads.load();
+        rebuildDerived();
+        return read;
     }
 
     public boolean isLoaded() {

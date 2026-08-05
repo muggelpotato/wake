@@ -1,25 +1,27 @@
 package dev.muggel.wake.features.base;
 
+import dev.muggel.wake.Wake;
 import org.bukkit.entity.Boat;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.vehicle.VehicleExitEvent;
 import org.jspecify.annotations.NonNull;
 
 public class EmptyBoatListener implements Listener {
-    private final BaseModule module;
-    public EmptyBoatListener(BaseModule module) {
-        this.module = module;
+    public static final String STATE_KEY_KILL_BOAT_ON_EXIT = "base.killboatonexit";
+    public static final boolean DEFAULT_KILL_BOAT_ON_EXIT = false;
+    private final Wake plugin;
+    public EmptyBoatListener(@NonNull Wake plugin) {
+        this.plugin = plugin;
     }
 
-    @EventHandler(ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onVehicleExit(@NonNull VehicleExitEvent event) {
-        if (event.getVehicle() instanceof Boat boat) {
-            if (module.isKillBoatOnExit()) {
-                if (boat.getPassengers().size() <= 1 && boat.getPassengers().contains(event.getExited())) {
-                    boat.remove();
-                }
-            }
+        if (!(event.getVehicle() instanceof Boat boat)) return;
+        if (!plugin.getStateDao().get(STATE_KEY_KILL_BOAT_ON_EXIT, DEFAULT_KILL_BOAT_ON_EXIT)) return;
+        if (boat.getPassengers().stream().allMatch(event.getExited()::equals)) {
+            boat.remove();
         }
     }
 }
