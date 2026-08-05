@@ -1,18 +1,21 @@
 package dev.muggel.wake.features.axiom;
 
-import co.aikar.idb.DB;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.database.CachedStore;
+import dev.muggel.wake.core.database.SqlStatement;
 import dev.muggel.wake.core.database.WakeDao;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
 public class AxiomDao extends WakeDao {
+    private static final String UPSERT_DISPLAY = "REPLACE INTO wake_axiom_displays (model_key) VALUES (?)";
     private final CachedStore<String> displays = mirror("wake_axiom_displays", this::readDisplays);
     public AxiomDao(Wake plugin) {
         super(plugin);
@@ -45,8 +48,8 @@ public class AxiomDao extends WakeDao {
         return models;
     }
 
-    public void importDisplay(String modelKey) throws SQLException {
-        DB.executeUpdate("REPLACE INTO wake_axiom_displays (model_key) VALUES (?)", modelKey);
-        displays.announce(modelKey, modelKey);
+    public void importDisplay(@NonNull String modelKey) {
+        String key = modelKey.toLowerCase(Locale.ROOT);
+        displays.save(key, key, "Failed to import an axiom display", List.of(new SqlStatement(UPSERT_DISPLAY, new Object[]{key})));
     }
 }

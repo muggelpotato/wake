@@ -19,7 +19,7 @@ database:
   pool:
     maximum_connections: 5
     minimum_idle: 1
-sync: # cross-server cache invalidation via Valkey pub-sub (requires shared mariadb database)
+sync: # cross-server cache invalidation via Valkey pub-sub (requires shared mariadb/valkey instance)
   enabled: false
   verbose_logging: false
   redis:

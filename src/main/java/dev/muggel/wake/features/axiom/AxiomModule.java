@@ -9,8 +9,6 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Set;
-import java.util.logging.Level;
 
 public class AxiomModule extends WakeModule {
     private AxiomDao dao;
@@ -26,12 +24,15 @@ public class AxiomModule extends WakeModule {
 
     @Override
     protected void onModuleEnable() {
+        axiomDisplays = new AxiomDisplays(plugin);
         dao = registerDao(new AxiomDao(plugin));
         dao.initTables();
-        axiomDisplays = new AxiomDisplays(plugin);
         CachedStore<String> displays = dao.displays();
         boolean read = displays.load();
-        axiomDisplays.register(Set.copyOf(displays.keys()));
+        axiomDisplays.apply(displays.keys());
+        if (!read) {
+            reload();
+        }
         seedDataIfEmpty(read && displays.keys().isEmpty());
     }
 
@@ -48,44 +49,33 @@ public class AxiomModule extends WakeModule {
     public void reload() {
         AxiomDao currentDao = this.dao;
         AxiomDisplays displays = this.axiomDisplays;
-        if (currentDao == null || displays == null || !isCompatible()) return;
+        if (currentDao == null || displays == null) return;
         currentDao.displays().reloadAsync(ignored -> {
-            if (this.dao != currentDao) return;
-            displays.unregisterAll();
-            displays.register(Set.copyOf(currentDao.displays().keys()));
+            if (this.dao == currentDao) {
+                displays.apply(currentDao.displays().keys());
+            }
         });
     }
 
     @Override
     protected int onExportData(@NonNull YamlConfiguration yaml) throws SQLException {
         AxiomDao currentDao = this.dao;
-        if (currentDao != null && !currentDao.displays().isLoaded()) {
+        if (currentDao == null || !currentDao.displays().isLoaded()) {
             throw new SQLException("Axiom displays could not be read");
         }
         int count = exportState(yaml);
-        if (currentDao == null) {
-            return count;
-        }
-        List<String> models = List.copyOf(currentDao.displays().keys());
+        List<String> models = currentDao.displays().keys().stream().sorted().toList();
         yaml.set("displays", models);
         return count + models.size();
     }
 
     @Override
     protected int onImportData(@NonNull YamlConfiguration yaml) throws SQLException {
-        AxiomDao currentDao = this.dao;
-        int count = 0;
-        if (currentDao != null) {
-            for (String display : yaml.getStringList("displays")) {
-                try {
-                    currentDao.importDisplay(display);
-                    count++;
-                } catch (SQLException e) {
-                    plugin.getLogger().log(Level.SEVERE, "Failed to import axiom display " + display, e);
-                }
-            }
+        List<String> models = yaml.getStringList("displays");
+        for (String model : models) {
+            dao.importDisplay(model);
         }
-        count += importState(yaml);
+        int count = models.size() + importState(yaml);
         reload();
         return count;
     }

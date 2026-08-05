@@ -244,6 +244,39 @@ def drill_seed(primary: Rcon):
     truthy("both backends hold the seeded pads", seeded, f"primary={mine[:120]} backend2={theirs[:120]}")
 
 
+def drill_axiom_displays(primary: Rcon):
+    """The axiom store is driven from the other side, because that is the only side a display moves from.
+
+    It has no command of its own: a model reaches the table through a seed, an import or a drop, so
+    the question this answers is whether the picker on the primary is rebuilt from what backend2 did
+    to the table, or stays as it was until someone restarts it.
+
+    `testEnvUp` copies the primary's plugin folder to backend2, so axiom has to be enabled in
+    `run/plugins/wake/config.yml` before `runServer` for either side to have a store to drive.
+    """
+    for side, reply in (("the primary", primary.run("wake database export axiom")),
+                        ("backend2", on_backend2("wake database export axiom"))):
+        if "not loaded" in reply:
+            step(f"skipped: axiom is not up on {side} (enable it before runServer, so backend2 is copied with it)")
+            return
+
+    step("a display store emptied on backend2 empties the primary's picker")
+    if "muggel:banana" not in primary_cache(primary, "axiom"):
+        on_backend2("wake database setdefaults axiom confirm")
+        settle(2)
+    on_backend2("wake database drop axiom confirm")
+    settle(2)
+    mine = primary_cache(primary, "axiom")
+    truthy("the primary's cache lost the models too", "muggel:banana" not in mine, mine[:200])
+
+    step("and re-seeding it there fills the primary's picker back up")
+    on_backend2("wake database setdefaults axiom confirm")
+    settle(2)
+    mine, theirs = both_caches(primary, "axiom")
+    truthy("backend2 holds the seeded models", "muggel:banana" in theirs, theirs[:200])
+    truthy("and so does the primary, without a restart", "muggel:banana" in mine, mine[:200])
+
+
 def drill_obu_import(primary: Rcon):
     step("the OBU aggregate: an import on the primary reaches backend2 whole")
     primary.run("wake database export obu")
@@ -748,6 +781,7 @@ def main():
     drill_reset(primary)
     drill_seed(primary)
     drill_state_prefix_clear(primary)
+    drill_axiom_displays(primary)
     drill_obu_import(primary)
     drill_separator_keys(primary)
     drill_bulk_import(primary)
