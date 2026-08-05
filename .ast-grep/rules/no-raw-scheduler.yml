@@ -7,16 +7,19 @@ note: |
   async tasks, all of which can still be running while the server stops. Bukkit answers a task
   submitted after that with IllegalPluginAccessException, and the isEnabled() check that would avoid
   it can never be airtight — the plugin can be disabled between the check and the submit. Both halves
-  live in `Scheduling.onMain/async/laterAsync`, so no caller has to remember either. Hand-rolling the
-  hop again is exactly how one of the two guards goes missing; add a variant to Scheduling instead.
+  live in `Scheduling`, so no caller has to remember either. Hand-rolling the hop again is exactly how
+  one of the two guards goes missing; add a variant to Scheduling instead. A task whose handle you need
+  back is not an exception — `laterAsync` and `repeatingAsync` return theirs.
 ignores:
   # The helper itself: the one place the raw scheduler belongs.
   - "**/core/Scheduling.java"
-  # Repeating purge sweep — needs the BukkitTask handle back to cancel it on disable, and is only
-  # ever scheduled from module enable/reload, never while the plugin is going down.
-  - "**/SandboxPurger.java"
 rule:
-  pattern: $RECEIVER.getScheduler().$METHOD($$$)
+  any:
+    - pattern: $RECEIVER.getScheduler().$METHOD($$$)
+    # the other way onto a Wake thread: BukkitRunnable schedules itself, so it never names a scheduler
+    - pattern: new BukkitRunnable()
 constraints:
   METHOD:
-    regex: '^runTask'
+    # every way onto a Wake thread from the scheduler, not only the runTask family: the legacy scheduleSync* pair,
+    # callSyncMethod's future, and the Executor a caller could hold past the disable that invalidates it
+    regex: '^(runTask|scheduleSync|callSyncMethod|getMainThreadExecutor)'

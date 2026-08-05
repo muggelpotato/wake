@@ -2,9 +2,10 @@
 """Module-system drills against a running Wake server.
 
 Covers what `core/module` owns wherever a console reaches it: the config toggle in every direction,
-a module surviving repeated cycles without duplicating or losing what it registered, the store it
-is rebuilt from on the way back up, the bundled defaults an empty store seeds, the format stamp an
-export carries, the state prefix it sweeps, and the service seam between two modules.
+a module surviving repeated cycles without duplicating or losing what it registered, the hot listener
+a feature claims from core and has to give back, the store it is rebuilt from on the way back up, the
+bundled defaults an empty store seeds, the format stamp an export carries, the state prefix it sweeps,
+and the service seam between two modules.
 
     python testenv/drills_module.py
 
@@ -37,12 +38,13 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from drills import (Log, Rcon, bad, detect_backend, docker, failures, ok, set_module_enabled,  # noqa: E402
-                    state, state_keys, step, write_state_raw)
+                    state, state_keys, step, switch, write_state_raw)
 
 WAKE = Path(__file__).resolve().parents[1] / "run" / "plugins" / "wake"
 CONFIG = WAKE / "config.yml"
 EXPORTS = WAKE / "exports"
 UNKNOWN = "Unknown or incomplete command"
+MOVE_EVENT = "org.bukkit.event.player.PlayerMoveEvent"
 COMPLETED = re.compile(r"Database (\w+) completed for module (\w+) \((\d+) records\)")
 OUTCOMES = [
     ("enabled", re.compile(r"(?<!Dis)Enabled module: (\w+)")),
@@ -157,6 +159,55 @@ def drill_repeated_cycles(rcon: Rcon, log: Log, mariadb):
     outcomes = reload_outcomes(rcon)
     doubled = {module: names for module, names in outcomes.items() if len(names) != 1}
     truthy(f"one line each for {', '.join(sorted(outcomes))}", not doubled, str(doubled))
+
+
+def drill_claimed_listener(rcon: Rcon, log: Log, mariadb):
+    """A hot listener a module claims from core has to come and go with it, exactly once.
+
+    `VehiclePath` registers on PlayerMoveEvent only while a feature holds a claim on it, which drydock's
+    boostpad detector takes and gives back. Paper is asked rather than Wake: a claim that is never given
+    back leaves the listener on the busiest event in the game, and one given back twice loses the
+    recording for whoever still wanted it. Both read straight off `/paper dumplisteners`.
+    """
+    def registrations():
+        return rcon.run(f"paper dumplisteners {MOVE_EVENT}").count("VehiclePath")
+
+    def listing():
+        return rcon.run("dd boostpad list")
+
+    def set_boostpads(enabled):
+        if (switch(listing()) == "enabled") != enabled:
+            rcon.run("dd boostpad toggle")
+
+    if "→" not in listing():
+        raise RuntimeError("no boostpad is configured, so nothing would claim the recording")
+    was_on = switch(listing()) == "enabled"
+    try:
+        set_boostpads(False)
+        truthy("nothing is on PlayerMoveEvent while the feature is off", registrations() == 0)
+        set_boostpads(True)
+        truthy("a configured pad and the switch on registers it once", registrations() == 1)
+
+        step("ten off/on cycles of the feature switch")
+        for round_number in range(10):
+            set_boostpads(False)
+            if registrations() != 0:
+                truthy(f"cycle {round_number} released it", False, "still registered with the feature off")
+                break
+            set_boostpads(True)
+            if registrations() != 1:
+                truthy(f"cycle {round_number} reclaimed it once", False, f"{registrations()} registration(s)")
+                break
+        else:
+            truthy("ten cycles leave exactly one registration", registrations() == 1)
+
+        step("and the module going down releases it too")
+        cycle(rcon, "drydock", False)
+        truthy("nothing is left on PlayerMoveEvent", registrations() == 0)
+        cycle(rcon, "drydock", True)
+        truthy("the enable claims it again, once", registrations() == 1)
+    finally:
+        set_boostpads(was_on)
 
 
 def drill_state_survives_cycle(rcon: Rcon, log: Log, mariadb):
@@ -399,7 +450,8 @@ def main():
     log = Log()
     original = CONFIG.read_text(encoding="utf-8")
     try:
-        for drill in [drill_toggle_directions, drill_repeated_cycles, drill_state_survives_cycle,
+        for drill in [drill_toggle_directions, drill_repeated_cycles, drill_claimed_listener,
+                      drill_state_survives_cycle,
                       drill_reseeds_empty_store, drill_export_format_gate, drill_enable_failure,
                       drill_failure_reaches_no_further, drill_export_every_module, drill_state_sweep,
                       drill_incompatible]:

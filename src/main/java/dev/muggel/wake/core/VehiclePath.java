@@ -21,27 +21,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * The path of a vehicle in a tick. <br>
- * Not just the straight line from start to end
- */
+/** The path a vehicle took within a tick, rather than the straight line from start to end its move event reports */
 public final class VehiclePath implements Listener {
     private static final int MAX_POINTS = 8;
     private final Wake plugin;
     private final Map<UUID, List<Vector>> points = new HashMap<>();
-    private int consumers;
+    private int claims;
     public VehiclePath(@NonNull Wake plugin) {
         this.plugin = plugin;
     }
 
     public void claim() {
-        if (consumers++ == 0) {
+        if (claims++ == 0) {
             Bukkit.getPluginManager().registerEvents(this, plugin);
         }
     }
 
     public void release() {
-        if (--consumers == 0) {
+        if (claims > 0 && --claims == 0) {
             HandlerList.unregisterAll(this);
             points.clear();
         }
@@ -52,16 +49,20 @@ public final class VehiclePath implements Listener {
         Location to = event.getTo();
         Vector end = to.toVector();
         List<Vector> recorded = points.get(event.getVehicle().getUniqueId());
-        return new Legs(recorded == null ? List.of() : recorded, from.getWorld() == to.getWorld() ? from.toVector() : end, end);
+        boolean sameWorld = from.getWorld() == to.getWorld();
+        Legs legs = Legs.of(sameWorld && recorded != null ? recorded : List.of(), sameWorld ? from.toVector() : end, end);
+        if (recorded != null) {
+            recorded.clear();
+        }
+        return legs;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerMove(@NonNull PlayerMoveEvent event) {
-        Entity vehicle = event.getPlayer().getVehicle();
-        if (vehicle == null) {
+        if (!(event.getPlayer().getVehicle() instanceof Vehicle vehicle)) {
             return;
         }
-        List<Vector> recorded = points.computeIfAbsent(vehicle.getUniqueId(), key -> new ArrayList<>(4));
+        List<Vector> recorded = points.computeIfAbsent(vehicle.getUniqueId(), key -> new ArrayList<>(MAX_POINTS));
         if (recorded.size() < MAX_POINTS && !unmoved(recorded, vehicle)) {
             recorded.add(new Vector(vehicle.getX(), vehicle.getY(), vehicle.getZ()));
         }
@@ -76,31 +77,35 @@ public final class VehiclePath implements Listener {
         return last.getX() == vehicle.getX() && last.getY() == vehicle.getY() && last.getZ() == vehicle.getZ();
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onVehicleMove(@NonNull VehicleMoveEvent event) {
-        List<Vector> recorded = points.get(event.getVehicle().getUniqueId());
-        if (recorded != null) {
-            recorded.clear();
-        }
-    }
-
     @EventHandler
     public void onEntityRemove(@NonNull EntityRemoveEvent event) {
-        if (event.getEntity() instanceof Vehicle) {
-            points.remove(event.getEntity().getUniqueId());
-        }
+        points.remove(event.getEntity().getUniqueId());
     }
 
-    public record Legs(@NonNull List<Vector> points, @NonNull Vector start, @NonNull Vector end) {
+    /** A tick's path as the boundaries between its legs. Where the vehicle started, every position it was seen at in between, and where it ended */
+    public record Legs(@NonNull List<Vector> boundaries) {
+        public Legs {
+            boundaries = List.copyOf(boundaries);
+        }
+
+        static @NonNull Legs of(@NonNull List<Vector> recorded, @NonNull Vector start, @NonNull Vector end) {
+            List<Vector> boundaries = new ArrayList<>(recorded.size() + 2);
+            boundaries.add(start);
+            for (Vector point : recorded) {
+                if (!point.equals(start) && !point.equals(end)) {
+                    boundaries.add(point);
+                }
+            }
+            boundaries.add(end);
+            return new Legs(boundaries);
+        }
+
         public int count() {
-            return Math.max(1, points.size());
+            return boundaries.size() - 1;
         }
 
         public @NonNull Vector at(int boundary) {
-            if (boundary == 0) {
-                return start;
-            }
-            return boundary < count() ? points.get(boundary - 1) : end;
+            return boundaries.get(boundary);
         }
 
         public double progress(int leg, double fraction) {

@@ -1,11 +1,13 @@
 package dev.muggel.wake.core;
 
-import dev.muggel.wake.Wake;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.IllegalPluginAccessException;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+
+import java.util.function.Supplier;
 
 /**
  * Scheduling that tolerates the plugin shutting down. <br>
@@ -15,45 +17,32 @@ import org.jspecify.annotations.Nullable;
 public final class Scheduling {
     private Scheduling() {}
 
-    public static void onMain(@NonNull Wake plugin, @NonNull Runnable task) {
-        if (!plugin.isEnabled()) {
-            return;
-        }
-        try {
-            Bukkit.getScheduler().runTask(plugin, task);
-        } catch (IllegalPluginAccessException disabledMidSubmit) {
-            // dropped
-        }
+    public static void onMain(@NonNull Plugin plugin, @NonNull Runnable task) {
+        submit(plugin, () -> Bukkit.getScheduler().runTask(plugin, task));
     }
 
-    public static void async(@NonNull Wake plugin, @NonNull Runnable task) {
-        if (!plugin.isEnabled()) {
-            return;
-        }
-        try {
-            Bukkit.getScheduler().runTaskAsynchronously(plugin, task);
-        } catch (IllegalPluginAccessException disabledMidSubmit) {
-            // dropped
-        }
+    public static void async(@NonNull Plugin plugin, @NonNull Runnable task) {
+        submit(plugin, () -> Bukkit.getScheduler().runTaskAsynchronously(plugin, task));
     }
 
-    public static void later(@NonNull Wake plugin, @NonNull Runnable task, long delayTicks) {
-        if (!plugin.isEnabled()) {
-            return;
-        }
-        try {
-            Bukkit.getScheduler().runTaskLater(plugin, task, delayTicks);
-        } catch (IllegalPluginAccessException disabledMidSubmit) {
-            // dropped
-        }
+    public static void later(@NonNull Plugin plugin, @NonNull Runnable task, long delayTicks) {
+        submit(plugin, () -> Bukkit.getScheduler().runTaskLater(plugin, task, delayTicks));
     }
 
-    public static @Nullable BukkitTask laterAsync(@NonNull Wake plugin, @NonNull Runnable task, long delayTicks) {
+    public static @Nullable BukkitTask laterAsync(@NonNull Plugin plugin, @NonNull Runnable task, long delayTicks) {
+        return submit(plugin, () -> Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, task, delayTicks));
+    }
+
+    public static @Nullable BukkitTask repeatingAsync(@NonNull Plugin plugin, @NonNull Runnable task, long delayTicks, long periodTicks) {
+        return submit(plugin, () -> Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, task, delayTicks, periodTicks));
+    }
+
+    private static @Nullable BukkitTask submit(@NonNull Plugin plugin, @NonNull Supplier<BukkitTask> hop) {
         if (!plugin.isEnabled()) {
             return null;
         }
         try {
-            return Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, task, delayTicks);
+            return hop.get();
         } catch (IllegalPluginAccessException disabledMidSubmit) {
             return null;
         }

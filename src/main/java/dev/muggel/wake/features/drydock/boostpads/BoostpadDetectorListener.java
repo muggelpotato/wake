@@ -124,7 +124,7 @@ public class BoostpadDetectorListener implements Listener {
         List<PadHit> hits = null;
         for (int leg = 0; leg < legCount; leg++) {
             Vector legEnd = legs.at(leg + 1);
-            BlockSweep sweep = CollisionGeometry.sweep(legs.at(leg), legEnd, reach, reach, -SURFACE_DROP);
+            BlockSweep sweep = CollisionGeometry.sweep(legs.at(leg), legEnd, reach, -SURFACE_DROP);
             Vector scanned = sweep.from();
             for (int y = sweep.minY(); y <= sweep.maxY(); y++) {
                 for (int x = sweep.minX(); x <= sweep.maxX(); x++) {
@@ -137,9 +137,7 @@ public class BoostpadDetectorListener implements Listener {
                             continue;
                         }
                         double padding = extent(config.padding(), hull);
-                        double fraction = CollisionGeometry.intersectionFraction(
-                                scanned.getX(), scanned.getY(), scanned.getZ(),
-                                legEnd.getX(), legEnd.getY(), legEnd.getZ(),
+                        double fraction = CollisionGeometry.intersectionFraction(scanned, legEnd,
                                 x - padding, y + 1 - SURFACE_BAND, z - padding,
                                 x + 1 + padding, y + 1 + SURFACE_BAND, z + 1 + padding);
                         if (fraction < 0 || (seen != null && !seen.add(blockKey(x, y, z)))) {

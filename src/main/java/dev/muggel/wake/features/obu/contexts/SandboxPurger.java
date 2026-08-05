@@ -48,7 +48,7 @@ public final class SandboxPurger {
         long intervalTicks = Math.min(keepMillis, MAX_SWEEP_INTERVAL_MILLIS) / 50L;
         long delayTicks = Math.min(FIRST_SWEEP_DELAY_MILLIS / 50L, intervalTicks);
         scheduledKeepMillis = keepMillis;
-        this.task = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::sweep, delayTicks, intervalTicks);
+        this.task = Scheduling.repeatingAsync(plugin, this::sweep, delayTicks, intervalTicks);
         return this.task;
     }
 

@@ -6,7 +6,10 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.jspecify.annotations.NonNull;
 
-/** Dates what happened throughout a tick */
+/**
+ * Dates what happened throughout a tick. <br>
+ * Every subtick timestamp in Wake comes from here, so events in one tick share a base and stay comparable.
+ */
 public final class TickClock implements Listener {
     private long start = System.nanoTime();
     private long previous = start;
