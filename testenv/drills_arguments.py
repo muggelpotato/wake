@@ -2,8 +2,9 @@
 """Argument-type drills against a running Wake server.
 
 Covers what `core/commands/arguments` owns wherever a console sender reaches it: one key out of a
-known set (a block, a boat type, a set a module owns) and a name the type validates. The list types
-ride OBU setting commands and are drilled in drills_obu.py.
+known set (a block, a boat type, a set a module owns), a name the type validates, and a module id,
+whose set is whatever is running right now rather than a fixed list. The list types ride OBU setting
+commands and are drilled in drills_obu.py.
 
     python testenv/drills_arguments.py
 
@@ -15,15 +16,16 @@ Needs a server up with RCON (./gradlew runServer). Exits non-zero if a check fai
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # also installs the utf-8 stdout wrapper the section-sign colour codes need
-from drills import Rcon, CODES  # noqa: E402
+from drills import Rcon, CODES, set_module_enabled  # noqa: E402
 
 # Brigadier's own rejections, plus the localized ones the argument types raise
 PARSE_ERROR = ("Incorrect argument", "Unknown or incomplete", "Expected", "Invalid block",
-               "Invalid boat type", "Invalid option", "Invalid sandbox name",
+               "Invalid boat type", "Invalid option", "Invalid sandbox name", "Module not loaded",
                "not in the boostpad list", "<--[HERE]")
 PAD = "sea_lantern"  # a block the shipped defaults leave without a pad
 SANDBOX = "drillbox"
@@ -117,6 +119,16 @@ def drill_boat_type():
     rejects("a boat that does not exist", "dd getboat oak_bot parkour oars")
     rejects("an unknown variant", "dd getboat oak_boat nonsense oars")
     rejects("an unknown oars value", "dd getboat oak_boat parkour maybe")
+    reply = rejects("a stray character in a choice", "dd getboat oak_boat park!our oars")
+    if "park!our" in reply:
+        ok("the refusal quotes the whole word, not the part a choice could hold")
+    else:
+        bad("stray character", reply)
+    reply = rejects("a quoted choice", 'dd getboat oak_boat "parkour" oars')
+    if '"parkour"' in reply:
+        ok("and names a quoted one rather than refusing nothing at all")
+    else:
+        bad("quoted choice", reply)
 
 
 def drill_name():
@@ -137,6 +149,56 @@ def drill_name():
     rcon.run(f"wo -sandbox delete {SANDBOX}")
 
 
+def drill_module():
+    """A module id is refused where it is typed, so no destructive branch is ever entered with a bad one.
+
+    The set is the modules that are running, not the ones this build ships: one turned off in
+    config.yml has no cache to export and no tables to drop, so it must stop being addressable the
+    moment it goes down and start again when it comes back.
+
+    Driven from the warning half of `drop`, which answers on the spot and drops nothing: the confirm
+    branch under it is the one that acts.
+    """
+    print("\na module id")
+    parses("a running module", "wake database drop drydock")
+    reply = expect("in any case", "wake database drop DRYDOCK", "drydock")
+    if "DRYDOCK" in reply:
+        bad("canonical id", f"the executor was handed what was typed: {reply}")
+    else:
+        ok("and what comes back out is the id Wake knows, not the spelling that was typed")
+    rejects("a module this build does not have", "wake database drop doesnotexist")
+    reply = rejects("even in front of confirm", "wake database drop doesnotexist confirm")
+    if "doesnotexist" in reply:
+        ok("the refusal quotes what was typed")
+    else:
+        bad("refusal text", reply)
+
+    print("\nand reads the whole word before it judges it")
+    for label, typed in [("a stray character at the end", "drydock!"),
+                         ("one in the middle", "dry!dock"),
+                         ("a quoted id", '"drydock"')]:
+        reply = rejects(label, f"wake database drop {typed}")
+        if typed in reply:
+            ok(f"the refusal quotes {typed}, not the part an id could hold")
+        else:
+            bad(label, reply)
+    rejects("nothing at all", "wake database drop")
+    rejects("a trailing space and nothing after it", "wake database drop ")
+
+    print("\nand only while the module is running")
+    # an export replies after the command returned, so a clean parse is all a console can read here
+    parses("an acting branch takes one that is up", "wake database export drydock")
+    time.sleep(2)  # let that export finish: a module is only operated on one command at a time
+    set_module_enabled("drydock", False)
+    try:
+        run("wake reload")
+        rejects("a module turned off is not addressable", "wake database export drydock")
+    finally:
+        set_module_enabled("drydock", True)
+        run("wake reload")
+    parses("and is addressable again once it is back", "wake database export drydock")
+
+
 def main():
     global rcon
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -155,6 +217,7 @@ def main():
     drill_module_keys()
     drill_boat_type()
     drill_name()
+    drill_module()
 
     print()
     if failures:

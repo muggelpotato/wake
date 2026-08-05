@@ -1,13 +1,12 @@
 package dev.muggel.wake.features.base.commands.database;
 
 import com.mojang.brigadier.Command;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.Scheduling;
-import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.commands.arguments.ModuleArgumentType;
+import dev.muggel.wake.core.database.DatabaseManager;
 import dev.muggel.wake.core.module.WakeModule;
 import dev.muggel.wake.core.text.MessageManager;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -16,97 +15,136 @@ import org.bukkit.command.CommandSender;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 final class DatabaseCommandHelper {
+    private static final Set<String> BUSY_MODULES = ConcurrentHashMap.newKeySet();
     private DatabaseCommandHelper() {}
 
     @FunctionalInterface
     interface ModuleOperation {
-        int run(WakeModule module) throws SQLException, IOException;
+        int run(@NonNull WakeModule module) throws SQLException, IOException;
     }
 
-    static @NonNull CommandNode confirmedNode(Wake plugin, String literal, String warnKey, String successKey, String failKey, ModuleOperation operation) {
+    static @NonNull CommandNode confirmedNode(@NonNull Wake plugin, @NonNull String literal, @NonNull String warnKey, @NonNull String successKey, @NonNull String failKey, @NonNull ModuleOperation operation) {
         return CommandNode.literal(literal)
-                .arguments(CommandNode.argument("module", StringArgumentType.string())
-                        .suggests(moduleSuggester(plugin))
+                .arguments(moduleArgument(plugin)
                         .executesSender((ctx, sender) -> {
                             warnUnconfirmed(plugin, ctx, literal, warnKey);
                             return 0;
                         })
                         .addSubcommand(CommandNode.literal("confirm")
-                                .executesSender((ctx, sender) -> runOnMain(plugin, ctx, literal, successKey, failKey, operation))));
+                                .executesSender((ctx, sender) -> runDrained(plugin, ctx, literal, successKey, failKey, operation))));
     }
 
-    private static void warnUnconfirmed(Wake plugin, @NonNull CommandContext<CommandSourceStack> ctx, String literal, String warnKey) {
-        CommandSender sender = ctx.getSource().getSender();
-        WakeModule module = operableModule(plugin, sender, moduleId(ctx));
-        if (module == null) return;
-        MessageManager messages = plugin.getMessageManager();
-        messages.send(sender, warnKey,
-                Placeholder.unparsed("module", module.getId()),
-                Placeholder.component("confirm_btn", messages.getComponent("commands.database.confirm_btn",
-                        Placeholder.parsed("literal", literal),
-                        Placeholder.parsed("module", module.getId()))));
+    static @NonNull CommandNode moduleArgument(@NonNull Wake plugin) {
+        return CommandNode.argument("module", ModuleArgumentType.of(plugin));
     }
 
-    static int runOnMain(Wake plugin, @NonNull CommandContext<CommandSourceStack> ctx, String literal, String successKey, String failKey, ModuleOperation operation) {
+    static @NonNull File exportDir(@NonNull Wake plugin) {
+        return new File(plugin.getDataFolder(), "exports");
+    }
+
+    static int runExport(@NonNull Wake plugin, @NonNull CommandContext<CommandSourceStack> ctx, @NonNull ModuleOperation operation) {
         CommandSender sender = ctx.getSource().getSender();
         String moduleId = moduleId(ctx);
-        if (operableModule(plugin, sender, moduleId) == null) return 0;
-        plugin.getDatabaseManager().runWithDrainedQueue(() -> {
-            WakeModule current = resolveModule(plugin, sender, moduleId);
-            if (current != null) {
-                report(plugin, sender, literal, moduleId, successKey, failKey, current, operation);
+        if (databaseUnavailable(plugin, sender)) {
+            return 0;
+        }
+        WakeModule module = resolveModule(plugin, sender, moduleId);
+        if (module == null || moduleBusy(plugin, sender, moduleId)) {
+            return 0;
+        }
+        Scheduling.async(plugin, () -> {
+            try {
+                report(plugin, sender, "export", module,
+                        "commands.database.export_success", "commands.database.export_fail", operation);
+            } finally {
+                BUSY_MODULES.remove(moduleId);
             }
         });
         return Command.SINGLE_SUCCESS;
     }
 
-    static int runExport(Wake plugin, @NonNull CommandContext<CommandSourceStack> ctx, ModuleOperation operation) {
+    private static int runDrained(@NonNull Wake plugin, @NonNull CommandContext<CommandSourceStack> ctx, @NonNull String literal, @NonNull String successKey, @NonNull String failKey, @NonNull ModuleOperation operation) {
         CommandSender sender = ctx.getSource().getSender();
         String moduleId = moduleId(ctx);
-        WakeModule module = operableModule(plugin, sender, moduleId);
-        if (module == null) return 0;
-        Scheduling.async(plugin, () -> report(plugin, sender, "export", moduleId, "commands.database.export_success", "commands.database.export_fail", module, operation));
+        if (databaseUnavailable(plugin, sender) || moduleBusy(plugin, sender, moduleId)) {
+            return 0;
+        }
+        plugin.getDatabaseManager().runWithDrainedQueue(() -> {
+            try {
+                WakeModule module = resolveModule(plugin, sender, moduleId);
+                if (module != null) {
+                    attributedTo(plugin, sender, () -> report(plugin, sender, literal, module, successKey, failKey, operation));
+                }
+            } finally {
+                BUSY_MODULES.remove(moduleId);
+            }
+        });
         return Command.SINGLE_SUCCESS;
     }
 
-    private static void report(Wake plugin, CommandSender sender, String literal, String moduleId, String successKey, String failKey, WakeModule module, @NonNull ModuleOperation operation) {
-        String key;
-        int count = 0;
+    private static boolean moduleBusy(@NonNull Wake plugin, @NonNull CommandSender sender, @NonNull String moduleId) {
+        if (BUSY_MODULES.add(moduleId)) {
+            return false;
+        }
+        plugin.getMessageManager().send(sender, "commands.database.busy", Placeholder.unparsed("module", moduleId));
+        return true;
+    }
+
+    private static void warnUnconfirmed(@NonNull Wake plugin, @NonNull CommandContext<CommandSourceStack> ctx, @NonNull String literal, @NonNull String warnKey) {
+        CommandSender sender = ctx.getSource().getSender();
+        if (databaseUnavailable(plugin, sender)) {
+            return;
+        }
+        String moduleId = moduleId(ctx);
+        MessageManager messages = plugin.getMessageManager();
+        messages.send(sender, warnKey,
+                Placeholder.unparsed("module", moduleId),
+                Placeholder.component("confirm_btn", messages.getComponent("commands.database.confirm_btn",
+                        Placeholder.parsed("literal", literal),
+                        Placeholder.parsed("module", moduleId))));
+    }
+
+    private static void report(@NonNull Wake plugin, @NonNull CommandSender sender, @NonNull String literal, @NonNull WakeModule module, @NonNull String successKey, @NonNull String failKey, @NonNull ModuleOperation operation) {
+        String moduleId = module.getId();
         try {
-            count = operation.run(module);
+            int count = operation.run(module);
             plugin.getLogger().info("Database " + literal + " completed for module " + moduleId + " (" + count + " records)");
-            key = successKey;
+            answer(plugin, sender, successKey, moduleId, String.valueOf(count), "");
         } catch (Exception e) {
             plugin.getLogger().log(Level.SEVERE, "Database " + literal + " failed for module " + moduleId, e);
-            key = failKey;
+            answer(plugin, sender, failKey, moduleId, "0", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
         }
-        int reported = count;
-        String messageKey = key;
+    }
+
+    private static void answer(@NonNull Wake plugin, @NonNull CommandSender sender, @NonNull String messageKey, @NonNull String moduleId, @NonNull String count, @NonNull String error) {
         Scheduling.onMain(plugin, () -> plugin.getMessageManager().send(sender, messageKey,
                 Placeholder.unparsed("module", moduleId),
-                Placeholder.unparsed("count", String.valueOf(reported))));
+                Placeholder.unparsed("count", count),
+                Placeholder.unparsed("error", error)));
     }
 
-    private static @Nullable WakeModule operableModule(@NonNull Wake plugin, CommandSender sender, String moduleId) {
-        WakeModule module = resolveModule(plugin, sender, moduleId);
-        return module != null && !databaseUnavailable(plugin, sender) ? module : null;
+    private static void attributedTo(@NonNull Wake plugin, @NonNull CommandSender sender, @NonNull Runnable body) {
+        DatabaseManager database = plugin.getDatabaseManager();
+        database.setActor(sender);
+        try {
+            body.run();
+        } finally {
+            database.restoreActor(null);
+        }
     }
 
-    static @NonNull SuggestionProvider<CommandSourceStack> moduleSuggester(Wake plugin) {
-        return (ctx, builder) -> CommandHelper.suggestMatching(builder,
-                plugin.getActiveModules().stream().map(WakeModule::getId).toList());
-    }
-
-    private static @Nullable WakeModule resolveModule(@NonNull Wake plugin, CommandSender sender, String moduleId) {
-        for (WakeModule m : plugin.getActiveModules()) {
-            if (m.getId().equals(moduleId)) {
-                return m;
+    private static @Nullable WakeModule resolveModule(@NonNull Wake plugin, @NonNull CommandSender sender, @NonNull String moduleId) {
+        for (WakeModule module : plugin.getActiveModules()) {
+            if (module.getId().equals(moduleId)) {
+                return module;
             }
         }
         plugin.getMessageManager().send(sender, "commands.base.module_not_loaded", Placeholder.unparsed("module", moduleId));
@@ -114,10 +152,10 @@ final class DatabaseCommandHelper {
     }
 
     private static @NonNull String moduleId(@NonNull CommandContext<CommandSourceStack> ctx) {
-        return StringArgumentType.getString(ctx, "module").toLowerCase(Locale.ROOT);
+        return ctx.getArgument("module", String.class);
     }
 
-    private static boolean databaseUnavailable(@NonNull Wake plugin, CommandSender sender) {
+    private static boolean databaseUnavailable(@NonNull Wake plugin, @NonNull CommandSender sender) {
         if (plugin.getDatabaseManager().isDegraded()) {
             plugin.getMessageManager().send(sender, "commands.database.unavailable");
             return true;

@@ -16,7 +16,7 @@
 #   <gradient:$secondary:$primary>...</gradient>
 #
 # Dynamic placeholders are filled by the plugin per message and only work in the message they already appear in (moving them to other keys does nothing):
-#   <aliases> <amount> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <count> <delay> <description> <duration> <error> <input> <literal> <module> <name> <padding> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
+#   <alias> <aliases> <amount> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <count> <delay> <description> <duration> <error> <input> <literal> <module> <name> <padding> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
 #
 # <prefix> inserts the `prefix` value you can modify below
 # ─────────────────────────────────────────────────────────────────────────────
@@ -31,12 +31,15 @@ commands:
   invalid_entity: "<prefix><danger>Invalid entity: <accent><input></accent></danger>"
   invalid_block: "<prefix><danger>Invalid block: <accent><input></accent></danger>"
   invalid_boat: "<prefix><danger>Invalid boat type: <accent><input></accent></danger>"
+  invalid_module: "<prefix><danger>Module not loaded: <accent><input></accent></danger>"
   only_players: "<prefix><danger>This command can only be executed by players</danger>"
   only_entities: "<prefix><danger>This command must be executed by an entity or via /execute as \\<targets></danger>"
   requires_version: "<prefix><danger>This feature requires Minecraft 1.21.2+ or newer</danger>"
   help:
     header: "<gradient:$secondary:$primary>─── Wake Commands ─────────</gradient>"
     entry: "  <muted>●</muted> <click:suggest_command:'/<command> '><hover:show_text:'<subcommands>'><accent>/<command></accent></hover></click> <muted_dark><aliases></muted_dark> <neutral><description></neutral>"
+    aliases: "(<aliases>)"
+    alias: "/<alias>"
     hover_header: "<secondary>Subcommands of /<command></secondary>"
     hover_line: "<neutral>/<command> <accent><sub></accent></neutral>"
     hover_more: "<muted_dark>... and <count> more</muted_dark>"
@@ -50,18 +53,19 @@ commands:
     toggle_disabled: "<prefix><neutral>Set <accent><name></accent> to <danger>disabled</danger></neutral>"
   database:
     export_success: "<prefix><neutral>Exported <primary><count></primary> records for module <accent><module></accent></neutral>"
-    export_fail: "<prefix><danger>Failed to export data for module <accent><module></accent></danger>"
+    export_fail: "<prefix><danger>Failed to export data for module <accent><module></accent>: <accent><error></accent></danger>"
     import_success: "<prefix><neutral>Imported <primary><count></primary> records for module <accent><module></accent></neutral>"
-    import_fail: "<prefix><danger>Failed to import data for module <accent><module></accent></danger>"
+    import_fail: "<prefix><danger>Failed to import data for module <accent><module></accent>: <accent><error></accent></danger>"
     import_confirm: "<prefix><danger><accent><module></accent> records will be overwritten or merged with imported data</danger><br><confirm_btn>"
     setdefaults_success: "<prefix><neutral>Seeded <primary><count></primary> default records for module <accent><module></accent></neutral>"
-    setdefaults_fail: "<prefix><danger>Failed to seed defaults for module <accent><module></accent></danger>"
+    setdefaults_fail: "<prefix><danger>Failed to seed defaults for module <accent><module></accent>: <accent><error></accent></danger>"
     setdefaults_confirm: "<prefix><danger><accent><module></accent> records will be reset to plugin defaults (custom records are kept)</danger><br><confirm_btn>"
     drop_success: "<prefix><neutral>Dropped records for module <accent><module></accent></neutral>"
-    drop_fail: "<prefix><danger>Failed to drop records for module <accent><module></accent></danger>"
+    drop_fail: "<prefix><danger>Failed to drop records for module <accent><module></accent>: <accent><error></accent></danger>"
     drop_confirm: "<prefix><danger>Dropping deletes every stored <accent><module></accent> record from the database</danger><br><confirm_btn>"
     confirm_btn: "  <muted>●</muted> <neutral>This cannot be undone. Run <click:suggest_command:'/wake database <literal> <module> confirm'><hover:show_text:'<secondary>Click to fill in</secondary>'><accent>/wake database <literal> <module> confirm</accent></hover></click> to go ahead</neutral>"
     unavailable: "<prefix><danger>Database is unreachable: try again once it has recovered</danger>"
+    busy: "<prefix><danger>Another database operation on <accent><module></accent> is still running: wait for it to finish</danger>"
   killemptyboats:
     success: "<prefix><neutral>Removed <primary><amount></primary> empty boats</neutral>"
   reload:

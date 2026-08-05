@@ -55,7 +55,7 @@ public final class KeyArgumentType implements CustomArgumentType<String, Namespa
     @Override
     public @NonNull String parse(@NonNull StringReader reader) throws CommandSyntaxException {
         int start = reader.getCursor();
-        String input = readToken(reader);
+        String input = ArgumentHelper.readToken(reader);
         NamespacedKey key = ArgumentHelper.resolveKey(input);
         if (key == null || !keys.get().contains(key)) {
             reader.setCursor(start);
@@ -68,13 +68,5 @@ public final class KeyArgumentType implements CustomArgumentType<String, Namespa
     public <S> @NonNull CompletableFuture<Suggestions> listSuggestions(@NonNull CommandContext<S> context, @NonNull SuggestionsBuilder builder) {
         ArgumentHelper.suggestKeys(builder.getRemaining().toLowerCase(Locale.ROOT), keys.get(), builder::suggest);
         return builder.buildFuture();
-    }
-
-    private static @NonNull String readToken(@NonNull StringReader reader) {
-        int start = reader.getCursor();
-        while (reader.canRead() && reader.peek() != ' ') {
-            reader.skip();
-        }
-        return reader.getString().substring(start, reader.getCursor());
     }
 }

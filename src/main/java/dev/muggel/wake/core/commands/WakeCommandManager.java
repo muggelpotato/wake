@@ -76,8 +76,8 @@ public final class WakeCommandManager {
         });
     }
 
-    public static @NonNull @Unmodifiable List<CommandNode> getRegisteredRoots() {
-        return roots;
+    public static @NonNull @Unmodifiable List<CommandNode> rootsVisibleTo(@NonNull Wake plugin, @NonNull CommandSender sender) {
+        return roots.stream().filter(root -> isVisible(plugin, root, root.getPermission(), sender)).toList();
     }
 
     /** The declared root a module registered, for reading its sub-commands back (their permissions included) */
@@ -90,9 +90,9 @@ public final class WakeCommandManager {
         return null;
     }
 
-    /** Every command below a root owned by a module lives or dies with it */
-    public static boolean isModuleActive(@NonNull Wake plugin, @NonNull CommandNode root) {
-        return plugin.isModuleActive(root.getModuleId());
+    /** Every command below a root owned by a module lives or dies with it and is hidden from whoever may not run it */
+    private static boolean isVisible(@NonNull Wake plugin, @NonNull CommandNode root, @NonNull String permission, @NonNull CommandSender sender) {
+        return plugin.isModuleActive(root.getModuleId()) && PermissionManager.canReach(sender, permission);
     }
 
     private static @NonNull List<String> allLabels(@NonNull CommandNode root) {
@@ -165,7 +165,7 @@ public final class WakeCommandManager {
     private static void wire(@NonNull ArgumentBuilder<CommandSourceStack, ?> builder, @NonNull Wake plugin, @NonNull CommandNode node, @NonNull CommandNode root, CommandNode.@Nullable Gate parentGate) {
         CommandNode.Gate gate = node.getGate() != null ? node.getGate() : parentGate;
         String nodePermission = node.getPermission();
-        builder.requires(source -> isModuleActive(plugin, root) && PermissionManager.canReach(source.getSender(), nodePermission));
+        builder.requires(source -> isVisible(plugin, root, nodePermission, source.getSender()));
         CommandNode.NodeExecutor executor = node.getExecutor();
         if (executor != null) {
             builder.executes(ctx -> run(plugin, node, gate, executor, ctx));

@@ -2,9 +2,10 @@
 """Drills for the /wake database admin surface and the outage journal's rough edges.
 
 Walks export, import, setdefaults and drop against whichever backend the server is configured for,
-and feeds the journal lines it cannot replay. What is checked is the store, not the file: an export
-writes out what a module's cache holds, so a value that reached the database but not the cache
-still fails here.
+including the two answers an import owes an admin -- no file is no records, an unreadable file is a
+refusal naming its cause -- and feeds the journal lines it cannot replay. What is checked is the
+store, not the file: an export writes out what a module's cache holds, so a value that reached the
+database but not the cache still fails here.
 
 The last three go after the same failure from different sides: while writes are sitting in the
 journal the table is behind the cache, so anything that reads it back -- a reload, a module
@@ -18,6 +19,7 @@ Runs against sqlite and mariadb alike. Exits non-zero if a drill fails.
 import argparse
 import os
 import re
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -96,6 +98,85 @@ def drill_confirm_gate(rcon: Rcon, log: Log, mariadb):
     time.sleep(SETTLE)
     truthy("no operation ran", not COMPLETED.search(log.read()), log.read()[-200:])
     truthy("the store is untouched", switch(rcon.run("dd boostpad list")) == before, f"was {before!r}")
+
+
+def drill_import_without_file(rcon: Rcon, log: Log, mariadb):
+    """No file to import is no records, not a failure: an admin who exported nothing gets an answer, not a trace."""
+    step("importing with the exports folder gone")
+    stash = EXPORTS.with_name("exports_stash")
+    if stash.is_dir():
+        shutil.rmtree(stash)
+    if EXPORTS.is_dir():
+        EXPORTS.rename(stash)
+    try:
+        log.reset()
+        count = run(rcon, log, "wake database import base confirm", "import", "base")
+        truthy("it reports no records", count == 0, f"reported {count}")
+        truthy("and nothing was logged as a failure", "Database import failed" not in log.read(),
+               log.read()[-200:])
+    finally:
+        if stash.is_dir():
+            if EXPORTS.is_dir():
+                shutil.rmtree(EXPORTS)
+            stash.rename(EXPORTS)
+
+
+def drill_failure_names_the_cause(rcon: Rcon, log: Log, mariadb):
+    """A refusal an admin cannot act on is half a message: the console has to carry what broke.
+
+    The chat half of the same message goes to whoever typed it, which a console command cannot read
+    back -- that one is TESTPLAN section 8. What is checked here is that the operation fails at all
+    rather than importing half a file, and that the reason survives into the log.
+    """
+    step("importing a file this build cannot read")
+    log.reset()
+    run(rcon, log, "wake database export base", "export", "base")
+    exported_file = EXPORTS / "base_data.yml"
+    good = exported_file.read_text(encoding="utf-8")
+    truthy("the export names the format it was written in", "version: 1" in good, good[:120])
+    exported_file.write_text(good.replace("version: 1", "version: 99"), encoding="utf-8")
+    try:
+        log.reset()
+        rcon.run("wake database import base confirm")
+        time.sleep(SETTLE)
+        text = log.read()
+        truthy("the import is refused, named on the console", "Database import failed for module base" in text,
+               text[-200:])
+        truthy("and the log carries what an admin has to act on", "export format v99" in text, text[-300:])
+        truthy("nothing was imported behind the refusal", not COMPLETED.search(text), text[-200:])
+    finally:
+        exported_file.write_text(good, encoding="utf-8")
+    log.reset()
+    truthy("the same file imports again once it is readable",
+           run(rcon, log, "wake database import base confirm", "import", "base") is not None, "no completion line")
+
+
+def drill_one_at_a_time(rcon: Rcon, log: Log, mariadb):
+    """An admin who runs the same command twice in a second must not get two operations on one module.
+
+    Every export of a module stages the same `<module>_data.yml.tmp` before moving it into place, so a
+    second one racing the first either fails outright or writes the staged file underneath it -- and
+    what lands is then a backup nobody can read, reported as a success. The file is the check: five
+    exports fired back to back have to leave one whole file behind and nothing on the console. Which
+    of them is turned away is a race, so the console half only holds the refusals to naming what they
+    refused.
+    """
+    step("five exports of one module fired back to back")
+    log.reset()
+    replies = [rcon.run("wake database export obu").strip() for _ in range(5)]
+    time.sleep(SETTLE * 2)
+    text = log.read()
+    truthy("none of them failed", "Database export failed" not in text, text[-300:])
+    truthy("at least one ran", COMPLETED.search(text), text[-200:])
+    # an export answers asynchronously, so an empty console reply is one that was taken; anything else is
+    # a refusal, and a refusal has to name the module it is about rather than leave the admin guessing
+    turned_away = [reply for reply in replies if reply]
+    truthy("whatever was turned away named the module", all("obu" in reply for reply in turned_away),
+           f"{turned_away}")
+    exported_text = exported("obu")
+    truthy("the file left behind is a whole export", exported_text.startswith("version:")
+           and "server:" in exported_text, exported_text[:120])
+    truthy("and nothing staged was left beside it", not (EXPORTS / "obu_data.yml.tmp").exists())
 
 
 def drill_state_roundtrip(rcon: Rcon, log: Log, mariadb):
@@ -466,7 +547,9 @@ def main():
     log = Log()
 
     try:
-        for drill in [drill_export_counts, drill_confirm_gate, drill_state_roundtrip, drill_drop_is_scoped,
+        for drill in [drill_export_counts, drill_confirm_gate, drill_import_without_file,
+                      drill_failure_names_the_cause, drill_one_at_a_time,
+                      drill_state_roundtrip, drill_drop_is_scoped,
                       drill_obu_export_shape, drill_malformed_state_row, drill_refused_while_degraded,
                       drill_reload_during_outage, drill_reenable_during_outage, drill_journal_bad_line]:
             print(f"\n{drill.__name__.removeprefix('drill_').replace('_', ' ')}")

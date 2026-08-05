@@ -1,5 +1,6 @@
 package dev.muggel.wake.core.commands.arguments;
 
+import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
@@ -25,6 +26,14 @@ public final class ArgumentHelper {
                     Placeholder.unparsed("input", String.valueOf(obj)));
             return MessageComponentSerializer.message().serialize(comp);
         });
+    }
+
+    public static @NonNull String readToken(@NonNull StringReader reader) {
+        int start = reader.getCursor();
+        while (reader.canRead() && reader.peek() != ' ') {
+            reader.skip();
+        }
+        return reader.getString().substring(start, reader.getCursor());
     }
 
     /** Converts raw user input to {@link NamespacedKey} (default: {@code minecraft:}), or null */

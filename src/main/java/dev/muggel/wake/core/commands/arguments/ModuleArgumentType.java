@@ -8,33 +8,30 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
+import dev.muggel.wake.core.module.WakeModule;
 import io.papermc.paper.command.brigadier.argument.CustomArgumentType;
 import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Any enum as an argument (case-insensitive input). <br>
- * Parses to the constant's own name, so a call site can hand it straight to {@code valueOf}. <br>
- * Use for closed sets of choices instead of validating a raw word in the executor.
+ * One of Wake's running modules, by id (case-insensitive). <br>
+ * Retrieve with {@code ctx.getArgument(name, String.class)}
  */
-public final class WakeEnumArgumentType implements CustomArgumentType<String, String> {
-    private static final DynamicCommandExceptionType INVALID_ENUM = ArgumentHelper.localizedException("commands.invalid_option");
-    private final List<String> validNames;
-
-    private WakeEnumArgumentType(@NonNull Class<? extends Enum<?>> enumClass) {
-        this.validNames = Arrays.stream(enumClass.getEnumConstants())
-                .map(Enum::name)
-                .toList();
+public final class ModuleArgumentType implements CustomArgumentType<String, String> {
+    private static final DynamicCommandExceptionType NOT_LOADED = ArgumentHelper.localizedException("commands.invalid_module");
+    private final Wake plugin;
+    private ModuleArgumentType(@NonNull Wake plugin) {
+        this.plugin = plugin;
     }
 
     @Contract(value = "_ -> new", pure = true)
-    public static @NonNull WakeEnumArgumentType wakeEnum(@NonNull Class<? extends Enum<?>> enumClass) {
-        return new WakeEnumArgumentType(enumClass);
+    public static @NonNull ModuleArgumentType of(@NonNull Wake plugin) {
+        return new ModuleArgumentType(plugin);
     }
 
     @Override
@@ -46,17 +43,21 @@ public final class WakeEnumArgumentType implements CustomArgumentType<String, St
     public @NonNull String parse(@NonNull StringReader reader) throws CommandSyntaxException {
         int start = reader.getCursor();
         String input = ArgumentHelper.readToken(reader);
-        for (String name : validNames) {
-            if (name.equalsIgnoreCase(input)) {
-                return name;
+        for (String id : activeIds()) {
+            if (id.equalsIgnoreCase(input)) {
+                return id;
             }
         }
         reader.setCursor(start);
-        throw INVALID_ENUM.createWithContext(reader, input);
+        throw NOT_LOADED.createWithContext(reader, input);
     }
 
     @Override
     public <S> @NonNull CompletableFuture<Suggestions> listSuggestions(@NonNull CommandContext<S> context, @NonNull SuggestionsBuilder builder) {
-        return CommandHelper.suggestMatching(builder, validNames);
+        return CommandHelper.suggestMatching(builder, activeIds());
+    }
+
+    private @NonNull List<String> activeIds() {
+        return plugin.getActiveModules().stream().map(WakeModule::getId).toList();
     }
 }

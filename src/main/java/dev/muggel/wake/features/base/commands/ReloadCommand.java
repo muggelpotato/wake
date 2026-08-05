@@ -17,12 +17,12 @@ public class ReloadCommand {
                 .executesSender((ctx, sender) -> execute(ctx, plugin));
     }
 
-    private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, @NonNull Wake plugin) {
+    private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
         List<Component> feedback = plugin.reloadSettings();
         plugin.getMessageManager().send(sender, "commands.reload.success");
-        for (Component msg : feedback) {
-            sender.sendMessage(msg);
+        for (Component outcome : feedback) {
+            sender.sendMessage(outcome);
         }
         return Command.SINGLE_SUCCESS;
     }

@@ -21,6 +21,7 @@ import java.util.List;
 
 public class HelpCommand {
     private static final int HOVER_SUBCOMMAND_CAP = 12;
+    private static final JoinConfiguration ALIAS_SEPARATOR = JoinConfiguration.separator(Component.text(", "));
 
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("help")
@@ -28,33 +29,32 @@ public class HelpCommand {
                 .executesSender((ctx, sender) -> execute(ctx, plugin));
     }
 
-    private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, @NonNull Wake plugin) {
+    private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
         MessageManager mm = plugin.getMessageManager();
         mm.send(sender, "commands.help.header");
-        for (CommandNode root : WakeCommandManager.getRegisteredRoots()) {
-            if (!WakeCommandManager.isModuleActive(plugin, root) || !PermissionManager.canReach(sender, root.getPermission())) {
-                continue;
-            }
+        for (CommandNode root : WakeCommandManager.rootsVisibleTo(plugin, sender)) {
             mm.send(sender, "commands.help.entry",
                     Placeholder.parsed("command", root.getName()),
-                    Placeholder.unparsed("aliases", aliasText(root)),
+                    Placeholder.component("aliases", aliasText(mm, root)),
                     Placeholder.component("description", CommandHelper.moduleDescription(plugin, root)),
-                    Placeholder.component("subcommands", subcommandHover(plugin, sender, root)));
+                    Placeholder.component("subcommands", subcommandHover(mm, sender, root)));
         }
         return Command.SINGLE_SUCCESS;
     }
 
-    private static @NonNull String aliasText(@NonNull CommandNode root) {
-        List<String> aliases = root.getAliases();
+    private static @NonNull Component aliasText(@NonNull MessageManager mm, @NonNull CommandNode root) {
+        List<Component> aliases = root.getAliases().stream()
+                .map(alias -> mm.getComponent("commands.help.alias", Placeholder.unparsed("alias", alias)))
+                .toList();
         if (aliases.isEmpty()) {
-            return "";
+            return Component.empty();
         }
-        return "(/" + String.join(", /", aliases) + ")";
+        return mm.getComponent("commands.help.aliases",
+                Placeholder.component("aliases", Component.join(ALIAS_SEPARATOR, aliases)));
     }
 
-    private static @NonNull Component subcommandHover(@NonNull Wake plugin, @NonNull CommandSender sender, @NonNull CommandNode root) {
-        MessageManager mm = plugin.getMessageManager();
+    private static @NonNull Component subcommandHover(@NonNull MessageManager mm, @NonNull CommandSender sender, @NonNull CommandNode root) {
         List<Component> lines = new ArrayList<>();
         lines.add(mm.getComponent("commands.help.hover_header",
                 Placeholder.unparsed("command", root.getName())));
