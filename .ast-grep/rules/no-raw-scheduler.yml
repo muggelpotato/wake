@@ -12,7 +12,7 @@ note: |
   back is not an exception — `laterAsync` and `repeatingAsync` return theirs.
 ignores:
   # The helper itself: the one place the raw scheduler belongs.
-  - "**/core/Scheduling.java"
+  - "**/wake/core/Scheduling.java"
 rule:
   any:
     - pattern: $RECEIVER.getScheduler().$METHOD($$$)

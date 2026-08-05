@@ -1,4 +1,4 @@
-package dev.muggel.wake.features.base.commands;
+package dev.muggel.wake.features.core.commands;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;

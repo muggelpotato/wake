@@ -9,12 +9,12 @@ note: |
   performance — it must own an `unregister()` that `onModuleDisable` calls.
 ignores:
   # The registration helper is the one place that must call Bukkit directly.
-  - "**/core/module/WakeModule.java"
+  - "**/wake/core/module/WakeModule.java"
   # Conditional self-registration for a hot event; owns its own unregister().
   - "**/BoostpadDetectorListener.java"
   # Records player moves only while a feature claims it; release() unregisters, called from the consumer's unregister().
   - "**/VehiclePath.java"
-  # Core plumbing that outlives every module: the outage notice must reach players with base disabled.
+  # Database-layer plumbing that outlives every module: the outage notice is not a module's to send.
   # Unregisters itself in shutdown().
   - "**/DatabaseManager.java"
   # The plugin's own bootstrap: core listeners live as long as Wake does and Bukkit drops them on disable.

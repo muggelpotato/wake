@@ -44,10 +44,10 @@ commands:
     hover_line: "<neutral>/<command> <accent><sub></accent></neutral>"
     hover_more: "<muted_dark>... and <count> more</muted_dark>"
     module:
-      base: "Core plugin management"
+      core: "Core plugin management"
       obu: "OpenBoatUtils boat physics settings"
       drydock: "Features for the Drydock server"
-  base:
+  core:
     module_not_loaded: "<prefix><danger>The <module> module is not loaded</danger>"
     toggle_enabled: "<prefix><neutral>Set <accent><name></accent> to <primary>enabled</primary></neutral>"
     toggle_disabled: "<prefix><neutral>Set <accent><name></accent> to <danger>disabled</danger></neutral>"

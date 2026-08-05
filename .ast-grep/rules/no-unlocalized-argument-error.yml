@@ -11,7 +11,7 @@ note: |
   so the value cannot inject markup either. Add the key to lang/en_us.yml and use the helper.
 ignores:
   # The helper itself: the one place a Brigadier exception type is built.
-  - "**/core/commands/arguments/ArgumentHelper.java"
+  - "**/wake/core/commands/arguments/ArgumentHelper.java"
 rule:
   any:
     - pattern: new SimpleCommandExceptionType($$$)

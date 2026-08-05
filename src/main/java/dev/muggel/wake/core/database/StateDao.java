@@ -17,7 +17,7 @@ import java.util.function.Consumer;
 
 /**
  * Key-value store for runtime flags and settings (cached in memory, persisted asynchronously). <br>
- * Keys are prefixed with the owning module's id ({@code "base.show_hints"}), which is what scopes export, import, and reset per module. <br>
+ * Keys are prefixed with the owning module's id ({@code "core.show_hints"}), which is what scopes export, import, and reset per module. <br>
  * Values are stored as JSON (prefer booleans and strings): <br>
  * All JSON numbers come back as {@code Double} after a restart (the getter coerces scalars to the default's type, but list elements get no coercion).
  */

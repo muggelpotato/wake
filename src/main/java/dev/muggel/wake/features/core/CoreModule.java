@@ -1,4 +1,4 @@
-package dev.muggel.wake.features.base;
+package dev.muggel.wake.features.core;
 
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
@@ -6,18 +6,23 @@ import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.core.database.StateDao;
 import dev.muggel.wake.core.module.WakeModule;
-import dev.muggel.wake.features.base.commands.HelpCommand;
-import dev.muggel.wake.features.base.commands.KillEmptyBoatsCommand;
-import dev.muggel.wake.features.base.commands.ReloadCommand;
-import dev.muggel.wake.features.base.commands.database.DatabaseCommand;
+import dev.muggel.wake.features.core.commands.HelpCommand;
+import dev.muggel.wake.features.core.commands.KillEmptyBoatsCommand;
+import dev.muggel.wake.features.core.commands.ReloadCommand;
+import dev.muggel.wake.features.core.commands.database.DatabaseCommand;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.jspecify.annotations.NonNull;
 
 import java.sql.SQLException;
 
-public class BaseModule extends WakeModule {
-    public BaseModule(Wake plugin) {
-        super(plugin, "base");
+public class CoreModule extends WakeModule {
+    public CoreModule(Wake plugin) {
+        super(plugin, "core");
+    }
+
+    @Override
+    public boolean isOptional() {
+        return false;
     }
 
     @Override

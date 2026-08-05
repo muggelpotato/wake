@@ -11,7 +11,7 @@ note: |
   fixed number of placeholders — never a value.
 ignores:
   # The layer that owns query assembly: WakeDao.selectByKeys expands `?` placeholders for an IN list.
-  - "**/core/database/*.java"
+  - "**/wake/core/database/*.java"
 rule:
   any:
     - pattern: DB.$METHOD($A + $B, $$$REST)

@@ -11,7 +11,7 @@ note: |
   a change observes an event or reloads with its scope; it does not subscribe.
 ignores:
   # The seam itself.
-  - "**/core/sync/*.java"
+  - "**/wake/core/sync/*.java"
 rule:
   any:
     - all:

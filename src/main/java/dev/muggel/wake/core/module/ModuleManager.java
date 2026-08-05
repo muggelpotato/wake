@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
  * Owns the module lifecycle. <br>
  * The set of modules is fixed at construction, so nothing can register one after the command tree is declared. <br>
  * {@link #syncModules()} compares {@code config.yml} with what is running and enables, disables, or reloads each module to match (at boot and on {@code /wake reload}). <br>
+ * A module that is not {@linkplain WakeModule#isOptional() optional} is not up for that comparison: it runs for as long as Wake does, and only shutdown takes it down. <br>
  * {@link #getModule(Class)} returns an active module or {@code null}. Callers must tolerate {@code null}, because any module can be off.
  */
 public final class ModuleManager {
@@ -38,6 +39,9 @@ public final class ModuleManager {
             }
             if (!ids.add(id)) {
                 throw new IllegalStateException("Two modules are registered as '" + id + "': an id is what config.yml, the command tree and every state key address");
+            }
+            if (!module.isOptional() && !module.isCompatible()) {
+                throw new IllegalStateException("Module '" + id + "' cannot be switched off yet reports itself incompatible: an always-on module has to run wherever Wake does");
             }
         }
     }
@@ -57,7 +61,7 @@ public final class ModuleManager {
         List<Component> feedback = new ArrayList<>();
         for (WakeModule module : modules) {
             String id = module.getId();
-            boolean configured = plugin.getConfig().getBoolean("modules." + id + ".enabled", true);
+            boolean configured = !module.isOptional() || plugin.getConfig().getBoolean("modules." + id + ".enabled", true);
             boolean shouldRun = configured && compatible(module);
             boolean running = activeModules.containsKey(id);
             String outcome;

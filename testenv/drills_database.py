@@ -83,9 +83,9 @@ def drill_export_counts(rcon: Rcon, log: Log, mariadb):
            f"reported {count}")
 
     log.reset()
-    count = run(rcon, log, "wake database export base", "export", "base")
-    keys = len(re.findall(r"(?m)^\s{2}\w+:", exported("base")))
-    truthy(f"base counts its state keys once ({keys})", count == keys, f"reported {count}")
+    count = run(rcon, log, "wake database export core", "export", "core")
+    keys = len(re.findall(r"(?m)^\s{2}\w+:", exported("core")))
+    truthy(f"core counts its state keys once ({keys})", count == keys, f"reported {count}")
 
 
 def drill_confirm_gate(rcon: Rcon, log: Log, mariadb):
@@ -110,7 +110,7 @@ def drill_import_without_file(rcon: Rcon, log: Log, mariadb):
         EXPORTS.rename(stash)
     try:
         log.reset()
-        count = run(rcon, log, "wake database import base confirm", "import", "base")
+        count = run(rcon, log, "wake database import core confirm", "import", "core")
         truthy("it reports no records", count == 0, f"reported {count}")
         truthy("and nothing was logged as a failure", "Database import failed" not in log.read(),
                log.read()[-200:])
@@ -130,17 +130,17 @@ def drill_failure_names_the_cause(rcon: Rcon, log: Log, mariadb):
     """
     step("importing a file this build cannot read")
     log.reset()
-    run(rcon, log, "wake database export base", "export", "base")
-    exported_file = EXPORTS / "base_data.yml"
+    run(rcon, log, "wake database export core", "export", "core")
+    exported_file = EXPORTS / "core_data.yml"
     good = exported_file.read_text(encoding="utf-8")
     truthy("the export names the format it was written in", "version: 1" in good, good[:120])
     exported_file.write_text(good.replace("version: 1", "version: 99"), encoding="utf-8")
     try:
         log.reset()
-        rcon.run("wake database import base confirm")
+        rcon.run("wake database import core confirm")
         time.sleep(SETTLE)
         text = log.read()
-        truthy("the import is refused, named on the console", "Database import failed for module base" in text,
+        truthy("the import is refused, named on the console", "Database import failed for module core" in text,
                text[-200:])
         truthy("and the log carries what an admin has to act on", "export format v99" in text, text[-300:])
         truthy("nothing was imported behind the refusal", not COMPLETED.search(text), text[-200:])
@@ -148,7 +148,7 @@ def drill_failure_names_the_cause(rcon: Rcon, log: Log, mariadb):
         exported_file.write_text(good, encoding="utf-8")
     log.reset()
     truthy("the same file imports again once it is readable",
-           run(rcon, log, "wake database import base confirm", "import", "base") is not None, "no completion line")
+           run(rcon, log, "wake database import core confirm", "import", "core") is not None, "no completion line")
 
 
 def drill_one_at_a_time(rcon: Rcon, log: Log, mariadb):
@@ -188,9 +188,9 @@ def drill_state_roundtrip(rcon: Rcon, log: Log, mariadb):
     time.sleep(SETTLE)
 
     log.reset()
-    run(rcon, log, "wake database export base", "export", "base")
+    run(rcon, log, "wake database export core", "export", "core")
     run(rcon, log, "wake database export drydock", "export", "drydock")
-    truthy("the export carries the switch", "show_hints: true" in exported("base"), exported("base"))
+    truthy("the export carries the switch", "show_hints: true" in exported("core"), exported("core"))
     truthy("and the new pad", "blue_ice" in exported("drydock"), exported("drydock")[:200])
 
     step("changing everything back, then importing")
@@ -199,11 +199,11 @@ def drill_state_roundtrip(rcon: Rcon, log: Log, mariadb):
     rcon.run("dd boostpad remove minecraft:blue_ice")
     time.sleep(SETTLE)
     log.reset()
-    run(rcon, log, "wake database import base confirm", "import", "base")
+    run(rcon, log, "wake database import core confirm", "import", "core")
     run(rcon, log, "wake database import drydock confirm", "import", "drydock")
     time.sleep(SETTLE)
-    truthy("the state key is back", state("base.show_hints", mariadb) == "true",
-           repr(state("base.show_hints", mariadb)))
+    truthy("the state key is back", state("core.show_hints", mariadb) == "true",
+           repr(state("core.show_hints", mariadb)))
     # the switch is read out of the state cache, so this is the cache half of the same round trip
     truthy("the module switch is back in the cache", switch(rcon.run("dd boostpad list")) == pads, f"want {pads!r}")
     truthy("the pad is back in the cache", "blue_ice" in rcon.run("dd boostpad list"), rcon.run("dd boostpad list"))
@@ -218,8 +218,8 @@ def drill_drop_is_scoped(rcon: Rcon, log: Log, mariadb):
     rcon.run("wake hints true")
     rcon.run("wake killboatonexit true")
     time.sleep(SETTLE)
-    base_before = state_keys("base.", mariadb)
-    truthy("base has state to lose", len(base_before) >= 2, str(base_before))
+    core_before = state_keys("core.", mariadb)
+    truthy("core has state to lose", len(core_before) >= 2, str(core_before))
     truthy("so does drydock", state_keys("drydock.", mariadb), "")
 
     log.reset()
@@ -228,7 +228,7 @@ def drill_drop_is_scoped(rcon: Rcon, log: Log, mariadb):
     listing = rcon.run("dd boostpad list")
     truthy("drydock lost its pads", "coral" not in listing, listing[:200])
     truthy("and every drydock.* key", not state_keys("drydock.", mariadb), str(state_keys("drydock.", mariadb)))
-    truthy("base kept all of its keys", state_keys("base.", mariadb) == base_before, str(state_keys("base.", mariadb)))
+    truthy("core kept all of its keys", state_keys("core.", mariadb) == core_before, str(state_keys("core.", mariadb)))
     truthy("obu kept its contexts", "default" in rcon.run("wobu -context"), rcon.run("wobu -context")[:200])
 
     step("setdefaults brings the bundled records back")
@@ -302,13 +302,13 @@ def drill_refused_while_degraded(rcon: Rcon, log: Log, mariadb):
         if not await_file(JOURNAL, True, 45):
             bad("no outage journal appeared, so the server never noticed the outage")
             return
-        stamp = (EXPORTS / "base_data.yml").stat().st_mtime if (EXPORTS / "base_data.yml").is_file() else 0
+        stamp = (EXPORTS / "core_data.yml").stat().st_mtime if (EXPORTS / "core_data.yml").is_file() else 0
         log.reset()
-        reply = rcon.run("wake database export base")
+        reply = rcon.run("wake database export core")
         time.sleep(SETTLE)
         truthy("export is refused", "unreachable" in reply.lower(), reply.strip())
         truthy("and wrote no file over the last good one",
-               stamp == ((EXPORTS / "base_data.yml").stat().st_mtime if (EXPORTS / "base_data.yml").is_file() else 0))
+               stamp == ((EXPORTS / "core_data.yml").stat().st_mtime if (EXPORTS / "core_data.yml").is_file() else 0))
         truthy("nothing ran behind the refusal", not COMPLETED.search(log.read()), log.read()[-200:])
 
         # a reload is the one thing that can ask a dead database for a whole table: an empty answer must
@@ -352,7 +352,7 @@ def drill_journal_bad_line(rcon: Rcon, log: Log, mariadb):
            [ln for ln in text.splitlines() if "Database recovered" in ln][-1:])
     truthy("and the journal was cleared", await_file(JOURNAL, False, 30))
     truthy("the value written during the outage reached the database",
-           state("base.show_hints", mariadb) == "true", repr(state("base.show_hints", mariadb)))
+           state("core.show_hints", mariadb) == "true", repr(state("core.show_hints", mariadb)))
 
 
 def settle_pending_resync(rcon: Rcon, timeout=30):
@@ -387,7 +387,7 @@ def drill_malformed_state_row(rcon: Rcon, log: Log, mariadb):
     if before is None:
         bad("could not read the boostpad switch to start from")
         return
-    key = "base.zz_drill_corrupt"
+    key = "core.zz_drill_corrupt"
     write_state_raw(key, '{"broken":', mariadb)
     try:
         log.reset()

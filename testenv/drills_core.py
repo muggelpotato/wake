@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drills for the base module's own commands.
+"""Drills for the core module's own commands.
 
 Covers what a console can judge about the flat `/wake` commands: the switches an admin flips and
 where they land, which boats `/wake killemptyboats` takes and which it has to leave alone, which
@@ -11,7 +11,7 @@ the drill sweeps the world first so the reported count can be checked exactly ra
 "at least". A console has no player to sit in a boat, so the riders are mobs -- which is the rule
 as well: what keeps a boat is a passenger, whoever it is.
 
-    python testenv/drills_base.py       # needs a server up (./gradlew runServer)
+    python testenv/drills_core.py       # needs a server up (./gradlew runServer)
 
 Runs against sqlite and mariadb alike. Exits non-zero if a drill fails.
 """
@@ -112,7 +112,7 @@ def drill_kill_boat_on_exit(rcon: Rcon, mariadb):
     a boat pulled out from under its rider fires one last exit that must reach the console as
     nothing at all.
     """
-    before = state("base.killboatonexit", mariadb)
+    before = state("core.killboatonexit", mariadb)
     rcon.run("forceload add 0 0")
     rcon.run("kill @e[tag=wakedrill]")
     try:
@@ -181,8 +181,8 @@ def drill_kill_boat_on_exit(rcon: Rcon, mariadb):
 def drill_toggles(rcon: Rcon, mariadb):
     """A switch has to name what it changed and reach the database, not only the cache."""
     step("a switch confirms what it set and lands in the database")
-    for command, key, feature in [("wake hints", "base.show_hints", "Hints"),
-                                  ("wake killboatonexit", "base.killboatonexit", "Auto-kill boat")]:
+    for command, key, feature in [("wake hints", "core.show_hints", "Hints"),
+                                  ("wake killboatonexit", "core.killboatonexit", "Auto-kill boat")]:
         before = state(key, mariadb)
         reply = rcon.run(f"{command} true")
         time.sleep(SETTLE)
@@ -205,7 +205,7 @@ def drill_reload_order(rcon: Rcon, mariadb):
     lines = [line for line in rcon.run("wake reload").splitlines() if line.strip()]
     truthy("the header is the first line", lines and "Reloaded configuration" in lines[0], str(lines[:1]))
     tail = lines[1:]
-    unheard = [module for module in ["base", "obu", "drydock"]
+    unheard = [module for module in ["core", "obu", "drydock"]
                if sum(module in line for line in tail) != 1]
     truthy(f"each module reports exactly once below it ({len(tail)} lines)", not unheard,
            f"{unheard} missing or doubled in {tail}")
@@ -239,7 +239,7 @@ def main():
     if failures:
         print(f"{len(failures)} drill step(s) failed")
         return 1
-    print("all base drills passed")
+    print("all core drills passed")
     return 0
 
 

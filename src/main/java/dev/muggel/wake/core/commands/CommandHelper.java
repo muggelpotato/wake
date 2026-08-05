@@ -21,7 +21,7 @@ import java.util.concurrent.CompletableFuture;
  * Independent of any feature module.
  */
 public final class CommandHelper {
-    public static final String STATE_KEY_SHOW_HINTS = "base.show_hints"; // Gates hint messages plugin-wide
+    public static final String STATE_KEY_SHOW_HINTS = "core.show_hints"; // Gates hint messages plugin-wide
     private CommandHelper() {}
     /**
      * The standard boolean feature flag: {@code <literal> <true|false>} <br>
@@ -73,7 +73,7 @@ public final class CommandHelper {
     }
 
     public static void toggle(@NonNull Wake plugin, @NonNull CommandSender sender, @NonNull String featureKey, boolean enabled) {
-        plugin.getMessageManager().send(sender, enabled ? "commands.base.toggle_enabled" : "commands.base.toggle_disabled",
+        plugin.getMessageManager().send(sender, enabled ? "commands.core.toggle_enabled" : "commands.core.toggle_disabled",
                 Placeholder.component("name", plugin.getMessageManager().getComponent(featureKey)));
     }
 

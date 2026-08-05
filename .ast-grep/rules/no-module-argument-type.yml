@@ -13,7 +13,7 @@ note: |
   type genuinely cannot express the value, the type belongs in core/commands/arguments, not here.
 ignores:
   # The package that owns the mechanism.
-  - "**/core/commands/arguments/*.java"
+  - "**/wake/core/commands/arguments/*.java"
 rule:
   all:
     - kind: import_declaration

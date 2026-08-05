@@ -18,8 +18,15 @@ off and a developer can remove without unpicking the rest. Prefer the change tha
 over the one that adds one. When a rule and a shortcut conflict, take the rule — this codebase is
 optimised for the next person reading it, not the current diff.
 
-Modules today: `base` (plugin chrome + shared commands), `obu` (OpenBoatUtils integration),
+Modules today: `core` (plugin chrome + shared commands), `obu` (OpenBoatUtils integration),
 `drydock` (track utilities), `axiom` (optional AxiomPaper integration). Future: races, gui.
+
+`core` — the module in `features/core/`, not the `core/` framework package — is the one exception to
+"every feature is toggleable": it owns the `/wake` tree, so a `config.yml` that could switch it off
+could take `/wake reload` down with it and leave a restart as the only way back. It is a module in
+every other respect (an id, a state prefix, bundled defaults, an export round trip, a line in the
+reload summary) and it is still fully torn down on shutdown. That is the *only* always-on module —
+a new one is a feature module, and features are toggleable.
 
 ## Architecture — non-negotiable
 

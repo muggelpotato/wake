@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Module-system drills against a running Wake server.
 
-Covers what `core/module` owns wherever a console reaches it: the config toggle in every direction,
-a module surviving repeated cycles without duplicating or losing what it registered, the hot listener
-a feature claims from core and has to give back, the store it is rebuilt from on the way back up, the
-bundled defaults an empty store seeds, the seeding decision an outage postpones rather than settles,
-the format stamp an export carries, the state prefix it sweeps, and the service seam between two
-modules.
+Covers what the `core/module` framework package owns wherever a console reaches it: the config toggle
+in every direction, the one module that toggle cannot reach, a module surviving repeated cycles
+without duplicating or losing what it registered, the hot listener a feature claims from the
+framework and has to give back, the store it is rebuilt from on the way back up, the bundled defaults
+an empty store seeds, the seeding decision an outage postpones rather than settles, the format stamp
+an export carries, the state prefix it sweeps, and the service seam between two modules.
 
     python testenv/drills_module.py
 
@@ -15,8 +15,9 @@ ends it, so the next enable finds the slot free -- a leaked one makes `register`
 is reversed and the reload reports "Failed to sync" instead of "Enabled". The consumer side is
 drydock, which has to keep working with the module it resolves switched off.
 
-`base` is never cycled here: its tree owns `/wake reload`, so a console that switches it off cannot
-switch it back on.
+The `core` module is never cycled here because nothing can cycle it: it is not optional, so
+`config.yml` has no say over it and only shutdown takes it down. `drill_core_is_not_toggleable`
+holds that guarantee -- it is what keeps `/wake reload` from being able to remove itself.
 
 What is left to TESTPLAN.md: anything a module registers that only a player can watch fire, the
 incompatible branch on a host without AxiomPaper (skipped here when it is installed), a compatibility
@@ -125,12 +126,31 @@ def drill_toggle_directions(rcon: Rcon, log: Log, mariadb):
     step("and a reload while it is off says nothing about it at all")
     outcomes = reload_outcomes(rcon)
     truthy("no line names drydock", "drydock" not in outcomes, str(outcomes))
-    truthy("its neighbours still reload", outcomes.get("base") == ["reloaded"], str(outcomes))
+    truthy("its neighbours still reload", outcomes.get("core") == ["reloaded"], str(outcomes))
 
     step("switching it back on brings it up on the next reload")
     truthy("it reports enabled once", cycle(rcon, "drydock", True) == ["enabled"])
     listing = rcon.run("dd boostpad list")
     truthy("and its tree answers again", UNKNOWN not in listing, listing[:120])
+
+
+def drill_core_is_not_toggleable(rcon: Rcon, log: Log, mariadb):
+    """The one module config.yml cannot reach. Without this, a reload can take /wake reload with it."""
+    step("the shipped config offers no switch for it")
+    config = CONFIG.read_text(encoding="utf-8")
+    truthy("there is no modules.core entry to flip", re.search(r"(?m)^  core:$", config) is None, config)
+
+    step("a hand-written switch is ignored rather than obeyed")
+    CONFIG.write_text(re.sub(r"(?m)^modules:.*\n", "modules:\n  core:\n    enabled: false\n", config, count=1),
+                      encoding="utf-8")
+    try:
+        outcomes = reload_outcomes(rcon)
+        truthy("core reloads anyway", outcomes.get("core") == ["reloaded"], str(outcomes))
+        reply = rcon.run("wake help")
+        truthy("and its tree still answers", UNKNOWN not in reply, reply[:120])
+    finally:
+        CONFIG.write_text(config, encoding="utf-8")
+    truthy("it still reloads once the entry is gone", reload_outcomes(rcon).get("core") == ["reloaded"])
 
 
 def drill_repeated_cycles(rcon: Rcon, log: Log, mariadb):
@@ -403,7 +423,7 @@ def drill_failure_reaches_no_further(rcon: Rcon, log: Log, mariadb):
         outcomes = reload_outcomes(rcon)
         truthy("obu reports failed", outcomes.get("obu") == ["failed"], str(outcomes))
         truthy("drydock, declared after it, still reloaded", outcomes.get("drydock") == ["reloaded"], str(outcomes))
-        truthy("and base, declared before it, reloaded too", outcomes.get("base") == ["reloaded"], str(outcomes))
+        truthy("and core, declared before it, reloaded too", outcomes.get("core") == ["reloaded"], str(outcomes))
         truthy("obu never entered the active set", "not loaded" in rcon.run("wake database export obu"))
         truthy("and its tree stayed hidden", UNKNOWN in rcon.run("wobu -context"))
     finally:
@@ -485,7 +505,8 @@ def main():
     log = Log()
     original = CONFIG.read_text(encoding="utf-8")
     try:
-        for drill in [drill_toggle_directions, drill_repeated_cycles, drill_claimed_listener,
+        for drill in [drill_toggle_directions, drill_core_is_not_toggleable,
+                      drill_repeated_cycles, drill_claimed_listener,
                       drill_state_survives_cycle,
                       drill_reseeds_empty_store, drill_seeds_after_recovery,
                       drill_export_format_gate, drill_enable_failure,

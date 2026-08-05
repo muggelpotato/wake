@@ -65,6 +65,11 @@ public abstract class WakeModule {
         return true;
     }
 
+    /** Override to put a module out of {@code config.yml}'s reach: it runs for as long as Wake does */
+    public boolean isOptional() {
+        return true;
+    }
+
     public @Nullable CommandNode buildCommands() {
         return null;
     }

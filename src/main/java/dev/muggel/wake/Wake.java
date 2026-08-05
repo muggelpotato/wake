@@ -11,7 +11,7 @@ import dev.muggel.wake.core.module.ServiceRegistry;
 import dev.muggel.wake.core.sync.SyncService;
 import dev.muggel.wake.features.drydock.DrydockModule;
 import dev.muggel.wake.features.obu.OBUModule;
-import dev.muggel.wake.features.base.BaseModule;
+import dev.muggel.wake.features.core.CoreModule;
 import dev.muggel.wake.features.axiom.AxiomModule;
 import com.github.retrooper.packetevents.PacketEvents;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
@@ -56,7 +56,7 @@ public final class Wake extends JavaPlugin {
         this.tickClock = new TickClock();
         this.vehiclePath = new VehiclePath(this);
         getServer().getPluginManager().registerEvents(tickClock, this);
-        this.moduleManager = new ModuleManager(this, List.of(new BaseModule(this), new OBUModule(this), new DrydockModule(this), new AxiomModule(this)));
+        this.moduleManager = new ModuleManager(this, List.of(new CoreModule(this), new OBUModule(this), new DrydockModule(this), new AxiomModule(this)));
         moduleManager.declareCommands();
         WakeCommandManager.init(this);
         moduleManager.syncModules();

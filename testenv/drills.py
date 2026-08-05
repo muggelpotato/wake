@@ -268,7 +268,7 @@ def drill_boot(rcon: Rcon):
 def drill_outage(rcon: Rcon, log: Log, mariadb: Optional[tuple]):
     """Cuts the database off, confirms writes are journaled, restores it, confirms they replay."""
     print("\ndatabase outage")
-    original = state("base.show_hints", mariadb) or "true"
+    original = state("core.show_hints", mariadb) or "true"
     target = "false" if original == "true" else "true"
     log.reset()
 
@@ -306,10 +306,10 @@ def drill_outage(rcon: Rcon, log: Log, mariadb: Optional[tuple]):
         bad("journal still on disk after replay")
 
     time.sleep(2)
-    if state("base.show_hints", mariadb) == target:
+    if state("core.show_hints", mariadb) == target:
         ok(f"replayed value landed in the database ({target})")
     else:
-        bad(f"database holds {state('base.show_hints', mariadb)!r}, expected {target!r}")
+        bad(f"database holds {state('core.show_hints', mariadb)!r}, expected {target!r}")
 
     rcon.run(f"wake hints {original}")
 
@@ -416,7 +416,7 @@ def drill_boot_replay(rcon: Rcon, log: Log, backend: str, mariadb: tuple):
     if before is None or remote_switch() != before:
         bad(f"the servers disagree before the drill starts ({before!r} vs {remote_switch()!r})")
         return
-    hints = state("base.show_hints", mariadb) or "true"
+    hints = state("core.show_hints", mariadb) or "true"
 
     step(f"stopping {container}")
     docker("stop", container)

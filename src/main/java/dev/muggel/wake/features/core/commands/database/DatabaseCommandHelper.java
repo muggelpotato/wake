@@ -1,4 +1,4 @@
-package dev.muggel.wake.features.base.commands.database;
+package dev.muggel.wake.features.core.commands.database;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
@@ -147,7 +147,7 @@ final class DatabaseCommandHelper {
                 return module;
             }
         }
-        plugin.getMessageManager().send(sender, "commands.base.module_not_loaded", Placeholder.unparsed("module", moduleId));
+        plugin.getMessageManager().send(sender, "commands.core.module_not_loaded", Placeholder.unparsed("module", moduleId));
         return null;
     }
 

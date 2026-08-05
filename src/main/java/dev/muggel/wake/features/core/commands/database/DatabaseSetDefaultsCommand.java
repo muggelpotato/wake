@@ -1,4 +1,4 @@
-package dev.muggel.wake.features.base.commands.database;
+package dev.muggel.wake.features.core.commands.database;
 
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;

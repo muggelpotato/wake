@@ -10,7 +10,7 @@ note: |
 ignores:
   # The data layer is where raw DB calls belong: data-access objects, and everything core/database is made of.
   - "**/*Dao.java"
-  - "**/core/database/*.java"
+  - "**/wake/core/database/*.java"
 rule:
   any:
     - pattern: DB.$METHOD($$$)
