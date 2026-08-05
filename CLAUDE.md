@@ -79,6 +79,12 @@ hardcode strings or build chat components ad hoc. Use the project's semantic col
 hex, so the palette stays one edit. Treat any player-supplied value as untrusted: insert it in a way
 that can't inject markup. Speak database terms to admins ("saved to database", not "config.yml").
 
+A key is a permanent name. A deployed language file is never overwritten and the bundled one only
+backfills the keys it does not define, so adding a key is free and deleting one nothing reads is
+safe — but renaming or repurposing a name silently renders the old text on every existing install.
+Every key the code asks for exists in the bundled file, and every key the bundled file carries is
+reachable from code: both directions are checked by `drills_text.py`, not by eye.
+
 ## Data & persistence
 
 - **`config.yml` is boot/admin-only** (which modules are on, DB connection). Never store

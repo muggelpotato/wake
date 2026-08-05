@@ -3,12 +3,12 @@ package dev.muggel.wake.core.text;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.minimessage.tag.TagPattern;
 import org.intellij.lang.annotations.Subst;
-import org.jspecify.annotations.NonNull;
 
 /**
  * Wake's color palette <br>
  * Recolor the plugin by editing these entries <br>
- * {@link MessageManager} derives both the {@code <tag>} resolver and the {@code $var} expansions from this list (never write raw hex in messages)
+ * {@link MessageManager} derives both the {@code <tag>} resolver and the {@code $var} expansions from this list (never write raw hex in messages) <br>
+ * A tag here overrides MiniMessage's own
  */
 public enum WakeColors {
     /** highlights, success values, counts */
@@ -44,9 +44,5 @@ public enum WakeColors {
 
     public TextColor color() {
         return color;
-    }
-
-    public @NonNull String asHexString() {
-        return color.asHexString();
     }
 }

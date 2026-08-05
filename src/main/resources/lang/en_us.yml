@@ -16,7 +16,7 @@
 #   <gradient:$secondary:$primary>...</gradient>
 #
 # Dynamic placeholders are filled by the plugin per message and only work in the message they already appear in (moving them to other keys does nothing):
-#   <aliases> <amount> <block> <blocks> <boat> <button> <code> <command> <context> <count> <delay> <description> <duration> <error> <input> <module> <name> <padding> <sandbox> <setting> <source> <sub> <subcommands> <target> <value> <variant> <x> <y> <z>
+#   <aliases> <amount> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <count> <delay> <description> <duration> <error> <input> <literal> <module> <name> <padding> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
 #
 # <prefix> inserts the `prefix` value you can modify below
 # ─────────────────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ commands:
   invalid_block: "<prefix><danger>Invalid block: <accent><input></accent></danger>"
   invalid_boat: "<prefix><danger>Invalid boat type: <accent><input></accent></danger>"
   only_players: "<prefix><danger>This command can only be executed by players</danger>"
-  only_entities: "<prefix><danger>This command must be executed by an entity or via /execute as <targets></danger>"
+  only_entities: "<prefix><danger>This command must be executed by an entity or via /execute as \\<targets></danger>"
   requires_version: "<prefix><danger>This feature requires Minecraft 1.21.2+ or newer</danger>"
   help:
     header: "<gradient:$secondary:$primary>─── Wake Commands ─────────</gradient>"

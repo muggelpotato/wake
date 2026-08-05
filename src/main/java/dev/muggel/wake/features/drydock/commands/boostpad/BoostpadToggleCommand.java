@@ -3,7 +3,7 @@ package dev.muggel.wake.features.drydock.commands.boostpad;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
-import dev.muggel.wake.core.text.MessageManager;
+import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadDetectorListener;
@@ -41,7 +41,7 @@ public class BoostpadToggleCommand {
         BoostpadConfig newConfig = new BoostpadConfig(existing.blockKey(), newState, existing.forceX(), existing.forceY(), existing.forceZ(), existing.delayMs(), existing.padding());
         boostpads.saveBoostpadConfig(newConfig);
         String stateKey = newState ? "commands.drydock.boostpad.block_enabled" : "commands.drydock.boostpad.block_disabled";
-        plugin.getMessageManager().send(ctx.getSource().getSender(), stateKey, Placeholder.unparsed("block", MessageManager.stripNamespace(blockKey)));
+        plugin.getMessageManager().send(ctx.getSource().getSender(), stateKey, Placeholder.unparsed("block", CommandHelper.stripNamespace(blockKey)));
         return Command.SINGLE_SUCCESS;
     }
 }

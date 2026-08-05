@@ -3,11 +3,11 @@ package dev.muggel.wake.features.drydock.commands;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.core.commands.arguments.KeyArgumentType;
 import dev.muggel.wake.core.commands.arguments.WakeEnumArgumentType;
-import dev.muggel.wake.core.text.MessageManager;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.Bukkit;
@@ -51,7 +51,7 @@ public class GetBoatCommand {
             plugin.getMessageManager().send(audience, "commands.requires_version");
             return;
         }
-        String boatId = MessageManager.stripNamespace(boatType); // the argument type only takes a boat material, so the namespace is always minecraft
+        String boatId = CommandHelper.stripNamespace(boatType);
         ItemStack item;
         try {
             String itemStr = String.format(Locale.ROOT, "minecraft:%s[minecraft:entity_data={id:\"minecraft:%s\",Air:%d},minecraft:enchantment_glint_override=true]", boatId, boatId, variant);

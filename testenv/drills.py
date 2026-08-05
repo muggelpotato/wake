@@ -76,8 +76,12 @@ class Rcon:
             buf += chunk
         return buf
 
+    def raw(self, command):
+        """The reply with the colour codes left in -- the only place a rendered colour is visible."""
+        return self._send(2, command) or ""
+
     def run(self, command):
-        return CODES.sub("", self._send(2, command) or "")
+        return CODES.sub("", self.raw(command))
 
 
 class Log:

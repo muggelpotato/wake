@@ -5,7 +5,6 @@ import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
-import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.features.obu.OBUModule;
 import dev.muggel.wake.features.obu.protocol.SettingType;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
@@ -111,7 +110,7 @@ public final class OBUCommandHelper {
         for (String entry : list.split(",")) {
             String trimmed = entry.trim();
             if (!trimmed.isEmpty()) {
-                shown.add(MessageManager.stripNamespace(trimmed));
+                shown.add(CommandHelper.stripNamespace(trimmed));
             }
         }
         return shown.toString();

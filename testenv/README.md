@@ -14,6 +14,7 @@ Switch backends in-game with `/server backend2` and `/server primary`
 - **`python testenv/drills.py`** operational drills against primary. Add `--sync` for the cross-server drill (needs mariadb mode)
 - **`python testenv/drills_database.py`** the `/wake database` admin surface and the outage journal's rough edges (either backend)
 - **`python testenv/drills_module.py`** the module lifecycle: config toggles, repeated off/on cycles, an enable that throws, seeding, the state prefix an export sweeps, the service seam (either backend)
+- **`python testenv/drills_text.py`** the language file: every key the code asks for and every key the file carries, the palette and placeholders its header documents, and what a reload does to a file that is edited, broken or missing (either backend; the first half needs no server)
 - **`python testenv/drills_changelog.py`** cross-server cache propagation over the sync bus: both directions, concurrent writes, bursts, a bus that is down at boot or killed mid-session, unusable sync settings (needs mariadb mode)
 - Primary has RCON enabled (`localhost:25575`, password `wake-dev`) so console commands
   can be driven from scripts; 

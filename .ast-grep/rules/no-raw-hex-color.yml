@@ -5,8 +5,11 @@ message: Raw hex colour in a string — use a semantic MiniMessage tag.
 note: |
   CLAUDE.md (Text): use `<primary> <secondary> <accent> <danger> <neutral> <info>
   <muted_dark> <overridden>` instead of raw hex, so a palette change stays one edit in
-  WakeColors. Also applies to legacy `&`-codes and `<color:#...>`.
+  WakeColors. Also applies to legacy `&`-codes and to every spelling of the colour tag —
+  MiniMessage answers to `<color:#...>`, `<colour:#...>` and `<c:#...>` alike.
+  This rule reads Java only; the same ban inside lang/en_us.yml is checked by
+  `testenv/drills_text.py`, which also holds that file's own colour table to WakeColors.
 rule:
   all:
     - kind: string_literal
-    - regex: '(<#[0-9a-fA-F]{6}>|<color:#[0-9a-fA-F]{6}>|&[0-9a-fk-or])'
+    - regex: '(<#[0-9a-fA-F]{6}>|<(c|colou?r):#[0-9a-fA-F]{6}>|&[0-9a-fk-or])'

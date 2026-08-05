@@ -80,4 +80,8 @@ public final class CommandHelper {
     public static @NonNull Component moduleDescription(@NonNull Wake plugin, @NonNull CommandNode root) {
         return plugin.getMessageManager().getComponent("commands.help.module." + root.getModuleId());
     }
+
+    public static @NonNull String stripNamespace(@NonNull String key) {
+        return key.startsWith("minecraft:") ? key.substring("minecraft:".length()) : key;
+    }
 }
