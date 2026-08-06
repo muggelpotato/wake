@@ -83,6 +83,7 @@ commands:
       variant_no_oars: 'parkour (no oars)'
     boostpad:
       block_added: "<prefix><neutral>Added boostpad block</neutral>"
+      block_updated: "<prefix><neutral>Updated boostpad block</neutral>"
       block_removed: "<prefix><neutral>Removed boostpad block</neutral>"
       block_not_found: "<prefix><danger>Block is not in the boostpad list</danger>"
       status_enabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><br>  <muted>●</muted> <neutral>Status: <primary>enabled</primary></neutral><br><blocks>"
@@ -90,6 +91,8 @@ commands:
       item_enabled: "  <muted>●</muted> <accent><block></accent> <muted>→</muted> <neutral><primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><padding></primary> padding</neutral>"
       item_disabled: "  <muted>●</muted> <danger><block></danger> <muted>→</muted> <neutral><primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><padding></primary> padding</neutral>"
       empty: "  <muted>●</muted> <muted_dark>(none configured)</muted_dark>"
+      unavailable: "  <muted>●</muted> <danger>(the boostpad table has not been read from the database yet)</danger>"
+      table_unavailable: "<prefix><danger>Cannot change a boostpad: the boostpad table has not been read from the database yet</danger>"
       enabled: "<prefix><neutral>Boostpads <primary>enabled</primary></neutral>"
       disabled: "<prefix><neutral>Boostpads <danger>disabled</danger></neutral>"
       block_enabled: "<prefix><neutral>Boostpad profile for <accent><block></accent> is now <primary>enabled</primary></neutral>"

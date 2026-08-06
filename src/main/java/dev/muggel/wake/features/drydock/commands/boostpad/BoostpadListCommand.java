@@ -5,17 +5,22 @@ import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadConfig;
 import dev.muggel.wake.features.drydock.boostpads.BoostpadDetectorListener;
+import dev.muggel.wake.features.drydock.boostpads.BoostpadRegistry;
 import dev.muggel.wake.features.drydock.commands.DrydockCommandHelper;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.JoinConfiguration;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
 import org.jspecify.annotations.NonNull;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 public class BoostpadListCommand {
     static @NonNull CommandNode getNode(Wake plugin) {
@@ -26,31 +31,37 @@ public class BoostpadListCommand {
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
         boolean globalEnabled = plugin.getStateDao().get(BoostpadDetectorListener.STATE_KEY_ENABLED, BoostpadDetectorListener.DEFAULT_ENABLED);
-        Map<String, BoostpadConfig> configs = DrydockCommandHelper.boostpads(plugin).cachedBoostpads();
-        Component blocksComp = Component.empty();
-        if (configs.isEmpty()) {
-            blocksComp = plugin.getMessageManager().getComponent("commands.drydock.boostpad.empty");
-        } else {
-            boolean first = true;
-            for (BoostpadConfig config : configs.values()) {
-                if (!first) {
-                    blocksComp = blocksComp.append(Component.newline());
-                }
-                first = false;
-                String key = config.enabled() ? "commands.drydock.boostpad.item_enabled" : "commands.drydock.boostpad.item_disabled";
-                Component itemComp = plugin.getMessageManager().getComponent(key,
-                        Placeholder.unparsed("block", CommandHelper.stripNamespace(config.blockKey())),
-                        Placeholder.unparsed("x", String.format(Locale.ROOT, "%.2f", config.forceX())),
-                        Placeholder.unparsed("y", String.format(Locale.ROOT, "%.2f", config.forceY())),
-                        Placeholder.unparsed("z", String.format(Locale.ROOT, "%.2f", config.forceZ())),
-                        Placeholder.unparsed("delay", String.valueOf(config.delayMs())),
-                        Placeholder.unparsed("padding", String.format(Locale.ROOT, "%.2f", config.padding()))
-                );
-                blocksComp = blocksComp.append(itemComp);
-            }
-        }
         String statusKey = globalEnabled ? "commands.drydock.boostpad.status_enabled" : "commands.drydock.boostpad.status_disabled";
-        plugin.getMessageManager().send(sender, statusKey, Placeholder.component("blocks", blocksComp));
+        Component blocks = blocks(plugin.getMessageManager(), DrydockCommandHelper.boostpads(plugin));
+        plugin.getMessageManager().send(sender, statusKey, Placeholder.component("blocks", blocks));
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static @NonNull Component blocks(@NonNull MessageManager messages, @NonNull BoostpadRegistry boostpads) {
+        if (!boostpads.isLoaded()) {
+            return messages.getComponent("commands.drydock.boostpad.unavailable");
+        }
+        List<BoostpadConfig> configs = new ArrayList<>(boostpads.cachedBoostpads().values());
+        if (configs.isEmpty()) {
+            return messages.getComponent("commands.drydock.boostpad.empty");
+        }
+        configs.sort(Comparator.comparing((BoostpadConfig config) -> CommandHelper.stripNamespace(config.blockKey()))
+                .thenComparing(BoostpadConfig::blockKey));
+        List<Component> lines = new ArrayList<>(configs.size());
+        for (BoostpadConfig config : configs) {
+            String key = config.enabled() ? "commands.drydock.boostpad.item_enabled" : "commands.drydock.boostpad.item_disabled";
+            lines.add(messages.getComponent(key,
+                    Placeholder.unparsed("block", CommandHelper.stripNamespace(config.blockKey())),
+                    Placeholder.unparsed("x", decimal(config.forceX())),
+                    Placeholder.unparsed("y", decimal(config.forceY())),
+                    Placeholder.unparsed("z", decimal(config.forceZ())),
+                    Placeholder.unparsed("delay", String.valueOf(config.delayMs())),
+                    Placeholder.unparsed("padding", decimal(config.padding()))));
+        }
+        return Component.join(JoinConfiguration.newlines(), lines);
+    }
+
+    private static @NonNull String decimal(double value) {
+        return String.format(Locale.ROOT, "%.2f", value);
     }
 }

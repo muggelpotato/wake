@@ -509,6 +509,13 @@ def drill_reenable_during_outage(rcon: Rcon, log: Log, mariadb):
                  else "it refused to enable at all, with the reason on the console")
             truthy("no pre-outage row reached the cache", listed not in listing and "coral" not in listing,
                    listing[:200])
+            # an empty cache and an empty table read the same on the console unless the listing says which
+            truthy("and the empty listing says it was never read, not that none are configured",
+                   not came_up or "none" not in listing.lower(), listing[:200])
+            # add reads added-or-edited off that same cache, so it must refuse rather than answer over a row it never saw
+            refused = rcon.run("dd boostpad add minecraft:blackstone 0.4 0.0 0.1 300") if came_up else ""
+            truthy("and add refuses outright rather than reporting it added something",
+                   not came_up or ("Added" not in refused and "not been read" in refused), refused.strip()[:200])
             truthy("and nothing seeded bundled defaults over the table it could not read",
                    "Auto-seeded" not in log.read(), log.read()[-200:])
     finally:

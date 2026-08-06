@@ -292,15 +292,25 @@ def drill_seeds_after_recovery(rcon: Rcon, log: Log, mariadb):
         rcon.run("wake hints true")  # a write that cannot land is what puts the database into degraded mode
         time.sleep(SETTLE)
         log.reset()
-        truthy("it still enables", cycle(rcon, "drydock", True) == ["enabled"])
+        # sqlite still answers reads, so the module comes up on an unloaded store; mariadb is gone outright,
+        # so the schema read fails and it refuses to enable. Neither may seed over a table it could not read
+        came_up = cycle(rcon, "drydock", True) == ["enabled"]
+        step("it enabled with an unloaded store" if came_up
+             else "it refused to enable at all, with the reason on the console")
         time.sleep(SETTLE)
         truthy("but seeds nothing, because an unread store is not an empty one",
                "Auto-seeded" not in log.read(), log.read()[-300:])
         listing = rcon.run("dd boostpad list")
-        truthy("and it is running on no pads at all", "none configured" in listing, listing[:200])
+        # the same distinction the seed rests on has to reach the console: unread, not decided empty
+        truthy("and it is running on no pads at all, reported as unread rather than as none configured",
+               not came_up or ("coral" not in listing and "none configured" not in listing), listing[:200])
 
     step("and the database comes back")
     truthy("recovery is reported", log.await_line("Database recovered", 90), log.read()[-300:])
+    if not came_up:
+        # a module that refused to enable is only retried by a reload, so this is the one an admin would run
+        rcon.run("wake reload")
+        time.sleep(3)
     truthy("the seeding decision it could not take is taken now", log.await_line("Auto-seeded", 30), log.read()[-300:])
     listing = rcon.run("dd boostpad list")
     truthy("the bundled pads are live without a restart or a setdefaults", "coral" in listing, listing[:200])

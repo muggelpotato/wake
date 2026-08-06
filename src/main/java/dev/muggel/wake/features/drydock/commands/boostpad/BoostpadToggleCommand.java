@@ -11,6 +11,7 @@ import dev.muggel.wake.features.drydock.boostpads.BoostpadRegistry;
 import dev.muggel.wake.features.drydock.commands.DrydockCommandHelper;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import org.bukkit.command.CommandSender;
 import org.jspecify.annotations.NonNull;
 
 public class BoostpadToggleCommand {
@@ -30,18 +31,18 @@ public class BoostpadToggleCommand {
     }
 
     private static int executeBlock(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
+        CommandSender sender = ctx.getSource().getSender();
         BoostpadRegistry boostpads = DrydockCommandHelper.boostpads(plugin);
-        String blockKey = ctx.getArgument("block", String.class);
-        BoostpadConfig existing = boostpads.cachedBoostpads().get(blockKey);
+        BoostpadConfig existing = DrydockCommandHelper.storedPad(boostpads, ctx.getArgument("block", String.class));
         if (existing == null) {
-            plugin.getMessageManager().send(ctx.getSource().getSender(), "commands.drydock.boostpad.block_not_found");
+            plugin.getMessageManager().send(sender, "commands.drydock.boostpad.block_not_found");
             return 0;
         }
         boolean newState = !existing.enabled();
         BoostpadConfig newConfig = new BoostpadConfig(existing.blockKey(), newState, existing.forceX(), existing.forceY(), existing.forceZ(), existing.delayMs(), existing.padding());
         boostpads.saveBoostpadConfig(newConfig);
         String stateKey = newState ? "commands.drydock.boostpad.block_enabled" : "commands.drydock.boostpad.block_disabled";
-        plugin.getMessageManager().send(ctx.getSource().getSender(), stateKey, Placeholder.unparsed("block", CommandHelper.stripNamespace(blockKey)));
+        plugin.getMessageManager().send(sender, stateKey, Placeholder.unparsed("block", CommandHelper.stripNamespace(existing.blockKey())));
         return Command.SINGLE_SUCCESS;
     }
 }
