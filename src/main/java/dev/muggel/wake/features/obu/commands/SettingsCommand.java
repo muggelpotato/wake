@@ -27,8 +27,8 @@ import java.util.Locale;
 public class SettingsCommand {
     public static @NonNull List<CommandNode> getNodes(Wake plugin) {
         List<CommandNode> nodes = new ArrayList<>();
-        for (String settingName : OBUDefinition.getRegisteredNames()) {
-            OBUDefinition def = OBUDefinition.get(settingName);
+        for (String settingName : OBUDefinition.commandNames()) {
+            OBUDefinition def = OBUDefinition.byName(settingName);
             if (def != null) {
                 nodes.add(createSettingNode(def, plugin));
             }
@@ -61,7 +61,7 @@ public class SettingsCommand {
         List<String> custom = def.argNames();
         String[] names = new String[types.size()];
         for (int i = 0; i < types.size(); i++) {
-            if (custom != null) {
+            if (!custom.isEmpty()) {
                 names[i] = custom.get(i);
                 continue;
             }
@@ -97,7 +97,7 @@ public class SettingsCommand {
         if (target instanceof Player p) {
             sandbox = OBUCommandHelper.active(plugin).sandboxOf(p.getUniqueId());
         }
-        if (sandbox != null && def.isContextSetting()) {
+        if (sandbox != null && !def.isActionSetting()) {
             plugin.getMessageManager().send(sender, "commands.obu.settings.sandbox",
                     Placeholder.parsed("setting", def.commandName()),
                     Placeholder.unparsed("value", valueStr),

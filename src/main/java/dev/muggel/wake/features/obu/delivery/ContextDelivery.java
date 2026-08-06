@@ -8,7 +8,6 @@ import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import dev.muggel.wake.features.obu.contexts.OBUPlayerState;
-import dev.muggel.wake.features.obu.protocol.PacketSender;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
@@ -21,9 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Arrays;
 import java.util.function.Consumer;
-import java.util.logging.Level;
 import dev.muggel.wake.features.obu.OBUDao;
 import dev.muggel.wake.features.obu.OBUModule;
 
@@ -60,11 +57,7 @@ public class ContextDelivery implements OBUService {
 
     public void requestClientVersion(@NonNull Player player) {
         clients.reopen(player.getUniqueId());
-        try {
-            packetSender.sendVersionRequest(player);
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to ask " + player.getName() + " to resend its OBU version", e);
-        }
+        packetSender.sendVersionRequest(player);
     }
 
     public void cleanupVehicle(@NonNull UUID uuid) {
@@ -145,13 +138,8 @@ public class ContextDelivery implements OBUService {
 
     private void sendActionSetting(@NonNull Entity target, @NonNull OBUSetting setting) {
         Player driver = OBUSyncManager.driverOf(target);
-        if (driver == null) {
-            return;
-        }
-        try {
+        if (driver != null) {
             packetSender.sendRawSetting(driver, setting);
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to send raw action setting", e);
         }
     }
 
@@ -227,10 +215,12 @@ public class ContextDelivery implements OBUService {
 
     @Override
     public void applyRelativeImpulse(@NonNull Player player, double x, double y, double z) {
-        OBUSetting setting = new OBUSetting(OBUDefinition.applyimpulserelative, Arrays.asList(
+        OBUSetting setting = OBUSetting.of(OBUDefinition.applyimpulserelative, List.of(
                 String.valueOf(x), String.valueOf(y), String.valueOf(z)
         ));
-        applySetting(player, setting);
+        if (setting != null) {
+            applySetting(player, setting);
+        }
     }
 
     public void loadPlayerState(@NonNull UUID uuid, @NonNull Consumer<@Nullable OBUPlayerState> applyOnMain) {

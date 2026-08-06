@@ -49,7 +49,7 @@ public class ClearCommand {
         if (sandboxName != null) {
             OBUContext base = contextManager.getContext(sandboxName);
             if (base != null) {
-                for (OBUSetting s : base.settings()) active.put(s.getUniqueKey(), s);
+                for (OBUSetting s : base.settings()) active.put(s.uniqueKey(), s);
             }
         }
         active.putAll(sync.getLocalOverrides(player.getUniqueId()));
@@ -63,10 +63,10 @@ public class ClearCommand {
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         String settingKey = StringArgumentType.getString(ctx, "setting");
         CommandSender sender = ctx.getSource().getSender();
-        OBUDefinition def = OBUDefinition.get(settingKey);
+        OBUDefinition def = OBUDefinition.byName(settingKey);
         Predicate<OBUSetting> matches = def != null
                 ? s -> s.definition() == def
-                : s -> s.getUniqueKey().equals(settingKey);
+                : s -> s.uniqueKey().equals(settingKey);
         var overrides = sync.getLocalOverrides(target.getUniqueId());
         boolean cleared = false;
         String defNameForMessage = def != null ? def.name() : settingKey;
@@ -76,7 +76,7 @@ public class ClearCommand {
             if (!matchedOverrides.isEmpty()) {
                 defNameForMessage = matchedOverrides.getFirst().definition().name();
                 for (OBUSetting s : matchedOverrides) {
-                    sync.removeLocalOverride(player.getUniqueId(), s.getUniqueKey());
+                    sync.removeLocalOverride(player.getUniqueId(), s.uniqueKey());
                 }
                 plugin.getMessageManager().send(sender, "commands.obu.clear.temp", Placeholder.unparsed("setting", defNameForMessage), Placeholder.component("target", OBUCommandHelper.targetPossessive(plugin, player, sender)));
                 cleared = true;
@@ -86,7 +86,7 @@ public class ClearCommand {
                 if (sandbox != null) {
                     boolean sandboxCleared = false;
                     for (OBUSetting s : sandbox.settings()) {
-                        if (matches.test(s) && contextManager.removeContextSetting(sandboxName, s.getUniqueKey())) {
+                        if (matches.test(s) && contextManager.removeContextSetting(sandboxName, s.uniqueKey())) {
                             defNameForMessage = s.definition().name();
                             sandboxCleared = true;
                         }
@@ -122,7 +122,7 @@ public class ClearCommand {
             if (!matchedOverrides.isEmpty()) {
                 defNameForMessage = matchedOverrides.getFirst().definition().name();
                 for (OBUSetting s : matchedOverrides) {
-                    sync.removeLocalOverride(boat.getUniqueId(), s.getUniqueKey());
+                    sync.removeLocalOverride(boat.getUniqueId(), s.uniqueKey());
                 }
                 plugin.getMessageManager().send(sender, "commands.obu.clear.temp", Placeholder.unparsed("setting", defNameForMessage), Placeholder.component("target", OBUCommandHelper.targetPossessive(plugin, boat, sender)));
                 cleared = true;

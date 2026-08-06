@@ -39,7 +39,7 @@ public class HelpCommand {
                     || !PermissionManager.canReach(sender, child.getPermission())) {
                 continue;
             }
-            OBUDefinition def = OBUDefinition.get(child.getName());
+            OBUDefinition def = OBUDefinition.byName(child.getName());
             if (def != null && def != OBUDefinition.reset) {
                 if (!settingsListed) {
                     mm.send(sender, KEY_PREFIX + "settings");

@@ -95,13 +95,18 @@ final class OBUDataTransfer {
             ConfigurationSection settingsSec = section.getConfigurationSection(name + ".settings");
             if (settingsSec != null) {
                 for (String settingName : settingsSec.getKeys(false)) {
-                    OBUDefinition def = OBUDefinition.get(settingName);
+                    OBUDefinition def = OBUDefinition.byName(settingName);
                     if (def == null) continue;
                     List<String> invocations = settingsSec.isList(settingName)
                             ? settingsSec.getStringList(settingName)
                             : List.of(String.valueOf(settingsSec.get(settingName)));
                     for (String invocation : invocations) {
-                        settingsToImport.add(new OBUSetting(def, def.splitInvocation(invocation)));
+                        OBUSetting setting = OBUSetting.of(def, def.splitInvocation(invocation));
+                        if (setting == null) {
+                            plugin.getLogger().warning("Skipped OBU setting '" + settingName + " " + invocation + "' in context '" + name + "': the client cannot be sent that value");
+                            continue;
+                        }
+                        settingsToImport.add(setting);
                     }
                 }
             }

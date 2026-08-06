@@ -42,12 +42,12 @@ public class DefaultsCommand {
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, CommandSender subject, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
         String settingName = StringArgumentType.getString(ctx, "setting");
-        OBUDefinition def = OBUDefinition.get(settingName);
-        if (def == null || def.defaultValues() == null) {
+        OBUDefinition def = OBUDefinition.byName(settingName);
+        String defValueStr = def == null ? null : def.defaultValue();
+        if (defValueStr == null) {
             plugin.getMessageManager().send(sender, "commands.obu.defaults.missing", Placeholder.unparsed("setting", settingName));
             return 0;
         }
-        String defValueStr = String.join(" ", def.defaultValues());
         plugin.getMessageManager().send(sender, "commands.obu.defaults.vanilla",
                 Placeholder.parsed("setting", def.commandName()),
                 Placeholder.parsed("value", defValueStr));

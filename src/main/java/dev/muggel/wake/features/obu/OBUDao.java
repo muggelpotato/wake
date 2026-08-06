@@ -6,6 +6,7 @@ import com.google.gson.reflect.TypeToken;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContext.ContextType;
+import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.contexts.OBUPlayerState;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
@@ -98,11 +99,11 @@ public class OBUDao extends WakeDao {
         List<DbRow> contextRows = new ArrayList<>();
         selectByKeys("SELECT * FROM wake_obu_contexts", "name", keys, contextRows::add);
         selectByKeys("SELECT context_name, definition_name, args FROM wake_obu_settings", "context_name", keys, row -> {
-            OBUDefinition def = OBUDefinition.get(row.getString("definition_name"));
+            OBUDefinition def = OBUDefinition.byName(row.getString("definition_name"));
             if (def == null) return;
             List<String> argsList = GSON.fromJson(row.getString("args"), new TypeToken<List<String>>(){}.getType());
             settingsByContext.computeIfAbsent(canonical(row.getString("context_name")), k -> new ArrayList<>())
-                    .add(new OBUSetting(def, argsList));
+                    .add(new OBUSetting(def, argsList != null ? argsList : List.of()));
         });
         for (DbRow row : contextRows) {
             String name = canonical(row.getString("name"));
@@ -119,8 +120,8 @@ public class OBUDao extends WakeDao {
             found.put(name, new OBUContext(name, type, owner,
                     settingsByContext.getOrDefault(name, List.of())));
         }
-        found.put(OBUDefinition.CONTEXT_EMPTY,
-                new OBUContext(OBUDefinition.CONTEXT_EMPTY, ContextType.SERVER, null, List.of()));
+        found.put(OBUContextManager.EMPTY_CONTEXT,
+                new OBUContext(OBUContextManager.EMPTY_CONTEXT, ContextType.SERVER, null, List.of()));
         return found;
     }
 
@@ -160,7 +161,7 @@ public class OBUDao extends WakeDao {
 
     public @NonNull SqlStatement settingUpsert(@NonNull String contextName, @NonNull OBUSetting setting) {
         return new SqlStatement("REPLACE INTO wake_obu_settings (context_name, unique_key, definition_name, args) VALUES (?, ?, ?, ?)",
-                new Object[]{canonical(contextName), setting.getUniqueKey(), setting.definition().name(), GSON.toJson(setting.args())});
+                new Object[]{canonical(contextName), setting.uniqueKey(), setting.definition().name(), GSON.toJson(setting.args())});
     }
 
     public @NonNull SqlStatement settingDelete(@NonNull String contextName, @NonNull String uniqueKey) {

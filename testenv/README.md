@@ -11,6 +11,7 @@ Fully automatic prod test env: when `run/plugins/wake/config.yml` has `database.
 Switch backends in-game with `/server backend2` and `/server primary`
 
 ## Headless testing
+- **`python testenv/drills_obu.py --encoding`** the bytes `features/obu/protocol` writes, judged against the ids, framing and vanilla defaults in `OBUSOURCE/OpenBoatUtils` — a probe compiled into the package prints each packet as hex (no server; needs `./gradlew compileJava` first). Without `--encoding` it also runs the command surface: every argument type parses, refuses, stores and displays, and a value the wire cannot carry never reaches the database
 - **`python testenv/drills_geometry.py`** the swept collision math at the root of `core/`: the segment-vs-box test, the block range it scans, the legs a tick's path is cut into, the tick clock (no server — compiles a probe against `build/classes`, so `./gradlew compileJava` first)
 - **`python testenv/drills.py`** operational drills against primary. Add `--sync` for the cross-server drill (needs mariadb mode)
 - **`python testenv/drills_database.py`** the `/wake database` admin surface and the outage journal's rough edges (either backend)

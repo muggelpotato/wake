@@ -101,11 +101,11 @@ public class StatusCommand {
         }
         Set<String> own = new HashSet<>();
         for (OBUSetting setting : base.settings()) {
-            own.add(setting.getUniqueKey());
+            own.add(setting.uniqueKey());
         }
         List<OBUSetting> inherited = new ArrayList<>();
         for (OBUSetting setting : defaults.settings()) {
-            if (!own.contains(setting.getUniqueKey())) {
+            if (!own.contains(setting.uniqueKey())) {
                 inherited.add(setting);
             }
         }
@@ -130,8 +130,8 @@ public class StatusCommand {
 
     private static void printSettings(Wake plugin, CommandSender audience, @NonNull List<OBUSetting> settings, @Nullable Map<String, OBUSetting> overrides, @NonNull Set<String> boatOverriddenKeys) {
         for (OBUSetting setting : settings) {
-            boolean shadowedByBoat = boatOverriddenKeys.contains(setting.getUniqueKey());
-            boolean shadowed = shadowedByBoat || (overrides != null && overrides.containsKey(setting.getUniqueKey()));
+            boolean shadowedByBoat = boatOverriddenKeys.contains(setting.uniqueKey());
+            boolean shadowed = shadowedByBoat || (overrides != null && overrides.containsKey(setting.uniqueKey()));
             Component line = plugin.getMessageManager().getComponent(
                     shadowed ? "commands.obu.status.overridden" : "commands.obu.status.line",
                     Placeholder.parsed("name", setting.definition().name()),

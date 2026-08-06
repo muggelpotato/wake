@@ -16,7 +16,7 @@ import dev.muggel.wake.features.obu.commands.StatusCommand;
 import dev.muggel.wake.features.obu.commands.sandbox.SandboxCommand;
 import dev.muggel.wake.features.obu.clients.HandshakeListener;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
-import dev.muggel.wake.features.obu.protocol.PacketSender;
+import dev.muggel.wake.features.obu.delivery.PacketSender;
 import dev.muggel.wake.features.obu.clients.BoatLagInterceptor;
 import dev.muggel.wake.features.obu.clients.ClientRegistry;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
@@ -30,7 +30,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.sql.SQLException;
-import java.util.logging.Level;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -59,7 +58,7 @@ public class OBUModule extends WakeModule {
         this.packetSender = new PacketSender(clients);
         this.contextManager = new OBUContextManager(obuDao);
         this.active = new ActiveContexts(plugin);
-        this.syncManager = new OBUSyncManager(plugin, packetSender, contextManager, active, clients);
+        this.syncManager = new OBUSyncManager(packetSender, contextManager, active, clients);
         this.delivery = new ContextDelivery(plugin, packetSender, contextManager, obuDao, clients, active, syncManager);
         this.dataTransfer = new OBUDataTransfer(plugin, obuDao, contextManager, syncManager);
         registerService(OBUService.class, delivery);
@@ -108,11 +107,7 @@ public class OBUModule extends WakeModule {
         if (delivery != null && syncManager != null && packetSender != null) {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 delivery.saveSelection(player);
-                try {
-                    packetSender.sendWipePlayer(player, OBUDefinition.CONTEXT_PERSONAL);
-                } catch (Exception e) {
-                    plugin.getLogger().log(Level.WARNING, "Failed to send wipe packet", e);
-                }
+                packetSender.sendWipePlayer(player, OBUDefinition.CONTEXT_PERSONAL);
             }
             syncManager.wipeAllBoatContexts();
             for (Player player : Bukkit.getOnlinePlayers()) {

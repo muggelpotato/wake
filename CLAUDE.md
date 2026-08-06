@@ -130,6 +130,12 @@ module will need it.)
 
 - Settings live in named, persisted **contexts**; a **sandbox** is a personal, ownership-scoped,
   disposable context. Enforce ownership on every sandbox operation.
+- **A value that did not come from a command argument type is canonicalised at the door** — an
+  import, a share code, another module's numbers. The stored spelling, the setting's identity key
+  and the bytes on the wire must all agree, or one block reached two ways becomes two settings and
+  the client silently applies whichever arrived last. Anything the wire cannot carry is refused
+  there, never written; a row that gets through anyway is skipped when the packet is built, because
+  one bad value must never cost a player every other setting they hold.
 - **Never mutate a shared context to represent one player.** Compose a per-player view and deliver
   it through the reserved per-player channel, leaving stored contexts untouched.
 - Adding a setting should be a minimal, localized change to the protocol definition — if it forces

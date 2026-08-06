@@ -1,10 +1,10 @@
 package dev.muggel.wake.features.obu.protocol;
 
-import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Unmodifiable;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -23,10 +23,10 @@ import static dev.muggel.wake.features.obu.protocol.SettingType.INT;
 import static dev.muggel.wake.features.obu.protocol.SettingType.SETTING_ENUM;
 
 public enum OBUDefinition {
-    reset(0, List.of(), (String[]) null),
+    reset(0, List.of()),
     stepsize(1, List.of(FLOAT), "0.0"),
     defaultslipperiness(2, List.of(FLOAT), "0.6"),
-    blockslipperiness(3, List.of(FLOAT, BLOCK_LIST), (String[]) null),
+    blockslipperiness(3, List.of(FLOAT, BLOCK_LIST)),
     falldamage(4, List.of(BOOLEAN), "true"),
     waterelevation(5, List.of(BOOLEAN), "false"),
     aircontrol(6, List.of(BOOLEAN), "false"),
@@ -42,15 +42,15 @@ public enum OBUDefinition {
     coyotetime(19, List.of(INT), "0"),
     waterjumping(20, List.of(BOOLEAN), "false"),
     swimforce(21, List.of(FLOAT), "0.0"),
-    removeblockslipperiness(22, List.of(BLOCK_LIST), (String[]) null),
-    clearslipperiness(23, List.of(), (String[]) null),
-    setblocksetting(26, List.of(SETTING_ENUM, FLOAT, BLOCK_LIST), (String[]) null),
+    removeblockslipperiness(22, List.of(BLOCK_LIST)),
+    clearslipperiness(23, List.of()),
+    setblocksetting(26, List.of(SETTING_ENUM, FLOAT, BLOCK_LIST)),
     collisionmode(27, List.of(COLLISION_ENUM), "VANILLA"),
     stepwhilefalling(28, List.of(BOOLEAN), "false"),
     setinterpolationten(29, List.of(BOOLEAN), "false"),
     setcollisionresolution(30, List.of(BYTE), "1"),
-    addcollisionfilter(31, List.of(ENTITY_LIST), (String[]) null),
-    clearcollisionfilter(32, List.of(), (String[]) null),
+    addcollisionfilter(31, List.of(ENTITY_LIST)),
+    clearcollisionfilter(32, List.of()),
     setwalltapmultiplier(34, List.of(FLOAT), "0.0"),
     setjumps(35, List.of(INT), "1"),
     setscale(36, List.of(FLOAT), "1.0"),
@@ -65,114 +65,111 @@ public enum OBUDefinition {
     setmaxspeed(45, List.of(FLOAT), "-1.0"),
     setmaxspeedresistance(46, List.of(FLOAT), "0.0"),
     sethoneycompat(47, List.of(BOOLEAN), "false");
-
     public static final String CONTEXT_PERSONAL = "wake:personal";
-    public static final String CONTEXT_EMPTY = "wake:empty";
     public static final String CHANNEL_SETTINGS = "openboatutils:settings";
     public static final String CHANNEL_CONTEXT = "openboatutils:context";
     public static final String CHANNEL_CONFIGURATION = "openboatutils:configuration";
-    public static final String CHANNEL_HANDSHAKE = "openboatutils:handshake";
     public static final short PACKET_RESEND_VERSION = 15;
     public static final int LATEST_SUPPORTED_VERSION = 22;
     public static final Set<Integer> REJECTED_VERSIONS = Set.of(8, 12, 15, 20, 21);
     private final int id;
     private final List<SettingType> types;
     private final List<String> argNames;
-    private final String[] defaultValues;
-
-    OBUDefinition(int id, List<SettingType> types, String... defaultValues) {
-        this(id, types, null, defaultValues);
+    private final String defaultValue;
+    OBUDefinition(int id, List<SettingType> types) {
+        this(id, types, List.of(), null);
     }
-    OBUDefinition(int id, List<SettingType> types, List<String> argNames, String... defaultValues) {
+    OBUDefinition(int id, List<SettingType> types, String defaultValue) {
+        this(id, types, List.of(), defaultValue);
+    }
+    OBUDefinition(int id, List<SettingType> types, List<String> argNames) {
+        this(id, types, argNames, null);
+    }
+    OBUDefinition(int id, List<SettingType> types, List<String> argNames, @Nullable String defaultValue) {
         this.id = id;
         this.types = types;
         this.argNames = argNames;
-        this.defaultValues = (defaultValues == null || defaultValues.length == 0 || defaultValues[0] == null) ? null : defaultValues;
+        this.defaultValue = defaultValue;
     }
 
     public int id() {
         return id;
     }
 
-    public List<SettingType> types() {
+    public @NonNull @Unmodifiable List<SettingType> types() {
         return types;
     }
 
-    public @Nullable List<String> argNames() {
+    public @NonNull @Unmodifiable List<String> argNames() {
         return argNames;
     }
 
-    public String @Nullable [] defaultValues() {
-        return defaultValues;
+    public @Nullable String defaultValue() {
+        return defaultValue;
     }
 
-    @Contract(pure = true)
     public @NonNull String commandName() {
         return this == reset ? "-reset" : name();
     }
 
-    public @NonNull @Unmodifiable List<String> splitInvocation(String raw) {
-        if (types.size() <= 1) {
-            return List.of(raw.trim());
+    public @NonNull @Unmodifiable List<String> splitInvocation(@NonNull String raw) {
+        if (types.isEmpty()) {
+            return List.of();
         }
         return List.of(raw.trim().split("\\s+", types.size()));
-    }
-
-
-    public boolean isContextSetting() {
-        return !isActionSetting();
-    }
-
-    public boolean isGlobalSetting() {
-        return this == setinterpolationten || this == setresetonworldload;
     }
 
     public boolean isActionSetting() {
         return this == applyimpulse || this == applyimpulserelative;
     }
 
-    private boolean canRepeat() {
-        return this == blockslipperiness || this == removeblockslipperiness || this == setblocksetting || this == addcollisionfilter;
+    public boolean isGlobalSetting() {
+        return this == setinterpolationten || this == setresetonworldload;
+    }
+
+    public @NonNull String uniqueKey(@NonNull List<String> args) {
+        if (types.stream().noneMatch(SettingType::isList)) {
+            return String.valueOf(id);
+        }
+        StringBuilder key = new StringBuilder().append(id);
+        for (int i = 0; i < types.size() && i < args.size(); i++) {
+            SettingType type = types.get(i);
+            if (type.isIdentity()) {
+                key.append(':').append(type.isList() ? sortedEntries(args.get(i)) : args.get(i));
+            }
+        }
+        return key.toString();
+    }
+
+    private static @NonNull String sortedEntries(@NonNull String list) {
+        String[] entries = list.split(",");
+        Arrays.sort(entries);
+        return String.join(",", entries);
     }
 
     private static final Map<Integer, OBUDefinition> BY_ID = new HashMap<>();
     private static final Map<String, OBUDefinition> BY_NAME = new HashMap<>();
-    private static final Set<String> REGISTERED_NAMES;
+    private static final Set<String> COMMAND_NAMES;
 
     static {
         for (OBUDefinition def : values()) {
             BY_ID.put(def.id(), def);
             BY_NAME.put(def.commandName(), def);
         }
-        REGISTERED_NAMES = Collections.unmodifiableSet(BY_NAME.keySet());
+        COMMAND_NAMES = Collections.unmodifiableSet(BY_NAME.keySet());
     }
 
-    public static @Nullable OBUDefinition getById(int id) {
+    public static @Nullable OBUDefinition byId(int id) {
         return BY_ID.get(id);
     }
 
-    public static @Nullable OBUDefinition get(@Nullable String commandName) {
+    public static @Nullable OBUDefinition byName(@Nullable String commandName) {
         if (commandName == null) return null;
         return BY_NAME.get(commandName.toLowerCase(Locale.ROOT));
     }
 
-    public static Set<String> getRegisteredNames() {
-        return REGISTERED_NAMES;
-    }
-
-    public @NonNull String generateUniqueKey(@NonNull List<String> args) {
-        if (canRepeat() && !args.isEmpty()) {
-            if (this == blockslipperiness) {
-                return id + ":" + (args.size() > 1 ? args.get(1) : "");
-            } else if (this == removeblockslipperiness) {
-                return id + ":" + args.getFirst();
-            } else if (this == setblocksetting) {
-                return id + ":" + args.get(0) + ":" + (args.size() > 2 ? args.get(2) : "");
-            } else if (this == addcollisionfilter) {
-                return id + ":" + args.getFirst();
-            }
-        }
-        return String.valueOf(id);
+    public static @NonNull @Unmodifiable Set<String> commandNames() {
+        return COMMAND_NAMES;
     }
 
     public enum PerBlockSetting {
@@ -192,13 +189,7 @@ public enum OBUDefinition {
         private final short id;
         PerBlockSetting(int id) { this.id = (short) id; }
 
-        public static short parse(@NonNull String arg) {
-            try {
-                return valueOf(arg.toUpperCase(Locale.ROOT)).id;
-            } catch (IllegalArgumentException e) {
-                return -1;
-            }
-        }
+        public short id() { return id; }
     }
 
     public enum CollisionMode {
@@ -210,13 +201,7 @@ public enum OBUDefinition {
         private final short id;
         CollisionMode(int id) { this.id = (short) id; }
 
-        public static short parse(@NonNull String arg) {
-            try {
-                return valueOf(arg.toUpperCase(Locale.ROOT)).id;
-            } catch (IllegalArgumentException e) {
-                return -1;
-            }
-        }
+        public short id() { return id; }
     }
 
     public enum ContextPacket {
@@ -225,9 +210,9 @@ public enum OBUDefinition {
         DROP_CONTEXT(2),
         STORE_CONTEXT(3),
         ENTITY_CONTEXT(4);
-        private final int id;
-        ContextPacket(int id) { this.id = id; }
+        private final short id;
+        ContextPacket(int id) { this.id = (short) id; }
 
-        public int getId() { return id; }
+        public short id() { return id; }
     }
 }

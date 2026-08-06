@@ -20,6 +20,7 @@ import java.util.function.Consumer;
 
 public class OBUContextManager {
     public static final String DEFAULT_CONTEXT = "default";
+    public static final String EMPTY_CONTEXT = "wake:empty";
     private final OBUDao dao;
     private final CachedStore<OBUContext> contexts;
     public OBUContextManager(OBUDao dao) {
@@ -127,7 +128,7 @@ public class OBUContextManager {
         OBUContext context = contexts.get(lower);
         if (context == null) return;
         List<OBUSetting> settings = new ArrayList<>(context.settings());
-        settings.removeIf(s -> s.getUniqueKey().equals(setting.getUniqueKey()));
+        settings.removeIf(s -> s.uniqueKey().equals(setting.uniqueKey()));
         settings.add(setting);
         dao.saveContext(new OBUContext(lower, context.type(), context.ownerUuid(), settings), List.of(dao.settingUpsert(lower, setting)));
     }
@@ -137,8 +138,8 @@ public class OBUContextManager {
         OBUContext context = contexts.get(lower);
         if (context == null || newSettings.isEmpty()) return;
         LinkedHashMap<String, OBUSetting> merged = new LinkedHashMap<>();
-        for (OBUSetting s : context.settings()) merged.put(s.getUniqueKey(), s);
-        for (OBUSetting s : newSettings) merged.put(s.getUniqueKey(), s);
+        for (OBUSetting s : context.settings()) merged.put(s.uniqueKey(), s);
+        for (OBUSetting s : newSettings) merged.put(s.uniqueKey(), s);
         List<SqlStatement> settingWrites = new ArrayList<>();
         for (OBUSetting s : newSettings) {
             settingWrites.add(dao.settingUpsert(lower, s));
@@ -151,7 +152,7 @@ public class OBUContextManager {
         OBUContext context = contexts.get(lower);
         if (context == null) return false;
         List<OBUSetting> settings = new ArrayList<>(context.settings());
-        if (!settings.removeIf(s -> s.getUniqueKey().equals(uniqueKey))) {
+        if (!settings.removeIf(s -> s.uniqueKey().equals(uniqueKey))) {
             return false;
         }
         dao.saveContext(new OBUContext(lower, context.type(), context.ownerUuid(), settings),
@@ -164,11 +165,11 @@ public class OBUContextManager {
     }
 
     public static boolean isInternal(@NonNull String name) {
-        return name.equals(OBUDefinition.CONTEXT_EMPTY) || name.equals(OBUDefinition.CONTEXT_PERSONAL);
+        return name.equals(EMPTY_CONTEXT) || name.equals(OBUDefinition.CONTEXT_PERSONAL);
     }
 
     public static boolean inheritsDefault(@NonNull String name) {
-        return !name.equalsIgnoreCase(DEFAULT_CONTEXT) && !name.equals(OBUDefinition.CONTEXT_EMPTY);
+        return !name.equalsIgnoreCase(DEFAULT_CONTEXT) && !name.equals(EMPTY_CONTEXT);
     }
 
     public static boolean inheritsDefault(@NonNull OBUContext context) {

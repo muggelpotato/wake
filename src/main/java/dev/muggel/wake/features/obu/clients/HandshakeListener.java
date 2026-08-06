@@ -84,8 +84,7 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     }
 
     private static boolean isHandshakeChannel(String channel) {
-        return OBUDefinition.CHANNEL_HANDSHAKE.equals(channel)
-                || OBUDefinition.CHANNEL_CONFIGURATION.equals(channel)
+        return OBUDefinition.CHANNEL_CONFIGURATION.equals(channel)
                 || OBUDefinition.CHANNEL_SETTINGS.equals(channel);
     }
 

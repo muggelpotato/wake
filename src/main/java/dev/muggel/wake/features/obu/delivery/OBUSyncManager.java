@@ -1,12 +1,10 @@
 package dev.muggel.wake.features.obu.delivery;
 
-import dev.muggel.wake.Wake;
 import dev.muggel.wake.features.obu.clients.ClientRegistry;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
-import dev.muggel.wake.features.obu.protocol.PacketSender;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
@@ -23,18 +21,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Level;
 
 public class OBUSyncManager {
-    private final Wake plugin;
     private final PacketSender packetSender;
     private final OBUContextManager contextManager;
     private final ActiveContexts active;
     private final ClientRegistry clients;
     private final Map<UUID, Map<String, OBUSetting>> localOverrides = new ConcurrentHashMap<>();
     private final Set<UUID> knownBoatContexts = ConcurrentHashMap.newKeySet();
-    public OBUSyncManager(Wake plugin, PacketSender packetSender, OBUContextManager contextManager, ActiveContexts active, ClientRegistry clients) {
-        this.plugin = plugin;
+    public OBUSyncManager(PacketSender packetSender, OBUContextManager contextManager, ActiveContexts active, ClientRegistry clients) {
         this.packetSender = packetSender;
         this.contextManager = contextManager;
         this.active = active;
@@ -55,7 +50,7 @@ public class OBUSyncManager {
 
     public void addLocalOverride(UUID uuid, OBUSetting setting) {
         localOverrides.computeIfAbsent(uuid, k -> new ConcurrentHashMap<>())
-                .put(setting.getUniqueKey(), setting);
+                .put(setting.uniqueKey(), setting);
     }
 
     public void removeLocalOverride(UUID uuid, String uniqueKey) {
@@ -98,12 +93,12 @@ public class OBUSyncManager {
                     OBUContext defaults = contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT);
                     if (defaults != null) {
                         for (OBUSetting setting : defaults.settings()) {
-                            absoluteTruth.put(setting.getUniqueKey(), setting);
+                            absoluteTruth.put(setting.uniqueKey(), setting);
                         }
                     }
                 }
                 for (OBUSetting setting : context.settings()) {
-                    absoluteTruth.put(setting.getUniqueKey(), setting);
+                    absoluteTruth.put(setting.uniqueKey(), setting);
                 }
             }
         }
@@ -111,7 +106,7 @@ public class OBUSyncManager {
             Player driver = driverOf(entity);
             if (driver != null) {
                 for (OBUSetting setting : calculateAbsoluteTruth(driver.getUniqueId())) {
-                    absoluteTruth.put(setting.getUniqueKey(), setting);
+                    absoluteTruth.put(setting.uniqueKey(), setting);
                 }
             }
         }
@@ -126,15 +121,11 @@ public class OBUSyncManager {
         List<OBUSetting> truth = calculateAbsoluteTruth(player.getUniqueId());
         active.updateScale(player.getUniqueId(), truth);
         String personalContextName = OBUDefinition.CONTEXT_PERSONAL;
-        try {
-            if (truth.isEmpty()) {
-                packetSender.sendWipePlayer(player, personalContextName);
-            } else {
-                packetSender.sendStoreContext(player, personalContextName, truth);
-                packetSender.sendSwitchContext(player, personalContextName);
-            }
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to sync personal context to " + player.getName(), e);
+        if (truth.isEmpty()) {
+            packetSender.sendWipePlayer(player, personalContextName);
+        } else {
+            packetSender.sendStoreContext(player, personalContextName, truth);
+            packetSender.sendSwitchContext(player, personalContextName);
         }
         if (player.getVehicle() instanceof Boat boat) {
             broadcastSync(boat);
@@ -148,12 +139,7 @@ public class OBUSyncManager {
         if (!clients.isDriven(viewer.getUniqueId())) {
             return;
         }
-        try {
-            var packet = packetSender.createEntityContextPacket(boat.getUniqueId(), settings);
-            packetSender.sendPrecompiledPacket(viewer, packet);
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to sync boat state to viewer", e);
-        }
+        packetSender.sendPrecompiledPacket(viewer, packetSender.createEntityContextPacket(boat.getUniqueId(), settings));
     }
 
     public void syncTrackedBoats(@NonNull Player viewer) {
@@ -177,25 +163,17 @@ public class OBUSyncManager {
         if (viewers.isEmpty()) {
             return;
         }
-        try {
-            var packet = packetSender.createEntityContextPacket(boat.getUniqueId(), settings);
-            for (Player viewer : viewers) {
-                packetSender.sendPrecompiledPacket(viewer, packet);
-            }
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to broadcast boat state", e);
+        var packet = packetSender.createEntityContextPacket(boat.getUniqueId(), settings);
+        for (Player viewer : viewers) {
+            packetSender.sendPrecompiledPacket(viewer, packet);
         }
     }
 
     public void wipeAllBoatContexts() {
         for (UUID boatId : knownBoatContexts) {
-            try {
-                var emptyPacket = packetSender.createEntityContextPacket(boatId, Collections.emptyList());
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    packetSender.sendPrecompiledPacket(player, emptyPacket);
-                }
-            } catch (Exception e) {
-                plugin.getLogger().log(Level.WARNING, "Failed to wipe context for boat " + boatId, e);
+            var emptyPacket = packetSender.createEntityContextPacket(boatId, Collections.emptyList());
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                packetSender.sendPrecompiledPacket(player, emptyPacket);
             }
         }
     }

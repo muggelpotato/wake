@@ -8,7 +8,6 @@ import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
-import dev.muggel.wake.features.obu.protocol.PacketWriter;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -18,7 +17,6 @@ import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Level;
 
@@ -66,15 +64,11 @@ public class SandboxImportCommand {
                 }
                 try {
                     int id = Integer.parseInt(part.substring(0, colonIdx));
-                    String argsStr = part.substring(colonIdx + 1);
-                    String[] args = argsStr.isEmpty() ? new String[0] : argsStr.split(" ");
-                    OBUDefinition def = OBUDefinition.getById(id);
-                    if (def == null || !def.isContextSetting()) {
-                        skipped++;
-                        continue;
-                    }
-                    OBUSetting setting = new OBUSetting(def, Arrays.asList(args));
-                    if (!PacketWriter.isEncodable(setting)) {
+                    OBUDefinition def = OBUDefinition.byId(id);
+                    OBUSetting setting = def == null || def.isActionSetting()
+                            ? null
+                            : OBUSetting.of(def, def.splitInvocation(part.substring(colonIdx + 1)));
+                    if (setting == null) {
                         skipped++;
                         continue;
                     }
