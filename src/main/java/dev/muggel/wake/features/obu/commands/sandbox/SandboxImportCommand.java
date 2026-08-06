@@ -46,7 +46,7 @@ public class SandboxImportCommand {
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.import_fail", Placeholder.unparsed("error", reason));
             return 0;
         }
-        String key = SandboxCommandHelper.claimSandbox(plugin, sender, subject, name, service);
+        String key = SandboxCommandHelper.claimSandbox(plugin, sender, subject, name);
         if (key == null) {
             return 0;
         }

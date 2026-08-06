@@ -32,10 +32,12 @@ final class VehicleScaleCache {
 
     private static double scaleIn(@NonNull List<OBUSetting> truth) {
         for (OBUSetting setting : truth) {
-            if (setting.definition() == OBUDefinition.setscale && !setting.args().isEmpty()) {
-                try {
-                    return Double.parseDouble(setting.args().getFirst());
-                } catch (NumberFormatException ignored) {}
+            if (setting.definition() != OBUDefinition.setscale) {
+                continue;
+            }
+            OBUSetting writable = OBUSetting.of(setting.definition(), setting.args());
+            if (writable != null) {
+                return Float.parseFloat(writable.args().getFirst());
             }
         }
         return UNSCALED;

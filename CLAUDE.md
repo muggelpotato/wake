@@ -118,7 +118,9 @@ reachable from code: both directions are checked by `drills_text.py`, not by eye
 - **Never touch the Bukkit API from an async task.** Do off-thread work asynchronously, then hop
   back to the main thread to apply anything that touches the server.
 - **Never cache `Player` or `Entity`** — key by `UUID` and evict on the lifecycle events that end
-  their relevance (quit, vehicle/entity removal). Every insertion needs a matching removal.
+  their relevance (quit, vehicle/entity removal). Every insertion needs a matching removal. A `UUID`
+  is not a way back either: pass the entity the caller already holds rather than looking one up by
+  id, which walks every world, needs the main thread and answers nothing for an unloaded chunk.
 - Any state reachable from network (PacketEvents) threads must be concurrency-safe.
 
 ## OBU (OpenBoatUtils integration)

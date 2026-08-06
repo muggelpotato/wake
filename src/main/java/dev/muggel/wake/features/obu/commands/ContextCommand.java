@@ -103,7 +103,7 @@ public class ContextCommand {
                 plugin.getMessageManager().send(sender, "commands.obu.context.applied", Placeholder.unparsed("context", shownName), Placeholder.component("target", OBUCommandHelper.targetName(plugin, p, sender)));
             }
         } else if (target instanceof Boat boat) {
-            service.applyEntityContext(boat, context.name());
+            service.applyEntityContext(boat, context);
             plugin.getMessageManager().send(sender, "commands.obu.context.applied", Placeholder.unparsed("context", shownName), Placeholder.component("target", OBUCommandHelper.targetName(plugin, boat, sender)));
         } else {
             plugin.getMessageManager().send(sender, "commands.obu.context.invalid_target");

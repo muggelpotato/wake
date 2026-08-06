@@ -69,6 +69,7 @@ final class OBUDataTransfer {
         for (Player player : Bukkit.getOnlinePlayers()) {
             syncManager.syncPlayer(player);
         }
+        syncManager.resyncPinnedBoats();
         return count;
     }
 

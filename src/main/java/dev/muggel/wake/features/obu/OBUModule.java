@@ -15,7 +15,6 @@ import dev.muggel.wake.features.obu.commands.SettingsCommand;
 import dev.muggel.wake.features.obu.commands.StatusCommand;
 import dev.muggel.wake.features.obu.commands.sandbox.SandboxCommand;
 import dev.muggel.wake.features.obu.clients.HandshakeListener;
-import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.delivery.PacketSender;
 import dev.muggel.wake.features.obu.clients.BoatLagInterceptor;
 import dev.muggel.wake.features.obu.clients.ClientRegistry;
@@ -75,7 +74,7 @@ public class OBUModule extends WakeModule {
         this.sandboxPurger = new SandboxPurger(plugin, obuDao, delivery, active);
         schedulePurgerSweep();
 
-        registerListener(new VehicleCleanupListener(delivery));
+        registerListener(new VehicleCleanupListener(syncManager));
         seedDataIfEmpty(() -> {
             Boolean hasContexts = dao.hasAnyContexts();
             return hasContexts == null ? null : !hasContexts;
@@ -107,7 +106,7 @@ public class OBUModule extends WakeModule {
         if (delivery != null && syncManager != null && packetSender != null) {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 delivery.saveSelection(player);
-                packetSender.sendWipePlayer(player, OBUDefinition.CONTEXT_PERSONAL);
+                packetSender.sendWipePlayer(player);
             }
             syncManager.wipeAllBoatContexts();
             for (Player player : Bukkit.getOnlinePlayers()) {
@@ -128,15 +127,17 @@ public class OBUModule extends WakeModule {
     public void reload() {
         OBUContextManager manager = this.contextManager;
         ContextDelivery service = this.delivery;
-        if (manager == null || service == null) return;
+        OBUSyncManager sync = this.syncManager;
+        if (manager == null || service == null || sync == null) return;
         schedulePurgerSweep();
         manager.reloadAsync(changedContexts -> {
-            if (service.isStale()) return;
+            if (service.isStale() || changedContexts.isEmpty()) return;
             for (Player player : Bukkit.getOnlinePlayers()) {
                 if (service.isAffectedBy(changedContexts, player)) {
                     service.resyncActiveSelection(player);
                 }
             }
+            sync.resyncPinnedBoats();
         });
     }
 

@@ -7,15 +7,15 @@ import org.bukkit.event.entity.EntityRemoveEvent;
 import org.jspecify.annotations.NonNull;
 
 public final class VehicleCleanupListener implements Listener {
-    private final ContextDelivery delivery;
-    public VehicleCleanupListener(@NonNull ContextDelivery delivery) {
-        this.delivery = delivery;
+    private final OBUSyncManager syncManager;
+    public VehicleCleanupListener(@NonNull OBUSyncManager syncManager) {
+        this.syncManager = syncManager;
     }
 
     @EventHandler
     public void onEntityRemove(@NonNull EntityRemoveEvent event) {
         if (event.getEntity() instanceof Boat) {
-            delivery.cleanupVehicle(event.getEntity().getUniqueId());
+            syncManager.cleanup(event.getEntity().getUniqueId());
         }
     }
 }

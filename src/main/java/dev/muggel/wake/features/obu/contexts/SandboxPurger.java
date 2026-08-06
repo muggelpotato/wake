@@ -85,11 +85,11 @@ public final class SandboxPurger {
 
     private @Nullable String lostContext(@NonNull Set<String> gone, @NonNull Player player) {
         String sandbox = active.sandboxOf(player.getUniqueId());
-        if (sandbox != null && gone.contains(sandbox.toLowerCase(Locale.ROOT))) {
+        if (sandbox != null && gone.contains(sandbox)) {
             return sandbox;
         }
         String context = active.contextOf(player.getUniqueId());
-        return gone.contains(context.toLowerCase(Locale.ROOT)) ? context : null;
+        return gone.contains(context) ? context : null;
     }
 
     public static long parseKeepMillis(@NonNull String raw) {

@@ -15,14 +15,14 @@ import org.jspecify.annotations.NonNull;
 import java.util.List;
 import java.util.UUID;
 
-public class PacketSender {
+public final class PacketSender {
     private final ClientRegistry clients;
     public PacketSender(@NonNull ClientRegistry clients) {
         this.clients = clients;
     }
 
-    public void sendWipePlayer(@NonNull Player player, @NonNull String contextId) {
-        sendContextPacket(player, PacketWriter.dropContext(contextId));
+    public void sendWipePlayer(@NonNull Player player) {
+        sendContextPacket(player, PacketWriter.dropContext(OBUDefinition.CONTEXT_PERSONAL));
         sendContextPacket(player, PacketWriter.resetContext());
     }
 
@@ -51,7 +51,7 @@ public class PacketSender {
         PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet);
     }
 
-    public void sendPluginMessage(@NonNull Player player, @NonNull String channel, byte @NonNull [] data) {
+    private void sendPluginMessage(@NonNull Player player, @NonNull String channel, byte @NonNull [] data) {
         if (!clients.isDriven(player.getUniqueId())) return;
         sendUngated(player, channel, data);
     }

@@ -17,14 +17,13 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import dev.muggel.wake.features.obu.OBUDao;
 import dev.muggel.wake.features.obu.OBUModule;
 
-public class ContextDelivery implements OBUService {
+public final class ContextDelivery implements OBUService {
     public static final String STATE_KEY_PERSISTENT_STATES = "obu.persistent_player_states";
     private final Wake plugin;
     private final PacketSender packetSender;
@@ -33,7 +32,7 @@ public class ContextDelivery implements OBUService {
     private final OBUSyncManager syncManager;
     private final OBUDao dao;
     private final ClientRegistry clients;
-    public ContextDelivery(Wake plugin, PacketSender packetSender, OBUContextManager contextManager, OBUDao dao, ClientRegistry clients, ActiveContexts active, OBUSyncManager syncManager) {
+    public ContextDelivery(@NonNull Wake plugin, @NonNull PacketSender packetSender, @NonNull OBUContextManager contextManager, @NonNull OBUDao dao, @NonNull ClientRegistry clients, @NonNull ActiveContexts active, @NonNull OBUSyncManager syncManager) {
         this.plugin = plugin;
         this.packetSender = packetSender;
         this.contextManager = contextManager;
@@ -60,11 +59,6 @@ public class ContextDelivery implements OBUService {
         packetSender.sendVersionRequest(player);
     }
 
-    public void cleanupVehicle(@NonNull UUID uuid) {
-        active.forgetVehicle(uuid);
-        syncManager.cleanup(uuid);
-    }
-
     public void applyDefaultContext(@NonNull Player player) {
         setPlayerActiveSandbox(player, null);
         applyContext(player.getUniqueId(), OBUContextManager.DEFAULT_CONTEXT);
@@ -76,19 +70,14 @@ public class ContextDelivery implements OBUService {
     }
 
     public boolean isAffectedBy(@NonNull Set<String> changedContexts, @NonNull Player player) {
-        if (changedContexts.contains(OBUContextManager.DEFAULT_CONTEXT)) {
-            return true;
-        }
         UUID uuid = player.getUniqueId();
         String sandbox = active.sandboxOf(uuid);
-        if (sandbox != null && changedContexts.contains(sandbox.toLowerCase(Locale.ROOT))) {
-            return true;
+        if (sandbox != null) {
+            return changedContexts.contains(sandbox);
         }
-        if (changedContexts.contains(active.contextOf(uuid).toLowerCase(Locale.ROOT))) {
-            return true;
-        }
-        String pinned = player.getVehicle() instanceof Boat boat ? active.pinnedOn(boat) : null;
-        return pinned != null && changedContexts.contains(pinned.toLowerCase(Locale.ROOT));
+        String context = active.contextOf(uuid);
+        return changedContexts.contains(context)
+                || (OBUContextManager.inheritsDefault(context) && changedContexts.contains(OBUContextManager.DEFAULT_CONTEXT));
     }
 
     public void resyncActiveSelection(@NonNull Player player) {
@@ -143,51 +132,39 @@ public class ContextDelivery implements OBUService {
         }
     }
 
-    public void applyEntityContext(@NonNull Boat boat, @NonNull String contextName) {
+    public void applyEntityContext(@NonNull Boat boat, @NonNull OBUContext context) {
         syncManager.clearLocalOverrides(boat.getUniqueId());
-        if (contextName.equalsIgnoreCase(OBUContextManager.DEFAULT_CONTEXT)) {
-            active.pin(boat, null);
-            syncManager.broadcastSync(boat);
-            return;
-        }
-        OBUContext context = contextManager.getContext(contextName);
-        if (context != null) {
-            active.pin(boat, contextName);
-            refreshIfSandbox(context);
-            syncManager.broadcastSync(boat);
-        }
-    }
-
-    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    public boolean createSandbox(@NonNull String name, @Nullable UUID ownerUuid) {
-        return contextManager.createSandbox(name, ownerUuid);
+        active.pin(boat, OBUContextManager.DEFAULT_CONTEXT.equals(context.name()) ? null : context.name());
+        refreshIfSandbox(context);
+        syncManager.broadcastSync(boat);
     }
 
     public @NonNull List<Player> deleteContextAndEvict(@NonNull String name) {
-        String lower = name.toLowerCase(Locale.ROOT);
+        String lower = ActiveContexts.canonical(name);
         contextManager.deleteContext(lower);
         List<Player> evicted = new ArrayList<>();
         for (Player online : Bukkit.getOnlinePlayers()) {
             UUID uuid = online.getUniqueId();
-            if (lower.equals(active.sandboxOf(uuid)) || lower.equalsIgnoreCase(active.contextOf(uuid))) {
+            if (lower.equals(active.sandboxOf(uuid)) || lower.equals(active.contextOf(uuid))) {
                 applyDefaultContext(online);
                 evicted.add(online);
             }
         }
+        syncManager.resyncPinnedBoats();
         return evicted;
     }
 
     public boolean publishSandbox(@NonNull String name) {
-        String lower = name.toLowerCase(Locale.ROOT);
-        if (!contextManager.publishSandbox(lower)) {
+        if (!contextManager.publishSandbox(name)) {
             return false;
         }
-        for (UUID uuid : active.clearSandbox(lower)) {
+        for (UUID uuid : active.clearSandbox(name)) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
                 syncManager.syncPlayer(player);
             }
         }
+        syncManager.resyncPinnedBoats();
         return true;
     }
 
@@ -210,7 +187,7 @@ public class ContextDelivery implements OBUService {
 
     @Override
     public double getVehicleScale(@NonNull UUID uuid) {
-        return active.scaleOf(uuid);
+        return syncManager.scaleOf(uuid);
     }
 
     @Override

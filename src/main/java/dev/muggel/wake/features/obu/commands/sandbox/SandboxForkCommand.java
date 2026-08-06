@@ -37,7 +37,7 @@ public class SandboxForkCommand {
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.missing", Placeholder.unparsed("sandbox", contextToLoad));
             return 0;
         }
-        String newKey = SandboxCommandHelper.claimSandbox(plugin, sender, subject, newName, service);
+        String newKey = SandboxCommandHelper.claimSandbox(plugin, sender, subject, newName);
         if (newKey == null) {
             return 0;
         }

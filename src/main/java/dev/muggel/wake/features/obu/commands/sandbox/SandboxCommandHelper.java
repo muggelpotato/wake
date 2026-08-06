@@ -72,13 +72,13 @@ final class SandboxCommandHelper {
         sync.syncPlayer(player);
     }
 
-    static @Nullable String claimSandbox(@NonNull Wake plugin, CommandSender sender, CommandSender subject, @NonNull String name, @NonNull ContextDelivery service) {
+    static @Nullable String claimSandbox(@NonNull Wake plugin, CommandSender sender, CommandSender subject, @NonNull String name) {
         if (OBUContextManager.isReserved(name)) {
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.reserved", Placeholder.unparsed("sandbox", name));
             return null;
         }
         String key = sandboxKeyFor(subject, name);
-        if (!service.createSandbox(key, ownerOf(subject))) {
+        if (!OBUCommandHelper.contexts(plugin).createSandbox(key, ownerOf(subject))) {
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.exists", Placeholder.unparsed("sandbox", name));
             return null;
         }

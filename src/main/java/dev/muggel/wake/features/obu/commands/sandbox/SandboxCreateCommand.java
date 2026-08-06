@@ -24,7 +24,7 @@ public class SandboxCreateCommand {
         CommandSender sender = ctx.getSource().getSender();
         ContextDelivery service = OBUCommandHelper.delivery(plugin);
         String name = StringArgumentType.getString(ctx, "name");
-        String key = SandboxCommandHelper.claimSandbox(plugin, sender, subject, name, service);
+        String key = SandboxCommandHelper.claimSandbox(plugin, sender, subject, name);
         if (key == null) {
             return 0;
         }

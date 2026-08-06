@@ -196,7 +196,6 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
             }
         }
         delivery.setPlayerActiveSandbox(player, sandboxName);
-        syncManager.clearLocalOverrides(player.getUniqueId());
         String contextName = state.activeContext() != null ? state.activeContext() : OBUContextManager.DEFAULT_CONTEXT;
         OBUContext context = contextManager.getContext(contextName);
         if (context == null) {
