@@ -20,8 +20,8 @@ import org.jspecify.annotations.Nullable;
 
 public class DrydockModule extends WakeModule {
     private DrydockDao drydockDao;
-    private BoostpadRegistry boostpads;
-    private BoostpadDetectorListener detectorListener;
+    private volatile @Nullable BoostpadRegistry boostpads;
+    private @Nullable BoostpadDetectorListener detectorListener;
     public DrydockModule(Wake plugin) {
         super(plugin, "drydock");
     }
@@ -30,12 +30,21 @@ public class DrydockModule extends WakeModule {
     protected void onModuleEnable() {
         this.drydockDao = registerDao(new DrydockDao(plugin));
         drydockDao.initTables();
-        this.boostpads = new BoostpadRegistry(drydockDao);
-        this.detectorListener = new BoostpadDetectorListener(plugin, boostpads);
-        boostpads.setOnReloadCallback(this.detectorListener::updateRegistration);
+        BoostpadRegistry registry = new BoostpadRegistry(drydockDao);
+        BoostpadDetectorListener detector = new BoostpadDetectorListener(plugin, registry);
+        this.boostpads = registry;
+        this.detectorListener = detector;
+        registry.setOnReloadCallback(detector::updateRegistration);
+        detector.updateRegistration();
         registerListener(new OBUBoostpadIntegration(plugin));
-        BoostpadRegistry registry = this.boostpads;
-        seedDataIfEmpty(() -> registry.isLoaded() || registry.load() ? registry.cachedBoostpads().isEmpty() : null);
+        seedDataIfEmpty(() -> (registry.isLoaded() || registry.load()) ? registry.cachedBoostpads().isEmpty() : null);
+    }
+
+    public void refreshBoostpadRegistration() {
+        BoostpadDetectorListener detector = this.detectorListener;
+        if (detector != null) {
+            detector.updateRegistration();
+        }
     }
 
     @Override
@@ -49,13 +58,15 @@ public class DrydockModule extends WakeModule {
 
     @Override
     protected void onModuleDisable() {
-        if (boostpads != null) {
-            boostpads.setOnReloadCallback(null);
+        BoostpadRegistry registry = this.boostpads;
+        if (registry != null) {
+            registry.setOnReloadCallback(null);
         }
-        if (detectorListener != null) {
-            detectorListener.unregister();
-            detectorListener = null;
+        BoostpadDetectorListener detector = this.detectorListener;
+        if (detector != null) {
+            detector.unregister();
         }
+        detectorListener = null;
         boostpads = null;
         drydockDao = null;
     }
@@ -67,23 +78,12 @@ public class DrydockModule extends WakeModule {
     @Override
     protected int onExportData(@NonNull YamlConfiguration yaml) throws SQLException {
         BoostpadRegistry registry = this.boostpads;
-        if (registry != null && !registry.isLoaded()) {
+        if (registry == null || !registry.isLoaded()) {
             throw new SQLException("Drydock boostpads could not be read");
         }
         int count = exportState(yaml);
-        if (registry == null) {
-            return count;
-        }
         for (Map.Entry<String, BoostpadConfig> entry : registry.cachedBoostpads().entrySet()) {
-            String key = entry.getKey();
-            BoostpadConfig config = entry.getValue();
-            String path = "boostpads." + key;
-            yaml.set(path + ".enabled", config.enabled());
-            yaml.set(path + ".force_x", config.forceX());
-            yaml.set(path + ".force_y", config.forceY());
-            yaml.set(path + ".force_z", config.forceZ());
-            yaml.set(path + ".delay_ms", config.delayMs());
-            yaml.set(path + ".padding", config.padding());
+            entry.getValue().writeTo(yaml.createSection("boostpads." + entry.getKey()));
             count++;
         }
         return count;
@@ -95,15 +95,13 @@ public class DrydockModule extends WakeModule {
         int count = 0;
         if (padsSec != null) {
             for (String key : padsSec.getKeys(false)) {
-                boolean enabled = padsSec.getBoolean(key + ".enabled", true);
-                double forceX = padsSec.getDouble(key + ".force_x", 0);
-                double forceY = padsSec.getDouble(key + ".force_y", 0);
-                double forceZ = padsSec.getDouble(key + ".force_z", 0);
-                long delayMs = padsSec.getLong(key + ".delay_ms", 1000);
-                double padding = padsSec.getDouble(key + ".padding", BoostpadConfig.DEFAULT_PADDING);
-                BoostpadConfig config = new BoostpadConfig(key, enabled, forceX, forceY, forceZ, delayMs, padding);
+                ConfigurationSection padSec = padsSec.getConfigurationSection(key);
+                if (padSec == null) {
+                    plugin.getLogger().warning("Skipped boostpad " + key + ": it is not a block of settings");
+                    continue;
+                }
                 try {
-                    drydockDao.importBoostpad(config);
+                    drydockDao.importBoostpad(BoostpadConfig.read(key, padSec));
                     count++;
                 } catch (Exception e) {
                     plugin.getLogger().log(Level.SEVERE, "Failed to import boostpad " + key, e);

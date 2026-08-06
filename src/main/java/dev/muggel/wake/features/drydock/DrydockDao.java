@@ -51,14 +51,17 @@ public class DrydockDao extends WakeDao {
         Map<String, BoostpadConfig> pads = new HashMap<>();
         selectByKeys("SELECT * FROM wake_drydock_boostpads", "block_key", keys, row -> {
             String key = row.getString("block_key");
+            if (key == null) {
+                return;
+            }
             pads.put(key, new BoostpadConfig(
                     key,
                     toBoolean(row.get("enabled")),
-                    ((Number) row.get("force_x")).doubleValue(),
-                    ((Number) row.get("force_y")).doubleValue(),
-                    ((Number) row.get("force_z")).doubleValue(),
-                    ((Number) row.get("delay_ms")).longValue(),
-                    ((Number) row.get("padding")).doubleValue()
+                    toDouble(row.get("force_x")),
+                    toDouble(row.get("force_y")),
+                    toDouble(row.get("force_z")),
+                    toLong(row.get("delay_ms")),
+                    toDouble(row.get("padding"))
             ));
         });
         return pads;
@@ -68,6 +71,14 @@ public class DrydockDao extends WakeDao {
         if (raw instanceof Boolean b) return b;
         if (raw instanceof Number n) return n.intValue() != 0;
         return "1".equals(String.valueOf(raw)) || "true".equalsIgnoreCase(String.valueOf(raw));
+    }
+
+    private static double toDouble(Object raw) {
+        return raw instanceof Number n ? n.doubleValue() : Double.NaN;
+    }
+
+    private static long toLong(Object raw) {
+        return raw instanceof Number n ? n.longValue() : 0L;
     }
 
     public void saveBoostpad(@NonNull BoostpadConfig config) {

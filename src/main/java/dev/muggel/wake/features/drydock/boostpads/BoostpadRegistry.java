@@ -19,7 +19,7 @@ public class BoostpadRegistry {
     private volatile Map<Material, BoostpadConfig> materialConfigs = Collections.emptyMap();
     private volatile Map<String, BoostpadConfig> publishedConfigs = Collections.emptyMap();
     private volatile double cachedMaxPadding = 0.0;
-    private Runnable onReloadCallback;
+    private @Nullable Runnable onReloadCallback;
     public BoostpadRegistry(@NonNull DrydockDao dao) {
         this.dao = dao;
         this.boostpads = dao.boostpads();
@@ -57,15 +57,16 @@ public class BoostpadRegistry {
                 Material mat = nsk != null ? Registry.MATERIAL.get(nsk) : Material.matchMaterial(entry.getKey());
                 if (mat != null) {
                     newConfigs.put(mat, cfg);
+                    maxPadding = Math.max(maxPadding, cfg.padding());
                 }
-                maxPadding = Math.max(maxPadding, cfg.padding());
             }
         }
         this.publishedConfigs = snapshot;
         this.materialConfigs = Map.copyOf(newConfigs);
         this.cachedMaxPadding = maxPadding;
-        if (this.onReloadCallback != null) {
-            this.onReloadCallback.run();
+        Runnable callback = this.onReloadCallback;
+        if (callback != null) {
+            callback.run();
         }
     }
 
@@ -89,11 +90,5 @@ public class BoostpadRegistry {
 
     public @NonNull Map<String, BoostpadConfig> cachedBoostpads() {
         return publishedConfigs;
-    }
-
-    public void refreshRegistration() {
-        if (onReloadCallback != null) {
-            onReloadCallback.run();
-        }
     }
 }

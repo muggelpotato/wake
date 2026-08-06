@@ -48,11 +48,10 @@ public class BoostpadDetectorListener implements Listener {
     private final BoostpadRegistry boostpads;
     private final Map<UUID, Map<String, Long>> lastBoostTimes = new HashMap<>();
     private final Set<UUID> jumpPresses = new HashSet<>();
-    private volatile boolean isRegistered = false;
+    private boolean isRegistered = false;
     public BoostpadDetectorListener(@NonNull Wake plugin, BoostpadRegistry boostpads) {
         this.plugin = plugin;
         this.boostpads = boostpads;
-        updateRegistration();
     }
 
     public void updateRegistration() {
@@ -100,11 +99,10 @@ public class BoostpadDetectorListener implements Listener {
     @EventHandler
     public void onVehicleMove(@NonNull VehicleMoveEvent event) {
         Map<Material, BoostpadConfig> materialConfigs = boostpads.getBoostpadConfigs();
-        if (materialConfigs.isEmpty() || !(event.getVehicle() instanceof Boat boat)) {
+        if (materialConfigs.isEmpty() || !(event.getVehicle() instanceof Boat boat) || boat.isEmpty()) {
             return;
         }
-        var passengers = boat.getPassengers();
-        if (passengers.isEmpty() || !(passengers.getFirst() instanceof Player player)) {
+        if (!(boat.getPassengers().getFirst() instanceof Player player)) {
             return;
         }
         List<PadHit> hits = findHits(boat, plugin.getVehiclePath().legs(event), materialConfigs);
@@ -126,12 +124,12 @@ public class BoostpadDetectorListener implements Listener {
             Vector legEnd = legs.at(leg + 1);
             BlockSweep sweep = CollisionGeometry.sweep(legs.at(leg), legEnd, reach, -SURFACE_DROP);
             Vector scanned = sweep.from();
-            for (int y = sweep.minY(); y <= sweep.maxY(); y++) {
-                for (int x = sweep.minX(); x <= sweep.maxX(); x++) {
-                    for (int z = sweep.minZ(); z <= sweep.maxZ(); z++) {
-                        if (!world.isChunkLoaded(x >> 4, z >> 4)) {
-                            continue;
-                        }
+            for (int x = sweep.minX(); x <= sweep.maxX(); x++) {
+                for (int z = sweep.minZ(); z <= sweep.maxZ(); z++) {
+                    if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+                        continue;
+                    }
+                    for (int y = sweep.minY(); y <= sweep.maxY(); y++) {
                         BoostpadConfig config = materialConfigs.get(world.getType(x, y, z));
                         if (config == null) {
                             continue;
@@ -158,6 +156,7 @@ public class BoostpadDetectorListener implements Listener {
         hits.sort(Comparator.comparingDouble(PadHit::progress));
         Map<String, Long> boatCooldowns = lastBoostTimes.computeIfAbsent(boat.getUniqueId(), key -> new HashMap<>(4));
         World world = boat.getWorld();
+        boolean grounded = boat.isOnGround();
         boolean cancelX = jumping && plugin.getStateDao().get(STATE_KEY_EARLY_OUT_X, DEFAULT_EARLY_OUT_X);
         boolean cancelY = jumping && plugin.getStateDao().get(STATE_KEY_EARLY_OUT_Y, DEFAULT_EARLY_OUT_Y);
         boolean cancelZ = jumping && plugin.getStateDao().get(STATE_KEY_EARLY_OUT_Z, DEFAULT_EARLY_OUT_Z);
@@ -165,7 +164,7 @@ public class BoostpadDetectorListener implements Listener {
         for (PadHit hit : hits) {
             BoostpadConfig config = hit.config();
             boolean boostPad = config.forceY() > 0;
-            if (boostPad && (firedBoostPad || !boat.isOnGround())) {
+            if (boostPad && (firedBoostPad || !grounded)) {
                 continue;
             }
             double forceX = cancelX ? 0.0 : config.forceX();
@@ -176,7 +175,7 @@ public class BoostpadDetectorListener implements Listener {
             }
             long crossedNanos = plugin.getTickClock().at(hit.progress());
             Long lastBoostNanos = boatCooldowns.get(config.blockKey());
-            if (lastBoostNanos != null && (crossedNanos - lastBoostNanos) / 1_000_000L < config.delayMs()) {
+            if (lastBoostNanos != null && crossedNanos - lastBoostNanos < config.delayMs() * 1_000_000L) {
                 continue;
             }
             boatCooldowns.put(config.blockKey(), crossedNanos);

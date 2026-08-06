@@ -26,6 +26,13 @@ public final class DrydockCommandHelper {
         return registry;
     }
 
+    public static void refreshBoostpadRegistration(@NonNull Wake plugin) {
+        DrydockModule module = plugin.getModule(DrydockModule.class);
+        if (module != null) {
+            module.refreshBoostpadRegistration();
+        }
+    }
+
     @Contract(value = "_ -> new", pure = true)
     public static @NonNull KeyArgumentType boostpadKey(@NonNull Wake plugin) {
         return KeyArgumentType.of(() -> configuredPads(plugin), "commands.drydock.boostpad.block_not_found");

@@ -9,6 +9,19 @@ module cycle, and that the pad flag and the axes ride the export round trip -- t
 carries the axes, but a pad's own `enabled` lives in the module's table and has to be checked from
 the other end.
 
+Two of them watch the export and the import rather than a command. The export is written straight out
+of `BoostpadConfig`, so one reads the record's field names out of the source and holds the export to
+them -- a component added to the record and left out of its export would go missing from every backup
+without a command ever misbehaving. The other drives the values only an edited backup can deliver: a
+delay past the ceiling the `add` argument enforces, a key that parses fine and names no block on this
+server, and a name under `boostpads` whose value is not a block of settings at all. A third writes
+straight into the table, which is the one door a row in a shape the columns do not declare comes in
+through -- and the read that trips over such a row is the read that loads every other pad.
+
+One of them asks Paper rather than Wake: what it costs a server to have the feature switched on is
+whether the move listener is registered, and only Paper can say. The switch's own half of that
+decision is drills_module.py, which cycles it; what is here is the other half, a pad that could fire.
+
 Which spellings of a block key parse and which are refused is drills_arguments.py, propagation to a
 second backend is drills_changelog.py, and the outage half -- a pad written while the database is
 unreachable, the listing a module re-enabled mid-outage prints, and the add it refuses -- is
@@ -20,21 +33,24 @@ fails here even when the table took it.
 
     python testenv/drills_drydock.py       # needs a server up (./gradlew runServer)
 
-Runs against sqlite and mariadb alike. Exits non-zero if a drill fails.
+Runs against sqlite and mariadb alike, bar the one row only sqlite will hold. Exits non-zero if a
+drill fails.
 """
 
 import argparse
 import os
 import re
+import sqlite3
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import Rcon, bad, detect_backend, failures, ok, set_module_enabled, state, step, switch  # noqa: E402
+from drills import WAKE, Rcon, bad, detect_backend, failures, ok, set_module_enabled, state, step, switch  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPORT = ROOT / "run" / "plugins" / "wake" / "exports" / "drydock_data.yml"
+RECORD = ROOT / "src" / "main" / "java" / "dev" / "muggel" / "wake" / "features" / "drydock" / "boostpads" / "BoostpadConfig.java"
 SETTLE = 1.5
 PAD = "minecraft:smooth_stone"  # a block the shipped defaults leave without a pad
 SHORT = "smooth_stone"
@@ -43,6 +59,18 @@ ORDERED = ["minecraft:sandstone", "minecraft:bookshelf", "minecraft:netherrack"]
 # stored bare, so it sorts after every "minecraft:" key while printing before "sandstone"
 FOREIGN = "prismarine"
 FOREIGN_BODY = "    enabled: true\n    force_x: 0.0\n    force_y: 0.0\n    force_z: 0.7\n    delay_ms: 250\n    padding: 1.0\n"
+# a key that parses like any other and names no block on any server, carrying a delay no argument would take
+UNKNOWN = "wake:not_a_block"
+UNKNOWN_SHORT = UNKNOWN  # only "minecraft:" is stripped for display, so a foreign namespace prints whole
+UNKNOWN_BODY = ("    enabled: true\n    force_x: 0.0\n    force_y: 0.0\n    force_z: 0.5\n"
+                "    delay_ms: 99999999999\n    padding: 4.0\n")
+CAPPED = str(2 ** 31 - 1)  # BoostpadConfig.MAX_DELAY_MS, which is the add argument's own ceiling
+# a name under boostpads whose value is not a block of settings at all
+SCALAR = "minecraft:andesite"
+SCALAR_SHORT = "andesite"
+# a row only a hand-run INSERT leaves, and only on sqlite
+MALFORMED = "wake:malformed_row"
+MOVE_EVENT = "org.bukkit.event.player.PlayerMoveEvent"
 # one listing line: the block, then the six values it is printed with
 ITEM = re.compile(r"●\s+(\S+)\s+\S+\s+(-?[\d.]+)x\s+(-?[\d.]+)y\s+(-?[\d.]+)z,\s+(\d+)ms,\s+(-?[\d.]+)")
 PARSE_ERROR = ("Incorrect argument", "Unknown or incomplete", "Expected", "Invalid block",
@@ -74,6 +102,11 @@ def order(rcon: Rcon):
     return [found[0] for found in ITEM.findall(rcon.run("dd boostpad list"))]
 
 
+def registrations(rcon: Rcon):
+    """How often VehiclePath sits on the move event, read off Paper rather than off Wake."""
+    return rcon.run(f"paper dumplisteners {MOVE_EVENT}").count("VehiclePath")
+
+
 def export(rcon: Rcon, timeout=20):
     """Writes the module's cache out and answers with the file, so a per-pad flag can be read back."""
     before = EXPORT.stat().st_mtime_ns if EXPORT.is_file() else 0
@@ -90,6 +123,66 @@ def record(text, block):
     """One exported pad, as a dict of the fields under it."""
     found = re.search(rf"(?m)^  {re.escape(block)}:\n((?:    \w+: .*\n)+)", text)
     return dict(re.findall(r"    (\w+): (.*)", found.group(1))) if found else {}
+
+
+def record_fields():
+    """The record's own component names, snake_cased the way the export writes them.
+
+    Read out of the source rather than restated here, so a field added to BoostpadConfig and left out
+    of its export fails this instead of quietly going missing from every backup.
+    """
+    header = re.search(r"record BoostpadConfig\(\s*(.*?)\n\)", RECORD.read_text(encoding="utf-8"), re.S)
+    names = [part.strip().split()[-1] for part in header.group(1).split(",")] if header else []
+    return [re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower() for name in names if name != "blockKey"]
+
+
+def graft(rcon: Rcon, addition):
+    """Writes `addition` into the boostpads section of a fresh export and imports it back."""
+    text = export(rcon)
+    if "boostpads:\n" not in text:
+        bad("the export carries no boostpads section to graft onto")
+        return False
+    EXPORT.write_text(text.replace("boostpads:\n", f"boostpads:\n{addition}", 1), encoding="utf-8")
+    rcon.run("wake database import drydock confirm")
+    time.sleep(3)
+    return True
+
+
+def write_pad_raw(block_key, force_x):
+    """Puts a boostpad row into sqlite behind the server's back, with force_x stored exactly as given."""
+    connection = sqlite3.connect(str(WAKE / "wake.db"), timeout=10)
+    try:
+        connection.execute("REPLACE INTO wake_drydock_boostpads "
+                           "(block_key, enabled, force_x, force_y, force_z, delay_ms, padding) "
+                           "VALUES (?, 1, ?, 0, 0.3, 250, 1.0)", (block_key, force_x))
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def drop_pad_raw(block_key):
+    connection = sqlite3.connect(str(WAKE / "wake.db"), timeout=10)
+    try:
+        connection.execute("DELETE FROM wake_drydock_boostpads WHERE block_key = ?", (block_key,))
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def reread_table(rcon: Rcon):
+    """Cycles the module, which is what makes the server read a row nothing announced to it.
+
+    A reload on its own will not: the store goes back to the table for the keys it was told moved, and a row
+    written behind its back moved none. Disabling drops the store, and enabling builds one that has never read.
+    """
+    set_module_enabled("drydock", False)
+    try:
+        rcon.run("wake reload")
+        time.sleep(2)
+    finally:
+        set_module_enabled("drydock", True)
+        rcon.run("wake reload")
+        time.sleep(3)
 
 
 def axis_key(axis):
@@ -200,14 +293,8 @@ def drill_foreign_key_row(rcon: Rcon, mariadb):
     second server or a hand-edited backup would leave: the same block, under a name no argument parses to.
     """
     step("a pad stored under a key no command would have written")
-    text = export(rcon)
-    if "boostpads:\n" not in text:
-        bad("the export carries no boostpads section to graft onto")
+    if not graft(rcon, f"  {FOREIGN}:\n{FOREIGN_BODY}"):
         return
-    (ROOT / "run" / "plugins" / "wake" / "exports" / "drydock_data.yml").write_text(
-        text.replace("boostpads:\n", f"boostpads:\n  {FOREIGN}:\n{FOREIGN_BODY}", 1), encoding="utf-8")
-    rcon.run("wake database import drydock confirm")
-    time.sleep(3)
     try:
         stored = export(rcon)
         truthy("it is in the table under the bare name", record(stored, FOREIGN).get("force_z") == "0.7",
@@ -250,6 +337,147 @@ def drill_foreign_key_row(rcon: Rcon, mariadb):
     finally:
         rcon.run(f"dd boostpad remove {FOREIGN}")
         rcon.run("dd boostpad remove minecraft:sandstone")
+        time.sleep(SETTLE)
+
+
+def drill_export_carries_the_record(rcon: Rcon, mariadb):
+    """The export is written out of BoostpadConfig, so what the record declares is what a backup holds.
+
+    The first half reads the field names out of the source: a component added to the record and left
+    out of its export would go missing from every backup silently, which is the one way this can break
+    without anybody noticing. The second half drives the round trip that carries them.
+    """
+    step("the export writes exactly the fields the record declares")
+    rcon.run(f"dd boostpad add {PAD} -0.25 0.75 0.4 250 1.5")
+    time.sleep(SETTLE)
+    try:
+        declared = record_fields()
+        before = record(export(rcon), PAD)
+        truthy("the record has fields to check", len(declared) > 1, str(declared))
+        truthy("and the export carries every one of them and nothing else", set(before) == set(declared),
+               f"{sorted(before)} != {sorted(declared)}")
+
+        step("and every one of them survives a round trip, not just the ones a listing prints")
+        rcon.run(f"dd boostpad add {PAD} 0 0 0 0 0")
+        rcon.run(f"dd boostpad toggle {PAD}")
+        time.sleep(SETTLE)
+        truthy("the pad really was changed first",
+               pads(rcon).get(SHORT) == ("0.00", "0.00", "0.00", "0", "0.00"), str(pads(rcon).get(SHORT)))
+        rcon.run("wake database import drydock confirm")
+        time.sleep(3)
+        after = record(export(rcon), PAD)
+        truthy("it came back field for field", after == before, f"{after} != {before}")
+    finally:
+        rcon.run(f"dd boostpad remove {PAD}")
+        time.sleep(SETTLE)
+
+
+def drill_imported_row_repair(rcon: Rcon, mariadb):
+    """Import is the one door a value no argument would have taken can come in through.
+
+    An edited backup is where a delay past the argument's ceiling, a key that names no block on this
+    server, and an entry that is not a block of settings at all all arrive from. The record repairs the
+    first, the registry has to tolerate the second, and the import has to refuse the third rather than
+    invent a pad with no force from it.
+    """
+    step("a delay past what the argument allows comes back at the cap")
+    if not graft(rcon, f"  {UNKNOWN}:\n{UNKNOWN_BODY}  {SCALAR}: nonsense\n"):
+        return
+    try:
+        stored = record(export(rcon), UNKNOWN)
+        truthy("the delay was clamped rather than stored whole", stored.get("delay_ms") == CAPPED, str(stored))
+        listed = pads(rcon).get(UNKNOWN_SHORT)
+        truthy("and the listing prints the clamped number", listed and listed[3] == CAPPED, str(listed))
+
+        step("a key that names no block here is still a row every command can reach")
+        truthy("the rest of it survived the import", stored.get("force_z") == "0.5", str(stored))
+        reply = rcon.run(f"dd boostpad toggle {UNKNOWN}")
+        time.sleep(SETTLE)
+        truthy("toggle reaches it", "not in the boostpad list" not in reply, reply.strip()[:160])
+        truthy("and the switch landed on it", record(export(rcon), UNKNOWN).get("enabled") == "false",
+               str(record(export(rcon), UNKNOWN)))
+
+        step("while an entry that is not a block of settings is skipped rather than made into a pad")
+        truthy("no row was invented for it", not record(export(rcon), SCALAR), str(record(export(rcon), SCALAR)))
+        truthy("and the listing does not print one", SCALAR_SHORT not in order(rcon), str(order(rcon)))
+    finally:
+        rcon.run(f"dd boostpad remove {UNKNOWN}")
+        rcon.run(f"dd boostpad remove {SCALAR}")
+        time.sleep(SETTLE)
+
+
+def drill_malformed_row(rcon: Rcon, mariadb):
+    """One row in a shape the columns do not declare must cost that pad and no other.
+
+    SQLite keeps whatever was written into a column whatever the column says, so a hand-run INSERT can leave
+    text where a force belongs -- and the read that trips over it is the read that loads every pad there is.
+    MariaDB refuses the same row outright, so there is nothing to drill on that backend.
+    """
+    if mariadb:
+        print("  skipped: mariadb refuses a row in the wrong shape, so there is none to read back")
+        return
+    step("a force column holding text leaves that pad inert and every other one alone")
+    rcon.run(f"dd boostpad add {PAD} 0 0 .4 250 1")
+    write_pad_raw(MALFORMED, "nonsense")
+    reread_table(rcon)
+    try:
+        listing = rcon.run("dd boostpad list")
+        truthy("the table was still read", "has not been read" not in listing, listing[:200])
+        listed = pads(rcon)
+        truthy("the pad beside it came back whole",
+               listed.get(SHORT) == ("0.00", "0.00", "0.40", "250", "1.00"), str(listed.get(SHORT)))
+        truthy("and the malformed row is listed with no force rather than dropped",
+               listed.get(MALFORMED) == ("0.00", "0.00", "0.30", "250", "1.00"), str(listed.get(MALFORMED)))
+        truthy("the export reads it the same way",
+               record(export(rcon), MALFORMED).get("force_x") == "0.0", str(record(export(rcon), MALFORMED)))
+    finally:
+        rcon.run(f"dd boostpad remove {PAD}")
+        drop_pad_raw(MALFORMED)
+        reread_table(rcon)
+
+
+def drill_registration_needs_a_pad(rcon: Rcon, mariadb):
+    """The switch being on is not enough to be worth listening for -- a pad has to be able to fire.
+
+    A server with none configured, or with nothing but pads naming a block it does not have, must not sit on
+    the busiest event in the game for something that can never happen. Paper is asked rather than Wake,
+    because the cost this avoids is Paper's to report. The switch's own half of the same decision, and the
+    module cycle around it, are drills_module.py.
+    """
+    step("a pad naming a block this server does not have does not make the listener worth registering")
+    was_on = switch(rcon.run("dd boostpad list")) == "enabled"
+    # grafts onto a fresh export, which doubles as the file every pad removed below is put back from
+    if not graft(rcon, f"  {UNKNOWN}:\n{UNKNOWN_BODY}"):
+        return
+    try:
+        if not was_on:
+            rcon.run("dd boostpad toggle")
+        time.sleep(SETTLE)
+        truthy("a real pad and the switch on registers it once", registrations(rcon) == 1,
+               f"{registrations(rcon)} registration(s)")
+        for block in order(rcon):
+            if block != UNKNOWN_SHORT:
+                rcon.run(f"dd boostpad remove minecraft:{block}")
+        time.sleep(SETTLE)
+        truthy("the unknown key is all that is left", order(rcon) == [UNKNOWN_SHORT], str(order(rcon)))
+        truthy("and nothing is registered for it", registrations(rcon) == 0,
+               f"{registrations(rcon)} registration(s)")
+
+        step("the first pad that names a real block claims it back, the last one gone gives it up again")
+        rcon.run(f"dd boostpad add {PAD} 0 0 .4 250 1")
+        time.sleep(SETTLE)
+        truthy("one registration once a pad can fire", registrations(rcon) == 1,
+               f"{registrations(rcon)} registration(s)")
+        rcon.run(f"dd boostpad remove {PAD}")
+        time.sleep(SETTLE)
+        truthy("and none once it is gone", registrations(rcon) == 0, f"{registrations(rcon)} registration(s)")
+    finally:
+        rcon.run(f"dd boostpad remove {PAD}")
+        rcon.run("wake database import drydock confirm")
+        time.sleep(3)
+        rcon.run(f"dd boostpad remove {UNKNOWN}")
+        if (switch(rcon.run("dd boostpad list")) == "enabled") != was_on:
+            rcon.run("dd boostpad toggle")
         time.sleep(SETTLE)
 
 
@@ -375,8 +603,9 @@ def main():
 
     try:
         for drill in [drill_add_round_trip, drill_add_edits, drill_listing, drill_foreign_key_row,
-                      drill_config_switches, drill_switches_survive_reload, drill_module_cycle,
-                      drill_export_round_trip]:
+                      drill_export_carries_the_record, drill_imported_row_repair, drill_malformed_row,
+                      drill_registration_needs_a_pad, drill_config_switches, drill_switches_survive_reload,
+                      drill_module_cycle, drill_export_round_trip]:
             print(f"\n{drill.__name__.removeprefix('drill_').replace('_', ' ')}")
             drill(rcon, mariadb)
     except RuntimeError as error:

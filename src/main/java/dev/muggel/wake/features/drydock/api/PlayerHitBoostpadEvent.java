@@ -15,7 +15,7 @@ public class PlayerHitBoostpadEvent extends Event {
     private final double forceX;
     private final double forceY;
     private final double forceZ;
-    public PlayerHitBoostpadEvent(Player player, Boat boat, Block block, double forceX, double forceY, double forceZ) {
+    public PlayerHitBoostpadEvent(@NonNull Player player, @NonNull Boat boat, @NonNull Block block, double forceX, double forceY, double forceZ) {
         this.player = player;
         this.boat = boat;
         this.block = block;
@@ -24,17 +24,15 @@ public class PlayerHitBoostpadEvent extends Event {
         this.forceZ = forceZ;
     }
 
-    public Player getPlayer() {
+    public @NonNull Player getPlayer() {
         return player;
     }
 
-    @SuppressWarnings("unused")
-    public Boat getBoat() {
+    public @NonNull Boat getBoat() {
         return boat;
     }
 
-    @SuppressWarnings("unused")
-    public Block getBlock() {
+    public @NonNull Block getBlock() {
         return block;
     }
 
@@ -51,7 +49,7 @@ public class PlayerHitBoostpadEvent extends Event {
     }
 
     @SuppressWarnings("unused")
-    public static HandlerList getHandlerList() {
+    public static @NonNull HandlerList getHandlerList() {
         return HANDLERS;
     }
 
