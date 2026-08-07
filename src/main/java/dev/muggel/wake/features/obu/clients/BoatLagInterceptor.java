@@ -3,6 +3,7 @@ package dev.muggel.wake.features.obu.clients;
 import com.github.retrooper.packetevents.event.PacketListenerAbstract;
 import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import dev.muggel.wake.Wake;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -18,9 +19,13 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class BoatLagInterceptor extends PacketListenerAbstract implements Listener {
+    public static final String STATE_KEY_BOAT_LAG_FIX = "obu.boat_lag_fix";
+    public static final boolean DEFAULT_BOAT_LAG_FIX = true;
     private final Set<UUID> boatRiders = ConcurrentHashMap.newKeySet();
+    private final Wake plugin;
     private final ClientRegistry clients;
-    public BoatLagInterceptor(@NonNull ClientRegistry clients) {
+    public BoatLagInterceptor(@NonNull Wake plugin, @NonNull ClientRegistry clients) {
+        this.plugin = plugin;
         this.clients = clients;
     }
 
@@ -51,7 +56,7 @@ public class BoatLagInterceptor extends PacketListenerAbstract implements Listen
 
     @Override
     public void onPacketSend(@NonNull PacketSendEvent event) {
-        if (event.getPacketType() != PacketType.Play.Server.VEHICLE_MOVE || boatRiders.isEmpty()) {
+        if (event.getPacketType() != PacketType.Play.Server.VEHICLE_MOVE || boatRiders.isEmpty() || !plugin.getStateDao().get(STATE_KEY_BOAT_LAG_FIX, DEFAULT_BOAT_LAG_FIX)) {
             return;
         }
         UUID uuid = event.getUser().getUUID();

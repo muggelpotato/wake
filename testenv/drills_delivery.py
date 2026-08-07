@@ -617,14 +617,34 @@ def drill_purge():
         rcon.run(f"kill @e[tag={TAG}]")
 
 
-def drill_persistence_switch():
-    """The one delivery setting an admin can change, and the answer it owes."""
-    before = run("wobu -settings persistence true")
-    truthy("persistence on names the feature", "persistent player states" in before.lower() and "enabled" in before.lower(),
-           before.strip()[:200])
-    after = run("wobu -settings persistence false")
-    truthy("and off says disabled", "disabled" in after.lower(), after.strip()[:200])
-    rcon.run("wobu -settings persistence true")
+def drill_settings_switches():
+    """Every switch `-settings` carries, the answer it owes, and the row it has to land in.
+
+    Neither one shows from a console -- persistence only on a relog, the lag fix only on a client
+    computing its own physics -- so a key the command writes but nothing reads would still reply
+    `enabled`. The export is what binds the two: it sweeps the module's prefix, so the value set here
+    has to come back out under the name the reader asks for."""
+    switches = {"persistence": ("persistent player states", "persistent_player_states"),
+                "boat-lag-fix": ("boat lag fix", "boat_lag_fix")}
+    try:
+        for literal, (feature, _) in switches.items():
+            on = run(f"wobu -settings {literal} true")
+            truthy(f"{literal} on names the feature", feature in on.lower() and "enabled" in on.lower(), on.strip()[:200])
+            off = run(f"wobu -settings {literal} false")
+            truthy(f"and {literal} off says disabled", "disabled" in off.lower(), off.strip()[:200])
+
+        step("and each one landed under the key its reader defaults")
+        log = Log()
+        rcon.run("wake database export obu")
+        if not log.await_line("Database export completed for module obu", 30):
+            bad("the export never finished, so no row could be read back")
+            return
+        text = EXPORT.read_text(encoding="utf-8", errors="replace")
+        for literal, (_, key) in switches.items():
+            truthy(f"{literal} wrote {key}", f"{key}: false" in text, text[:400])
+    finally:
+        for literal in switches:
+            rcon.run(f"wobu -settings {literal} true")
 
 
 def main():
@@ -650,7 +670,7 @@ def main():
                       drill_publish_collision, drill_context_listing,
                       drill_context_delete, drill_pinned_to_a_deleted_context,
                       drill_publish_under_a_pinned_boat, drill_sweep_over_pinned_boats,
-                      drill_keep_window, drill_purge, drill_persistence_switch]:
+                      drill_keep_window, drill_purge, drill_settings_switches]:
             print(f"\n{drill.__name__.removeprefix('drill_').replace('_', ' ')}")
             drill()
     except RuntimeError as error:

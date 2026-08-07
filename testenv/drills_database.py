@@ -30,6 +30,7 @@ from drills import (JOURNAL, Log, Rcon, await_file, bad, detect_backend, failure
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPORTS = ROOT / "run" / "plugins" / "wake" / "exports"
+SEED = ROOT / "src" / "main" / "resources" / "defaults" / "obu_default.yml"
 # the reply reaches the sender after the command returned, so the console line is what a script can read
 COMPLETED = re.compile(r"Database (\w+) completed for module (\w+) \((\d+) records\)")
 SETTLE = 1.5
@@ -272,8 +273,10 @@ def drill_obu_export_shape(rcon: Rcon, log: Log, mariadb):
     contexts = len(re.findall(r"(?m)^ {2}[\w@-]+:(?: \{\})?$", text))
     truthy("the contexts are under server:, none of them carrying a type: key",
            "server:" in text and "type:" not in text, text[:200])
-    truthy("the state prefix came along, swept rather than named",
-           "persistent_player_states" in switches and "keep_unused_sandboxes" in switches, repr(switches))
+    # read the switches out of the jar's own defaults, so a new one is covered the day it is seeded
+    seeded = re.findall(r"(?m)^ {2}(\w+):", section(SEED.read_text(encoding="utf-8"), "obu"))
+    truthy("every switch the defaults carry came along, swept rather than named",
+           seeded and all(f"{key}:" in switches for key in seeded), f"{seeded} vs {switches!r}")
     entries = len(re.findall(r"(?m)^ {2}\w+:", switches))
     truthy(f"the count is contexts + switches, swept once ({contexts} + {entries})", count == contexts + entries,
            f"reported {count}")

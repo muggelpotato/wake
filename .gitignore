@@ -16,5 +16,6 @@ run/
 
 # Test environment
 testenv/paper2/
+testenv/__pycache__/
 *PLAN*.md
 OBUSOURCE

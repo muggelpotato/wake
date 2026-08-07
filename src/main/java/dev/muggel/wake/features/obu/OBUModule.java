@@ -64,7 +64,7 @@ public class OBUModule extends WakeModule {
         HandshakeListener handshakeListener = new HandshakeListener(plugin, delivery, contextManager, syncManager, clients);
         registerListener(handshakeListener);
         registerPacketListener(handshakeListener);
-        BoatLagInterceptor boatLagInterceptor = new BoatLagInterceptor(clients);
+        BoatLagInterceptor boatLagInterceptor = new BoatLagInterceptor(plugin, clients);
         registerListener(boatLagInterceptor);
         registerPacketListener(boatLagInterceptor);
         for (Player player : Bukkit.getOnlinePlayers()) {

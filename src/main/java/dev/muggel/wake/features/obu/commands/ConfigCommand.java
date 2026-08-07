@@ -6,6 +6,7 @@ import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.features.obu.clients.BoatLagInterceptor;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager.ContextCounts;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import dev.muggel.wake.features.obu.contexts.SandboxPurger;
@@ -23,6 +24,7 @@ public class ConfigCommand {
                 .withoutPresets()
                 .withGate(CommandNode.Gate.OPEN)
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "persistence", ContextDelivery.STATE_KEY_PERSISTENT_STATES, "words.feature.persistent_states"))
+                .addSubcommand(CommandHelper.toggleCommand(plugin, "boat-lag-fix", BoatLagInterceptor.STATE_KEY_BOAT_LAG_FIX, "words.feature.boat_lag_fix"))
                 .addSubcommand(CommandNode.literal("keep-unused-sandboxes")
                         .arguments(CommandNode.argument("duration", StringArgumentType.string())
                                 .executesSender((ctx, sender) -> executeKeepUnused(ctx, plugin))))
