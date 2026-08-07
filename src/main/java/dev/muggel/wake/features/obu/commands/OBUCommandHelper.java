@@ -54,7 +54,7 @@ public final class OBUCommandHelper {
         return loaded(module(plugin).getActiveContexts());
     }
 
-    public static @NonNull ClientRegistry clients(@NonNull Wake plugin) {
+    private static @NonNull ClientRegistry clients(@NonNull Wake plugin) {
         return loaded(module(plugin).getClients());
     }
 
@@ -86,12 +86,12 @@ public final class OBUCommandHelper {
     public static @Nullable OBUContext resolveForSubject(@NonNull Wake plugin, @NonNull CommandSender subject, @NonNull String name) {
         OBUContextManager contextManager = contexts(plugin);
         OBUContext context = contextManager.getContext(name);
-        if (context != null && !(context.isSandbox() && subject instanceof Player)) {
+        if (!(subject instanceof Player owner)) {
             return context;
         }
-        return subject instanceof Player owner
-                ? contextManager.getContext(OBUContextManager.sandboxKey(name, owner.getUniqueId()))
-                : null;
+        return context != null && !context.isSandbox()
+                ? context
+                : contextManager.getContext(OBUContextManager.sandboxKey(name, owner.getUniqueId()));
     }
 
     public static @NonNull List<String> displayArgs(@NonNull OBUSetting setting) {

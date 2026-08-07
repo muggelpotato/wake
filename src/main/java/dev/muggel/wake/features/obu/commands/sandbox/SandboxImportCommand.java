@@ -9,13 +9,13 @@ import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
-import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -33,16 +33,15 @@ public class SandboxImportCommand {
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, CommandSender subject, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        ContextDelivery service = OBUCommandHelper.delivery(plugin);
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         String name = StringArgumentType.getString(ctx, "name");
         String code = StringArgumentType.getString(ctx, "shareCode");
         String decodedStr;
         try {
             decodedStr = SandboxCommandHelper.decodeShareCode(code);
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to decode share code", e);
-            String reason = (e.getMessage() != null) ? e.getMessage() : e.getClass().getSimpleName();
+        } catch (IOException | IllegalArgumentException badCode) {
+            plugin.getLogger().log(Level.WARNING, "Failed to decode share code", badCode);
+            String reason = badCode.getMessage() != null ? badCode.getMessage() : badCode.getClass().getSimpleName();
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.import_fail", Placeholder.unparsed("error", reason));
             return 0;
         }
@@ -85,7 +84,7 @@ public class SandboxImportCommand {
         }
         plugin.getMessageManager().send(sender, "commands.obu.sandbox.imported", Placeholder.unparsed("sandbox", name));
         if (subject instanceof Player p) {
-            SandboxCommandHelper.enterSandbox(p, key, service, plugin);
+            SandboxCommandHelper.enterSandbox(plugin, p, key);
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.switched", Placeholder.unparsed("sandbox", name));
             SandboxCommandHelper.sendHintIfEnabled(plugin, sender);
         }

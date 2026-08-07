@@ -148,7 +148,6 @@ commands:
       none_active: "<prefix><danger>You are not currently in a sandbox</danger>"
       exited: "<prefix><neutral>Exited sandbox</neutral>"
       switched: "<prefix><neutral>Switched to sandbox <accent><sandbox></accent></neutral>"
-      export_fail: "<prefix><danger>Failed to export sandbox: <accent><error></accent></danger>"
       import_fail: "<prefix><danger>Failed to import sandbox: <accent><error></accent></danger>"
       imported: "<prefix><neutral>Imported sandbox <accent><sandbox></accent></neutral>"
       import_skipped: "<prefix><danger>Skipped <accent><count></accent> invalid settings from the share code</danger>"

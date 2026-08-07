@@ -91,13 +91,9 @@ public class ContextCommand {
             service.setPlayerActiveSandbox(p, null);
             service.applyContext(p, context);
             OBUCommandHelper.sync(plugin).syncPlayer(p);
-            String leftSandbox = previousSandbox != null && !previousSandbox.equals(context.name()) ? previousSandbox : null;
-            if (leftSandbox != null) {
-                plugin.getMessageManager().send(p, "commands.obu.context.applied_from_sandbox",
-                        Placeholder.unparsed("sandbox", OBUContextManager.displayName(leftSandbox)),
-                        Placeholder.unparsed("context", shownName));
-            }
-            if (leftSandbox == null || !p.equals(sender)) {
+            if (previousSandbox != null && p.equals(sender)) {
+                plugin.getMessageManager().send(sender, "commands.obu.context.applied_from_sandbox", Placeholder.unparsed("sandbox", OBUContextManager.displayName(previousSandbox)), Placeholder.unparsed("context", shownName));
+            } else {
                 plugin.getMessageManager().send(sender, "commands.obu.context.applied", Placeholder.unparsed("context", shownName), Placeholder.component("target", OBUCommandHelper.targetName(plugin, p, sender)));
             }
         } else if (target instanceof Boat boat) {

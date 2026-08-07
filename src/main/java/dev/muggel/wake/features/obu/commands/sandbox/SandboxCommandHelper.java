@@ -10,7 +10,6 @@ import dev.muggel.wake.core.commands.arguments.NameArgumentType;
 import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
-import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
@@ -24,7 +23,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.zip.GZIPInputStream;
@@ -38,16 +36,9 @@ final class SandboxCommandHelper {
         CommandHelper.sendHint(plugin, sender, "commands.obu.sandbox.hint");
     }
 
-    static String sandboxKeyFor(CommandSender subject, @NonNull String name) {
-        return subject instanceof Player p ? OBUContextManager.sandboxKey(name, p.getUniqueId()) : name.toLowerCase(Locale.ROOT);
-    }
-
-    static @Nullable UUID ownerOf(CommandSender subject) {
-        return subject instanceof Player p ? p.getUniqueId() : null;
-    }
-
     static @Nullable OBUContext requireOwnSandbox(@NonNull Wake plugin, CommandSender sender, CommandSender subject, @NonNull String name) {
-        OBUContext context = OBUCommandHelper.contexts(plugin).getContext(sandboxKeyFor(subject, name));
+        String key = subject instanceof Player owner ? OBUContextManager.sandboxKey(name, owner.getUniqueId()) : name;
+        OBUContext context = OBUCommandHelper.contexts(plugin).getContext(key);
         if (context == null || !context.isSandbox()) {
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.missing", Placeholder.unparsed("sandbox", name));
             return null;
@@ -63,9 +54,9 @@ final class SandboxCommandHelper {
         return OBUCommandHelper.suggestContexts(ctx, builder, plugin, OBUContext::isSandbox);
     }
 
-    static void enterSandbox(Player player, String key, @NonNull ContextDelivery service, Wake plugin) {
+    static void enterSandbox(@NonNull Wake plugin, @NonNull Player player, @NonNull String key) {
         OBUSyncManager sync = OBUCommandHelper.sync(plugin);
-        service.setPlayerActiveSandbox(player, key);
+        OBUCommandHelper.delivery(plugin).setPlayerActiveSandbox(player, key);
         sync.clearLocalOverrides(player.getUniqueId());
         sync.syncPlayer(player);
     }
@@ -75,8 +66,9 @@ final class SandboxCommandHelper {
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.reserved", Placeholder.unparsed("sandbox", name));
             return null;
         }
-        String key = sandboxKeyFor(subject, name);
-        if (!OBUCommandHelper.contexts(plugin).createSandbox(key, ownerOf(subject))) {
+        UUID owner = subject instanceof Player player ? player.getUniqueId() : null;
+        String key = owner == null ? name : OBUContextManager.sandboxKey(name, owner);
+        if (!OBUCommandHelper.contexts(plugin).createSandbox(key, owner)) {
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.exists", Placeholder.unparsed("sandbox", name));
             return null;
         }

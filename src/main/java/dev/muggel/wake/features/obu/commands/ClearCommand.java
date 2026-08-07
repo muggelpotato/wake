@@ -43,18 +43,19 @@ public class ClearCommand {
             return builder.buildFuture();
         }
         OBUSyncManager sync = OBUCommandHelper.sync(plugin);
-        OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
-        String sandboxName = OBUCommandHelper.active(plugin).sandboxOf(player.getUniqueId());
-        Map<String, OBUSetting> active = new HashMap<>();
-        if (sandboxName != null) {
-            OBUContext base = contextManager.getContext(sandboxName);
-            if (base != null) {
-                for (OBUSetting s : base.settings()) active.put(s.uniqueKey(), s);
+        Map<String, OBUSetting> clearable = new HashMap<>();
+        if (player.getTargetEntity(CommandNode.TargetType.AIM_DISTANCE) instanceof Boat boat) {
+            clearable.putAll(sync.getLocalOverrides(boat.getUniqueId()));
+        } else {
+            String sandboxName = OBUCommandHelper.active(plugin).sandboxOf(player.getUniqueId());
+            OBUContext sandbox = sandboxName == null ? null : OBUCommandHelper.contexts(plugin).getContext(sandboxName);
+            if (sandbox != null) {
+                for (OBUSetting s : sandbox.settings()) clearable.put(s.uniqueKey(), s);
             }
+            clearable.putAll(sync.getLocalOverrides(player.getUniqueId()));
         }
-        active.putAll(sync.getLocalOverrides(player.getUniqueId()));
         return CommandHelper.suggestMatching(builder,
-                active.values().stream().map(s -> s.definition().name()).distinct().toList());
+                clearable.values().stream().map(s -> s.definition().name()).distinct().toList());
     }
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, @NonNull Entity target, Wake plugin) {
@@ -67,78 +68,64 @@ public class ClearCommand {
         Predicate<OBUSetting> matches = def != null
                 ? s -> s.definition() == def
                 : s -> s.uniqueKey().equals(settingKey);
-        var overrides = sync.getLocalOverrides(target.getUniqueId());
+        Map<String, OBUSetting> overrides = sync.getLocalOverrides(target.getUniqueId());
         boolean cleared = false;
-        String defNameForMessage = def != null ? def.name() : settingKey;
+        String settingName = def != null ? def.name() : settingKey;
+        List<OBUSetting> matchedOverrides = overrides.values().stream().filter(matches).toList();
+        if (!matchedOverrides.isEmpty()) {
+            settingName = matchedOverrides.getFirst().definition().name();
+            for (OBUSetting s : matchedOverrides) {
+                sync.removeLocalOverride(target.getUniqueId(), s.uniqueKey());
+            }
+            plugin.getMessageManager().send(sender, "commands.obu.clear.temp", Placeholder.unparsed("setting", settingName), Placeholder.component("target", OBUCommandHelper.targetPossessive(plugin, target, sender)));
+            cleared = true;
+        }
         if (target instanceof Player player) {
             String sandboxName = active.sandboxOf(player.getUniqueId());
-            List<OBUSetting> matchedOverrides = overrides.values().stream().filter(matches).toList();
-            if (!matchedOverrides.isEmpty()) {
-                defNameForMessage = matchedOverrides.getFirst().definition().name();
-                for (OBUSetting s : matchedOverrides) {
-                    sync.removeLocalOverride(player.getUniqueId(), s.uniqueKey());
-                }
-                plugin.getMessageManager().send(sender, "commands.obu.clear.temp", Placeholder.unparsed("setting", defNameForMessage), Placeholder.component("target", OBUCommandHelper.targetPossessive(plugin, player, sender)));
-                cleared = true;
-            }
             if (sandboxName != null) {
                 OBUContext sandbox = contextManager.getContext(sandboxName);
                 if (sandbox != null) {
                     boolean sandboxCleared = false;
                     for (OBUSetting s : sandbox.settings()) {
                         if (matches.test(s) && contextManager.removeContextSetting(sandboxName, s.uniqueKey())) {
-                            defNameForMessage = s.definition().name();
+                            settingName = s.definition().name();
                             sandboxCleared = true;
                         }
                     }
                     if (sandboxCleared) {
-                        plugin.getMessageManager().send(sender, "commands.obu.clear.sandbox", Placeholder.unparsed("setting", defNameForMessage), Placeholder.unparsed("sandbox", OBUContextManager.displayName(sandboxName)));
+                        plugin.getMessageManager().send(sender, "commands.obu.clear.sandbox", Placeholder.unparsed("setting", settingName), Placeholder.unparsed("sandbox", OBUContextManager.displayName(sandboxName)));
                         cleared = true;
                     }
                 }
-            } else if (!cleared) {
-                String baseName = active.contextOf(player.getUniqueId());
-                boolean isBase = false;
-                OBUContext base = contextManager.getContext(baseName);
-                if (base != null) {
-                    isBase = base.settings().stream().anyMatch(matches);
-                }
-                if (!isBase && OBUContextManager.inheritsDefault(baseName)) {
-                    OBUContext defaults = contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT);
-                    if (defaults != null) {
-                        isBase = defaults.settings().stream().anyMatch(matches);
-                    }
-                }
-                if (isBase) {
-                    plugin.getMessageManager().send(sender, "commands.obu.clear.base_blocked", Placeholder.unparsed("setting", defNameForMessage));
-                    return 0;
-                }
+            } else if (!cleared && inBaseContext(contextManager, active.contextOf(player.getUniqueId()), matches)) {
+                plugin.getMessageManager().send(sender, "commands.obu.clear.base_blocked", Placeholder.unparsed("setting", settingName));
+                return 0;
             }
             if (cleared) {
                 sync.syncPlayer(player);
             }
-        } else if (target instanceof Boat boat) {
-            List<OBUSetting> matchedOverrides = overrides.values().stream().filter(matches).toList();
-            if (!matchedOverrides.isEmpty()) {
-                defNameForMessage = matchedOverrides.getFirst().definition().name();
-                for (OBUSetting s : matchedOverrides) {
-                    sync.removeLocalOverride(boat.getUniqueId(), s.uniqueKey());
-                }
-                plugin.getMessageManager().send(sender, "commands.obu.clear.temp", Placeholder.unparsed("setting", defNameForMessage), Placeholder.component("target", OBUCommandHelper.targetPossessive(plugin, boat, sender)));
-                cleared = true;
-            }
-            if (cleared) {
-                sync.broadcastSync(boat);
-            }
+        } else if (cleared && target instanceof Boat boat) {
+            sync.broadcastSync(boat);
         }
         if (!cleared) {
             if (def == null) {
                 plugin.getMessageManager().send(sender, "commands.obu.clear.unknown", Placeholder.unparsed("setting", settingKey));
                 return 0;
             }
-            plugin.getMessageManager().send(sender, "commands.obu.clear.missing", Placeholder.unparsed("setting", defNameForMessage), Placeholder.component("target", OBUCommandHelper.targetPossessive(plugin, target, sender)));
+            plugin.getMessageManager().send(sender, "commands.obu.clear.missing", Placeholder.unparsed("setting", settingName), Placeholder.component("target", OBUCommandHelper.targetPossessive(plugin, target, sender)));
             return 0;
         }
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static boolean inBaseContext(@NonNull OBUContextManager contextManager, @NonNull String baseName, @NonNull Predicate<OBUSetting> matches) {
+        OBUContext base = contextManager.getContext(baseName);
+        if (base != null && base.settings().stream().anyMatch(matches)) {
+            return true;
+        }
+        OBUContext defaults = OBUContextManager.inheritsDefault(baseName)
+                ? contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT)
+                : null;
+        return defaults != null && defaults.settings().stream().anyMatch(matches);
     }
 }

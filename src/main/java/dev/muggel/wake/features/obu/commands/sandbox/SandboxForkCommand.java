@@ -9,7 +9,6 @@ import dev.muggel.wake.core.commands.arguments.NameArgumentType;
 import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
-import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
@@ -28,7 +27,6 @@ public class SandboxForkCommand {
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, CommandSender subject, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        ContextDelivery service = OBUCommandHelper.delivery(plugin);
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         String contextToLoad = StringArgumentType.getString(ctx, "contextToLoad");
         String newName = StringArgumentType.getString(ctx, "newName");
@@ -44,7 +42,7 @@ public class SandboxForkCommand {
         contextManager.addSettings(newKey, sourceContext.settings());
         plugin.getMessageManager().send(sender, "commands.obu.sandbox.forked", Placeholder.unparsed("source", OBUContextManager.displayName(sourceContext.name())), Placeholder.unparsed("sandbox", newName));
         if (subject instanceof Player p) {
-            SandboxCommandHelper.enterSandbox(p, newKey, service, plugin);
+            SandboxCommandHelper.enterSandbox(plugin, p, newKey);
             plugin.getMessageManager().send(sender, "commands.obu.sandbox.switched", Placeholder.unparsed("sandbox", newName));
             SandboxCommandHelper.sendHintIfEnabled(plugin, sender);
         }

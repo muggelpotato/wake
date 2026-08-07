@@ -20,9 +20,9 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class DefaultsCommand {
@@ -35,8 +35,9 @@ public class DefaultsCommand {
     }
 
     private static @NonNull CompletableFuture<Suggestions> suggestSetting(CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
-        return CommandHelper.suggestMatching(builder,
-                Arrays.stream(OBUDefinition.values()).map(OBUDefinition::commandName).toList());
+        return CommandHelper.suggestMatching(builder, Arrays.stream(OBUDefinition.values())
+                .filter(def -> def.defaultValue() != null)
+                .map(OBUDefinition::commandName).toList());
     }
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, CommandSender subject, Wake plugin) {
@@ -57,62 +58,41 @@ public class DefaultsCommand {
         ActiveContexts active = OBUCommandHelper.active(plugin);
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         String sandboxName = active.sandboxOf(player.getUniqueId());
-        String baseName = active.contextOf(player.getUniqueId());
-        Map<String, OBUSetting> overrides = OBUCommandHelper.sync(plugin).getLocalOverrides(player.getUniqueId());
-        OBUSetting effectiveSetting;
-        boolean isServerDefault = false;
         int id = def.id();
-        effectiveSetting = overrides.values().stream().filter(s -> s.definition().id() == id).findFirst().orElse(null);
+        OBUSetting effectiveSetting = OBUCommandHelper.sync(plugin).getLocalOverrides(player.getUniqueId()).values().stream().filter(s -> s.definition().id() == id).findFirst().orElse(null);
+        boolean isServerDefault = false;
         if (effectiveSetting == null && sandboxName != null) {
-            OBUContext sb = contextManager.getContext(sandboxName);
-            if (sb != null) {
-                for (OBUSetting s : sb.settings()) {
-                    if (s.definition().id() == id) {
-                        effectiveSetting = s;
-                        break;
-                    }
-                }
+            effectiveSetting = settingOf(contextManager.getContext(sandboxName), id);
+        }
+        if (effectiveSetting == null && sandboxName == null) {
+            String baseName = active.contextOf(player.getUniqueId());
+            effectiveSetting = settingOf(contextManager.getContext(baseName), id);
+            if (effectiveSetting == null && OBUContextManager.inheritsDefault(baseName)) {
+                effectiveSetting = settingOf(contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT), id);
             }
+            isServerDefault = effectiveSetting != null;
         }
         if (effectiveSetting == null) {
-            OBUContext base = contextManager.getContext(baseName);
-            if (base != null) {
-                for (OBUSetting s : base.settings()) {
-                    if (s.definition().id() == id) {
-                        effectiveSetting = s;
-                        isServerDefault = true;
-                        break;
-                    }
-                }
-            }
-        }
-        if (effectiveSetting == null && sandboxName == null && OBUContextManager.inheritsDefault(baseName)) {
-            OBUContext defaults = contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT);
-            if (defaults != null) {
-                for (OBUSetting s : defaults.settings()) {
-                    if (s.definition().id() == id) {
-                        effectiveSetting = s;
-                        isServerDefault = true;
-                        break;
-                    }
-                }
-            }
-        }
-        if (effectiveSetting != null) {
-            String activeValue = String.join(", ", OBUCommandHelper.displayArgs(effectiveSetting));
-            Component button;
-            if (isServerDefault && sandboxName == null) {
-                button = plugin.getMessageManager().getComponent("commands.obu.defaults.blocked_btn");
-            } else {
-                button = plugin.getMessageManager().getComponent("commands.obu.defaults.clear_btn", Placeholder.parsed("setting", def.commandName()));
-            }
-            plugin.getMessageManager().send(sender, "commands.obu.defaults.custom",
-                    Placeholder.unparsed("value", activeValue),
-                    Placeholder.component("button", button));
-        } else {
             plugin.getMessageManager().send(sender, "commands.obu.defaults.active",
                     Placeholder.parsed("value", defValueStr));
+            return Command.SINGLE_SUCCESS;
         }
+        Component button = isServerDefault
+                ? plugin.getMessageManager().getComponent("commands.obu.defaults.blocked_btn")
+                : plugin.getMessageManager().getComponent("commands.obu.defaults.clear_btn", Placeholder.parsed("setting", def.commandName()));
+        plugin.getMessageManager().send(sender, "commands.obu.defaults.custom", Placeholder.unparsed("value", String.join(", ", OBUCommandHelper.displayArgs(effectiveSetting))), Placeholder.component("button", button));
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static @Nullable OBUSetting settingOf(@Nullable OBUContext context, int id) {
+        if (context == null) {
+            return null;
+        }
+        for (OBUSetting setting : context.settings()) {
+            if (setting.definition().id() == id) {
+                return setting;
+            }
+        }
+        return null;
     }
 }

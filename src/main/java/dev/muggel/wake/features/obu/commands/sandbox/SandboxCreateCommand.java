@@ -5,8 +5,6 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
-import dev.muggel.wake.features.obu.commands.OBUCommandHelper;
-import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
@@ -22,14 +20,13 @@ public class SandboxCreateCommand {
 
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, CommandSender subject, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
-        ContextDelivery service = OBUCommandHelper.delivery(plugin);
         String name = StringArgumentType.getString(ctx, "name");
         String key = SandboxCommandHelper.claimSandbox(plugin, sender, subject, name);
         if (key == null) {
             return 0;
         }
         if (subject instanceof Player player) {
-            SandboxCommandHelper.enterSandbox(player, key, service, plugin);
+            SandboxCommandHelper.enterSandbox(plugin, player, key);
         }
         plugin.getMessageManager().send(sender, "commands.obu.sandbox.created", Placeholder.unparsed("sandbox", name));
         SandboxCommandHelper.sendHintIfEnabled(plugin, sender);
