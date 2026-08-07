@@ -122,14 +122,12 @@ public final class OBUCommandHelper {
         OBUContextManager contextManager = contexts(plugin);
         CommandSender sender = CommandHelper.actingSender(ctx.getSource());
         List<String> shown = new ArrayList<>();
-        for (String name : contextManager.getContextNames()) {
-            if (OBUContextManager.isInternal(name)) continue;
-            OBUContext context = contextManager.getContext(name);
-            if (context == null || !filter.test(context)) continue;
-            String display = name;
+        for (OBUContext context : contextManager.getContexts()) {
+            if (OBUContextManager.isInternal(context.name()) || !filter.test(context)) continue;
+            String display = context.name();
             if (context.isSandbox() && sender instanceof Player p) {
                 if (!p.getUniqueId().equals(context.ownerUuid())) continue;
-                display = OBUContextManager.displayName(name);
+                display = OBUContextManager.displayName(display);
             }
             shown.add(display);
         }

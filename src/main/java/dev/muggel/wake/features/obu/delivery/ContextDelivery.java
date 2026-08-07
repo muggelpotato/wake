@@ -7,7 +7,6 @@ import dev.muggel.wake.features.obu.clients.ClientRegistry;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
-import dev.muggel.wake.features.obu.contexts.OBUPlayerState;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
@@ -15,13 +14,17 @@ import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import dev.muggel.wake.features.obu.OBUDao;
 import dev.muggel.wake.features.obu.OBUModule;
+import dev.muggel.wake.features.obu.OBUPlayerState;
 
 public final class ContextDelivery implements OBUService {
     public static final String STATE_KEY_PERSISTENT_STATES = "obu.persistent_player_states";
@@ -110,7 +113,7 @@ public final class ContextDelivery implements OBUService {
         if (target instanceof Player player) {
             String sandboxName = active.sandboxOf(player.getUniqueId());
             if (sandboxName != null) {
-                contextManager.updateSandboxSetting(sandboxName, setting);
+                contextManager.addSettings(sandboxName, List.of(setting));
             } else {
                 syncManager.addLocalOverride(player.getUniqueId(), setting);
             }
@@ -139,15 +142,24 @@ public final class ContextDelivery implements OBUService {
         syncManager.broadcastSync(boat);
     }
 
-    public @NonNull List<Player> deleteContextAndEvict(@NonNull String name) {
-        String lower = ActiveContexts.canonical(name);
-        contextManager.deleteContext(lower);
-        List<Player> evicted = new ArrayList<>();
+    public @NonNull Map<Player, String> deleteContextsAndEvict(@NonNull Collection<String> names) {
+        Set<String> gone = new HashSet<>();
+        for (String name : names) {
+            String lower = ActiveContexts.canonical(name);
+            if (contextManager.deleteContext(lower)) {
+                gone.add(lower);
+            }
+        }
+        Map<Player, String> evicted = new LinkedHashMap<>();
         for (Player online : Bukkit.getOnlinePlayers()) {
             UUID uuid = online.getUniqueId();
-            if (lower.equals(active.sandboxOf(uuid)) || lower.equals(active.contextOf(uuid))) {
+            String selected = active.sandboxOf(uuid);
+            if (selected == null) {
+                selected = active.contextOf(uuid);
+            }
+            if (gone.contains(selected)) {
                 applyDefaultContext(online);
-                evicted.add(online);
+                evicted.put(online, selected);
             }
         }
         syncManager.resyncPinnedBoats();

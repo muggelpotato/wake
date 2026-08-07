@@ -1,4 +1,4 @@
-package dev.muggel.wake.features.obu.contexts;
+package dev.muggel.wake.features.obu;
 
 import org.jspecify.annotations.Nullable;
 

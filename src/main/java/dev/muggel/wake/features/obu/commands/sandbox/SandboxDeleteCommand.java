@@ -15,6 +15,8 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
 
+import java.util.List;
+
 public class SandboxDeleteCommand {
     static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("delete")
@@ -33,7 +35,7 @@ public class SandboxDeleteCommand {
             return 0;
         }
         plugin.getMessageManager().send(sender, "commands.obu.sandbox.deleted", Placeholder.unparsed("sandbox", name));
-        for (Player evicted : service.deleteContextAndEvict(context.name())) {
+        for (Player evicted : service.deleteContextsAndEvict(List.of(context.name())).keySet()) {
             if (!evicted.equals(sender)) {
                 plugin.getMessageManager().send(evicted, "commands.obu.sandbox.kicked", Placeholder.unparsed("sandbox", name));
             }

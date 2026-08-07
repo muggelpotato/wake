@@ -12,7 +12,7 @@ import dev.muggel.wake.core.Scheduling;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
-import dev.muggel.wake.features.obu.contexts.OBUPlayerState;
+import dev.muggel.wake.features.obu.OBUPlayerState;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import dev.muggel.wake.features.obu.delivery.OBUSyncManager;

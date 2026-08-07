@@ -7,7 +7,6 @@ import dev.muggel.wake.Wake;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContext.ContextType;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
-import dev.muggel.wake.features.obu.contexts.OBUPlayerState;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import co.aikar.idb.DbRow;
@@ -122,6 +121,8 @@ public class OBUDao extends WakeDao {
         }
         found.put(OBUContextManager.EMPTY_CONTEXT,
                 new OBUContext(OBUContextManager.EMPTY_CONTEXT, ContextType.SERVER, null, List.of()));
+        found.putIfAbsent(OBUContextManager.DEFAULT_CONTEXT,
+                new OBUContext(OBUContextManager.DEFAULT_CONTEXT, ContextType.SERVER, null, List.of()));
         return found;
     }
 

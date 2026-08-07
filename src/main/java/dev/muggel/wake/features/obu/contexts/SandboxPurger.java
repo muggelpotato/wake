@@ -3,93 +3,68 @@ package dev.muggel.wake.features.obu.contexts;
 import dev.muggel.wake.core.Scheduling;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.features.obu.OBUDao;
-import dev.muggel.wake.features.obu.delivery.ActiveContexts;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
 public final class SandboxPurger {
     public static final String STATE_KEY_KEEP_UNUSED = "obu.keep_unused_sandboxes";
-    public static final String DEFAULT_KEEP = "30d";
+    private static final String DEFAULT_KEEP = "30d";
     private static final long MAX_SWEEP_INTERVAL_MILLIS = 3_600_000L;
     private static final long FIRST_SWEEP_DELAY_MILLIS = 60_000L;
     private final Wake plugin;
     private final OBUDao dao;
     private final ContextDelivery service;
-    private final ActiveContexts active;
     private @Nullable BukkitTask task;
-    private long scheduledKeepMillis;
-    public SandboxPurger(Wake plugin, OBUDao dao, ContextDelivery service, ActiveContexts active) {
+    private @Nullable String scheduled;
+    public SandboxPurger(Wake plugin, OBUDao dao, ContextDelivery service) {
         this.plugin = plugin;
         this.dao = dao;
         this.service = service;
-        this.active = active;
     }
 
     public @Nullable BukkitTask restart() {
-        long keepMillis = configuredKeepMillis();
-        if (task != null && keepMillis == scheduledKeepMillis) {
+        String configured = configuredKeep();
+        if (configured.equals(scheduled)) {
             return null;
         }
+        scheduled = configured;
         if (task != null) {
             task.cancel();
             task = null;
         }
+        long keepMillis = parseKeepMillis(configured);
+        if (keepMillis < 0) {
+            plugin.getLogger().warning("Automatic sandbox purging is off: " + STATE_KEY_KEEP_UNUSED + " is '" + configured + "', which is not a duration");
+        }
         if (keepMillis <= 0) return null;
         long intervalTicks = Math.min(keepMillis, MAX_SWEEP_INTERVAL_MILLIS) / 50L;
         long delayTicks = Math.min(FIRST_SWEEP_DELAY_MILLIS / 50L, intervalTicks);
-        scheduledKeepMillis = keepMillis;
         this.task = Scheduling.repeatingAsync(plugin, this::sweep, delayTicks, intervalTicks);
         return this.task;
     }
 
-    private long configuredKeepMillis() {
-        return parseKeepMillis(plugin.getStateDao().get(STATE_KEY_KEEP_UNUSED, DEFAULT_KEEP));
+    private @NonNull String configuredKeep() {
+        return plugin.getStateDao().get(STATE_KEY_KEEP_UNUSED, DEFAULT_KEEP);
     }
 
     private void sweep() {
-        long thresholdMillis = configuredKeepMillis();
+        long thresholdMillis = parseKeepMillis(configuredKeep());
         if (thresholdMillis <= 0) return;
         long cutoff = System.currentTimeMillis() - thresholdMillis;
-        List<String> expired = dao.getOldSandboxes(cutoff);
-        if (expired == null || expired.isEmpty()) return;
-        Scheduling.onMain(plugin, () -> purge(expired));
+        plugin.getDatabaseManager().readAsync(() -> dao.getOldSandboxes(cutoff), this::purge);
     }
 
-    private void purge(@NonNull List<String> expired) {
-        if (service.isStale()) return;
-        Set<String> gone = new HashSet<>();
-        for (String sandbox : expired) {
-            gone.add(sandbox.toLowerCase(Locale.ROOT));
-            dao.deleteContext(sandbox);
-        }
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            String lost = lostContext(gone, player);
-            if (lost == null) {
-                continue;
-            }
-            service.applyDefaultContext(player);
-            plugin.getMessageManager().send(player, "commands.obu.sandbox.purged", Placeholder.unparsed("sandbox", OBUContextManager.displayName(lost)));
-        }
+    private void purge(@Nullable List<String> expired) {
+        if (expired == null || expired.isEmpty() || service.isStale()) return;
+        service.deleteContextsAndEvict(expired).forEach((player, lost) ->
+                plugin.getMessageManager().send(player, "commands.obu.sandbox.purged", Placeholder.unparsed("sandbox", OBUContextManager.displayName(lost))));
         plugin.getLogger().info("Purged " + expired.size() + " sandbox(es) unused past the keep window");
-    }
-
-    private @Nullable String lostContext(@NonNull Set<String> gone, @NonNull Player player) {
-        String sandbox = active.sandboxOf(player.getUniqueId());
-        if (sandbox != null && gone.contains(sandbox)) {
-            return sandbox;
-        }
-        String context = active.contextOf(player.getUniqueId());
-        return gone.contains(context) ? context : null;
     }
 
     public static long parseKeepMillis(@NonNull String raw) {

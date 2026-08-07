@@ -14,6 +14,13 @@ Eviction is drilled by keeping the boat's UUID fixed across the removal: a leake
 still be attached to that id, and `-clear` would find it. Both ways out are drilled -- the boat taken
 out from under Wake, and the chunk unloading with it still in there.
 
+The sandbox purge is here too: with the keep window cut to seconds a real sweep runs while the drill
+watches, so what it takes, what a recent access spares, and what an off switch stops are all read
+back off the listing rather than reasoned about.
+
+So is the store the whole surface stands on: what an empty one seeds, and the names the import door
+has to refuse because no command would ever have written them.
+
 What a client *does* with any of it is not here, because it needs a client. That half is TESTPLAN §2.
 
     python testenv/drills_delivery.py       # needs a server up (./gradlew runServer)
@@ -29,10 +36,11 @@ import time
 from collections.abc import Callable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import CODES, Log, Rcon, bad, failures, ok, set_module_enabled, step  # noqa: E402
+from drills import CODES, Log, ROOT, Rcon, bad, failures, ok, set_module_enabled, step  # noqa: E402
 
 SETTLE = 1.0
 TAG = "wakedelivery"
+EXPORT = ROOT / "run" / "plugins" / "wake" / "exports" / "obu_data.yml"
 # a boat summoned twice under this id is, to everything keyed by UUID, the same boat
 FIXED_UUID = "[I;16,32,48,64]"
 # where CraftBukkit keeps an entity's persistent data container inside its nbt
@@ -41,6 +49,9 @@ PIN = re.compile(r'"?wake:obu_context"?\s*:\s*"([^"]*)"')
 # a context every install has, seeded from the jar, and one nothing will ever seed
 KNOWN_CONTEXT = "harbour"
 UNKNOWN_CONTEXT = "nosuchcontextanywhere"
+# two players who were never here: a sandbox key is only ever built from its owner's id
+GRAFT_OWNER = "0f1e2d3c-4b5a-4968-8778-695a4b3c2d1e"
+OTHER_OWNER = "1a2b3c4d-5e6f-4708-8192-a3b4c5d6e7f8"
 
 rcon = None
 
@@ -297,6 +308,35 @@ def drill_module_cycle():
     rcon.run(f"kill @e[tag={TAG}]")
 
 
+def drill_seeds_an_empty_store():
+    """The jar's contexts are all an install starts with, and the module only reaches for them when it
+    finds the table empty. So nothing may write a row of its own before that question is asked -- a
+    module that stocks the store on the way up answers it for itself, and the bundled contexts then
+    never land at all, on the one install that had none. The fallback context has to answer anyway."""
+    log = Log()
+    rcon.run("wake database drop obu confirm")
+    if not log.await_line("Database drop completed for module obu", 30):
+        bad("the drop never finished, so the store was never empty")
+        return
+    listing = run("wobu -context")
+    truthy("the store is empty", KNOWN_CONTEXT not in listing.lower(), listing.strip()[:300])
+    truthy("but the context every selection falls back to still answers for itself",
+           "default" in listing.lower(), listing.strip()[:300])
+    says("and it is still protected with no row behind it", "wobu -context -delete default", "cannot delete")
+
+    step("and the module comes back up on it")
+    set_module_enabled("obu", False)
+    rcon.run("wake reload")
+    time.sleep(SETTLE)
+    log = Log()
+    set_module_enabled("obu", True)
+    rcon.run("wake reload")
+    time.sleep(SETTLE)
+    truthy("the console says it seeded the jar's contexts", log.await_line("Auto-seeded", 15), log.read()[-300:])
+    listing = run("wobu -context")
+    truthy("and they are live without a setdefaults", KNOWN_CONTEXT in listing.lower(), listing.strip()[:300])
+
+
 def drill_reserved_contexts():
     """A protected context has to be refused whatever case it is typed in, or the reply lies about deleting it."""
     for spelling in ("default", "DEFAULT", "Default"):
@@ -306,6 +346,95 @@ def drill_reserved_contexts():
     listing = run("wobu -context")
     truthy("default is still in the listing afterwards", "default" in listing.lower(), listing.strip()[:200])
     says("a sandbox cannot take a reserved name either", "wobu -sandbox create default", "reserved")
+
+
+def graft_export(sections):
+    """Exports, writes hand-authored entries into the file, imports it back and hands over the console.
+
+    An export is the one file an admin edits by hand, so it is the only door a name that no command
+    would have produced can come through."""
+    log = Log()
+    rcon.run("wake database export obu")
+    if not log.await_line("Database export completed for module obu", 30):
+        return None
+    good = EXPORT.read_text(encoding="utf-8", errors="replace")
+    edited = good
+    for section, body in sections.items():
+        edited = (edited.replace(f"{section}:\n", f"{section}:\n{body}", 1) if f"{section}:\n" in edited
+                  else edited + f"{section}:\n{body}")
+    EXPORT.write_text(edited, encoding="utf-8")
+    try:
+        log = Log()
+        rcon.run("wake database import obu confirm")
+        if not log.await_line("Database import completed for module obu", 30):
+            return None
+        return log.read()
+    finally:
+        EXPORT.write_text(good, encoding="utf-8")
+
+
+def drill_imported_names():
+    """Every name a command refuses has to be refused at the import door too, and for the same reason.
+
+    A sandbox called `default` shadows the context every selection falls back to, and the reserved
+    guard would then make it undeletable. A sandbox keyed to a uuid that is not its owner's, or a
+    server context carrying the `@` that splits a sandbox key, is worse than wrong: it is a row no
+    command can ever name again, so it only ever surfaces as a number in the count and as a purge
+    much later. The one well-formed graft in the same file is what says this is a door, not a wall."""
+    console = graft_export({"sandbox":
+                            "  default:\n    settings:\n      stepsize: '9.0'\n"
+                            f"  default@{GRAFT_OWNER}:\n    owner_uuid: {GRAFT_OWNER}\n"
+                            f"  graftstray@{GRAFT_OWNER}:\n    owner_uuid: {OTHER_OWNER}\n"
+                            f"  graftok@{GRAFT_OWNER}:\n    owner_uuid: {GRAFT_OWNER}\n"
+                            "    settings:\n      stepsize: '1.5'\n",
+                            "server": "  graftat@server:\n    settings:\n      stepsize: '9.0'\n"})
+    if console is None:
+        bad("the export/import round trip never finished, so there is nothing to judge")
+        return
+    truthy("the import named both reserved names it refused, keyed and bare",
+           console.count("that name is reserved") == 2, console.strip()[-600:])
+    truthy("and named the two nothing could have addressed, for the other reason",
+           console.count("no command could reach a context stored under that name") == 2, console.strip()[-600:])
+    listing = run("wobu -context").lower()
+    for refused in (f"default@{GRAFT_OWNER}".lower(), f"graftstray@{GRAFT_OWNER}".lower(), "graftat@server"):
+        truthy(f"{refused} is not in the store", refused not in listing, listing.strip()[:400])
+    says("no sandbox answers to the reserved name", "wobu -sandbox view default", "does not exist")
+    says("and default is still the protected server context", "wobu -context -delete default", "cannot delete")
+
+    step("while the graft that is shaped like a real row goes straight in")
+    truthy("the sandbox keyed to its own owner is there",
+           f"graftok@{GRAFT_OWNER}".lower() in listing, listing.strip()[:400])
+    says("and it carries what the file gave it", f"wobu -sandbox view graftok@{GRAFT_OWNER}", "stepsize")
+    rcon.run(f"wobu -sandbox delete graftok@{GRAFT_OWNER}")
+
+
+def drill_publish_collision():
+    """Publishing renames a sandbox to the display half of its key, so it is the one operation that can
+    walk a name into a namespace that already holds it. Only a key carrying an `@uuid` can collide --
+    a console sandbox is already stored under its display name -- so the graft door is what puts one
+    here without a second player. A publish that went through would fold two contexts into one row."""
+    keyed = f"{KNOWN_CONTEXT}@{GRAFT_OWNER}"
+    console = graft_export({"sandbox": f"  {keyed}:\n    owner_uuid: {GRAFT_OWNER}\n"
+                                       "    settings:\n      stepsize: '9.0'\n"})
+    if console is None:
+        bad("the export/import round trip never finished, so there is nothing to publish")
+        return
+    try:
+        listing = run("wobu -context")
+        truthy("a sandbox arrives keyed under a name a server context already has",
+               keyed.lower() in listing.lower(), listing.strip()[:400])
+        says("publishing it is refused", f"wobu -sandbox publish {keyed}", "already exists")
+        listing = run("wobu -context")
+        truthy("it is still a sandbox", keyed.lower() in listing.lower(), listing.strip()[:400])
+        says("carrying what it had", f"wobu -sandbox view {keyed}", "stepsize")
+        truthy("and the server context of that name is untouched beside it",
+               listing.lower().count(KNOWN_CONTEXT) == 2, listing.strip()[:400])
+        says("which still forks as the server context, not the sandbox",
+             f"wobu -sandbox fork {KNOWN_CONTEXT} deliverycollide", "forked")
+        says("and what it copied is the server context's", "wobu -sandbox view deliverycollide", "defaultslipperiness")
+    finally:
+        rcon.run("wobu -sandbox delete deliverycollide")
+        rcon.run(f"wobu -sandbox delete {keyed}")
 
 
 def drill_context_listing():
@@ -420,6 +549,74 @@ def drill_sweep_over_pinned_boats():
     rcon.run(f"kill @e[tag={TAG}]")
 
 
+def drill_keep_window():
+    """The keep window is the only number an admin types at the purger, and three answers have to stay
+    apart: a duration it will sweep on, an off switch, and a refusal. A spelling that slid from one to
+    another would either purge on a window nobody set or stop purging without saying so."""
+    for spelling in ("90s", "45min", "10h", "30d", "2w", "6mo", "1y", "30D", '" 30d "'):
+        says(f"{spelling} is a duration", f"wobu -settings keep-unused-sandboxes {spelling}", "kept for")
+    step("and the spelling it echoes back is the one it stored")
+    reply = run('wobu -settings keep-unused-sandboxes " 30D "')
+    truthy("padding and case are gone from the echo", "30d" in reply and "30D" not in reply, reply.strip()[:200])
+
+    step("every way of saying never is off, not a window of zero")
+    for spelling in ("0", "0d", "off", "never", "disabled", "NEVER"):
+        says(f"{spelling} disables the sweep", f"wobu -settings keep-unused-sandboxes {spelling}", "purging is now")
+
+    step("and everything else is refused rather than read as one of the two")
+    for spelling in ("30", "d", "abc", "-1d", "30m", '"30 d"', '""',
+                     "9999999999y", "99999999999999999999d"):
+        says(f"{spelling} is refused", f"wobu -settings keep-unused-sandboxes {spelling}", "invalid duration")
+    rcon.run("wobu -settings keep-unused-sandboxes 30d")
+
+
+def drill_purge():
+    """The sweep is the only thing that deletes a context nobody named, so what it takes, what it
+    spares and what it leaves behind are all read back off the server rather than trusted.
+
+    The keep window is a state row every server sharing the database reads, so on mariadb either one
+    can be the server that sweeps. The signal here is therefore the row leaving *this* server's
+    cache, never a line on this server's console -- which is also the whole cross-server story: the
+    loser of the race sees the purge as an ordinary invalidation."""
+    rcon.run("wobu -sandbox delete purgestale")
+    rcon.run("wobu -sandbox delete purgefresh")
+    says("a sandbox to leave sitting is created", "wobu -sandbox create purgestale", "created")
+    if not boat():
+        bad("could not summon the boat this drill needs")
+        return
+    boat_says("and a boat is left standing on it", "wobu -context purgestale", "applied context")
+    window = 3.0  # short enough to watch, and the sweep runs on the same interval
+    log = Log()
+    says("the keep window is cut to three seconds", f"wobu -settings keep-unused-sandboxes {window:.0f}s", "kept for")
+    try:
+        truthy("the sandbox nothing touched leaves the cache",
+               wait_until(lambda: "purgestale" not in run("wobu -context").lower(), 30),
+               run("wobu -context").strip()[:300])
+        truthy("with nothing on the console", not traces(log), str(traces(log)[:2]))
+        truthy("the boat keeps the pin it was given", pinned_on_boat() == "purgestale", repr(pinned_on_boat()))
+        boat_says("and still answers", "wobu stepsize 1.5", "set stepsize")
+        boat_says("and can still be unpinned", "wobu -context default", "applied context")
+
+        step("a sandbox that keeps being used outlives the same window")
+        says("a second sandbox is created", "wobu -sandbox create purgefresh", "created")
+        deadline = time.monotonic() + window * 3
+        while time.monotonic() < deadline:
+            as_boat("wobu -context purgefresh")  # pinning is an access, so this one never ages out
+            time.sleep(0.5)
+        truthy("it survived several sweeps of a three-second window",
+               "purgefresh" in run("wobu -context").lower(), run("wobu -context").strip()[:300])
+
+        step("and with the sweep off it ages out without being taken")
+        says("purging is disabled", "wobu -settings keep-unused-sandboxes never", "purging is now")
+        time.sleep(window * 3)
+        truthy("the sandbox is still there several windows later",
+               "purgefresh" in run("wobu -context").lower(), run("wobu -context").strip()[:300])
+    finally:
+        rcon.run("wobu -settings keep-unused-sandboxes 30d")
+        rcon.run("wobu -sandbox delete purgefresh")
+        rcon.run(f"kill @e[tag={TAG}]")
+
+
 def drill_persistence_switch():
     """The one delivery setting an admin can change, and the answer it owes."""
     before = run("wobu -settings persistence true")
@@ -446,12 +643,14 @@ def main():
 
     rcon.run("forceload add 0 0")
     try:
-        for drill in [drill_pin_storage, drill_boat_overrides, drill_context_replaces_overrides,
+        for drill in [drill_seeds_an_empty_store,
+                      drill_pin_storage, drill_boat_overrides, drill_context_replaces_overrides,
                       drill_chunk_unload_eviction, drill_override_eviction,
-                      drill_module_cycle, drill_reserved_contexts, drill_context_listing,
+                      drill_module_cycle, drill_reserved_contexts, drill_imported_names,
+                      drill_publish_collision, drill_context_listing,
                       drill_context_delete, drill_pinned_to_a_deleted_context,
                       drill_publish_under_a_pinned_boat, drill_sweep_over_pinned_boats,
-                      drill_persistence_switch]:
+                      drill_keep_window, drill_purge, drill_persistence_switch]:
             print(f"\n{drill.__name__.removeprefix('drill_').replace('_', ' ')}")
             drill()
     except RuntimeError as error:

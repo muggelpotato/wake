@@ -51,10 +51,8 @@ public class ContextCommand {
         OBUContextManager contextManager = OBUCommandHelper.contexts(plugin);
         List<OBUContext> serverContexts = new ArrayList<>();
         List<OBUContext> mySandboxes = new ArrayList<>();
-        for (String contextName : contextManager.getContextNames()) {
-            if (OBUContextManager.isInternal(contextName)) continue;
-            OBUContext context = contextManager.getContext(contextName);
-            if (context == null) continue;
+        for (OBUContext context : contextManager.getContexts()) {
+            if (OBUContextManager.isInternal(context.name())) continue;
             if (context.isSandbox()) {
                 if (!(subject instanceof Player p) || p.getUniqueId().equals(context.ownerUuid())) {
                     mySandboxes.add(context);
@@ -126,7 +124,7 @@ public class ContextCommand {
             plugin.getMessageManager().send(sender, "commands.obu.context.cannot_delete", Placeholder.unparsed("context", name));
             return 0;
         }
-        for (Player evicted : service.deleteContextAndEvict(name)) {
+        for (Player evicted : service.deleteContextsAndEvict(List.of(name)).keySet()) {
             if (!evicted.equals(sender)) {
                 plugin.getMessageManager().send(evicted, "commands.obu.context.kicked", Placeholder.unparsed("context", name));
             }

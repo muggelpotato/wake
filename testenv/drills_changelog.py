@@ -337,12 +337,19 @@ def drill_outage(primary: Rcon):
     settle()
 
 
-def obu_import(primary: Rcon, contexts):
-    """Rewrites the primary's obu export with `contexts` ({name: {setting: value}}) and imports it."""
+def obu_import(primary: Rcon, contexts, state=None):
+    """Rewrites the primary's obu export with `contexts` ({name: {setting: value}}) and imports it.
+
+    `state` is written into the module's own `obu:` section, which is where an import picks up state rows."""
     primary.run("wake database export obu")
     time.sleep(1.0)
     path = PRIMARY_EXPORTS / "obu_data.yml"
-    body = ["version: 1", "server:"]
+    body = ["version: 1"]
+    if state:
+        body.append("obu:")
+        for key, value in state.items():
+            body.append(f"  {key!r}: {value!r}")
+    body.append("server:")
     for name, settings in contexts.items():
         body.append(f"  {name!r}:")
         body.append("    settings:")
@@ -354,18 +361,20 @@ def obu_import(primary: Rcon, contexts):
 
 def drill_separator_keys(primary: Rcon):
     step("a key holding the message's field separator still reaches the other backend")
-    # a name reaches a row through an imported file as well as through a command, so it is not held to what the
-    # command parser accepts: the key list is the last field of the message and keeps every pipe it was handed
-    obu_import(primary, {"pipe|ctx": {"setscale": "1.5"}, "plainctx": {"setscale": "2.5"}})
+    # the key list is the last field of the message and keeps every pipe it was handed. A context name cannot
+    # carry one any more -- the obu import door only takes a name a command could have written -- but a state
+    # key is free-form, so that is the row the framing still has to be asked about
+    obu_import(primary, {"plainctx": {"setscale": "2.5"}}, state={"pipe|key": "kept"})
     settle(3)
     mine, theirs = both_caches(primary, "obu")
-    truthy("the primary imported both names", "pipe|ctx" in mine and "plainctx" in mine, mine[:400])
-    truthy("backend2 received the pipe key", "pipe|ctx" in theirs, theirs[:400])
+    truthy("the primary imported the separator key beside a plain context",
+           "pipe|key" in mine and "plainctx" in mine, mine[:400])
+    truthy("backend2 received the pipe key", "pipe|key" in theirs, theirs[:400])
     truthy("backend2 received the plain one beside it", "plainctx" in theirs, theirs[:400])
     on_backend2("wake database drop obu confirm")
     settle(2)
     truthy("and the primary loses both when backend2 drops the module",
-           "pipe|ctx" not in primary_cache(primary, "obu"), "")
+           "pipe|key" not in primary_cache(primary, "obu"), "")
 
 
 def drill_bulk_import(primary: Rcon, count=600):
@@ -796,6 +805,8 @@ def main():
     drill_bus_down_both_sides(primary)
     drill_outage(primary)
     drill_outage_both_sides(primary)
+    # the obu drops above leave the store bare, and the suites that come after need its seeded contexts
+    primary.run("wake database setdefaults obu confirm")
 
     print()
     if failures:

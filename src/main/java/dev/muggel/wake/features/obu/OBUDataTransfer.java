@@ -38,11 +38,9 @@ final class OBUDataTransfer {
             throw new SQLException("OBU contexts could not be read");
         }
         int count = 0;
-        for (String name : contextManager.getContextNames()) {
-            if (OBUContextManager.isInternal(name)) continue;
-            OBUContext context = contextManager.getContext(name);
-            if (context == null) continue;
-            String path = sectionOf(context.type()) + "." + name;
+        for (OBUContext context : contextManager.getContexts()) {
+            if (OBUContextManager.isInternal(context.name())) continue;
+            String path = sectionOf(context.type()) + "." + context.name();
             yaml.createSection(path);
             if (context.ownerUuid() != null) {
                 yaml.set(path + ".owner_uuid", context.ownerUuid().toString());
@@ -84,13 +82,22 @@ final class OBUDataTransfer {
         int count = 0;
         for (String name : section.getKeys(false)) {
             String ownerStr = section.getString(name + ".owner_uuid");
+            UUID owner = null;
             if (ownerStr != null) {
                 try {
-                    UUID.fromString(ownerStr);
+                    owner = UUID.fromString(ownerStr);
                 } catch (IllegalArgumentException e) {
                     plugin.getLogger().warning("Skipped OBU context '" + name + "': invalid owner_uuid '" + ownerStr + "'");
                     continue;
                 }
+            }
+            if (!OBUContextManager.isAddressable(name, type, owner)) {
+                plugin.getLogger().warning("Skipped OBU context '" + name + "': no command could reach a context stored under that name");
+                continue;
+            }
+            if (type == OBUContext.ContextType.SANDBOX && OBUContextManager.isReserved(OBUContextManager.displayName(name))) {
+                plugin.getLogger().warning("Skipped OBU context '" + name + "': that name is reserved");
+                continue;
             }
             List<OBUSetting> settingsToImport = new ArrayList<>();
             ConfigurationSection settingsSec = section.getConfigurationSection(name + ".settings");

@@ -71,7 +71,7 @@ public class OBUModule extends WakeModule {
             delivery.requestClientVersion(player);
             boatLagInterceptor.adoptDriver(player);
         }
-        this.sandboxPurger = new SandboxPurger(plugin, obuDao, delivery, active);
+        this.sandboxPurger = new SandboxPurger(plugin, obuDao, delivery);
         schedulePurgerSweep();
 
         registerListener(new VehicleCleanupListener(syncManager));

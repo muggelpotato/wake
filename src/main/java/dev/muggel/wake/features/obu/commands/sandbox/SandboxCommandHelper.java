@@ -27,12 +27,10 @@ import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 final class SandboxCommandHelper {
-    private static final Pattern SANDBOX_NAME_PATTERN = Pattern.compile("[a-z0-9_-]{1,32}");
     private static final int MAX_SHARE_CODE_BYTES = 65536;
     private SandboxCommandHelper() {}
 
@@ -58,7 +56,7 @@ final class SandboxCommandHelper {
     }
 
     static @NonNull CommandNode nameArgument(String argumentName) {
-        return CommandNode.argument(argumentName, NameArgumentType.greedy(SANDBOX_NAME_PATTERN, "commands.obu.sandbox.invalid_name"));
+        return CommandNode.argument(argumentName, NameArgumentType.greedy(OBUContextManager.NAME_PATTERN, "commands.obu.sandbox.invalid_name"));
     }
 
     static @NonNull CompletableFuture<Suggestions> suggestOwnSandboxes(@NonNull CommandContext<CommandSourceStack> ctx, @NonNull SuggestionsBuilder builder, Wake plugin) {
