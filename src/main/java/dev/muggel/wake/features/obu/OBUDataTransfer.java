@@ -63,6 +63,9 @@ final class OBUDataTransfer {
         for (OBUContext.ContextType type : OBUContext.ContextType.values()) {
             count += importContexts(yaml.getConfigurationSection(sectionOf(type)), type);
         }
+        if (count == 0) {
+            return 0;
+        }
         contextManager.loadContexts();
         for (Player player : Bukkit.getOnlinePlayers()) {
             syncManager.syncPlayer(player);
@@ -91,7 +94,7 @@ final class OBUDataTransfer {
                     continue;
                 }
             }
-            if (!OBUContextManager.isAddressable(name, type, owner)) {
+            if (OBUContextManager.isUnaddressable(name, type, owner)) {
                 plugin.getLogger().warning("Skipped OBU context '" + name + "': no command could reach a context stored under that name");
                 continue;
             }
@@ -105,6 +108,10 @@ final class OBUDataTransfer {
                 for (String settingName : settingsSec.getKeys(false)) {
                     OBUDefinition def = OBUDefinition.byName(settingName);
                     if (def == null) continue;
+                    if (def.isOneShot()) {
+                        plugin.getLogger().warning("Skipped OBU setting '" + settingName + "' in context '" + name + "': that setting acts once, so no context holds it");
+                        continue;
+                    }
                     List<String> invocations = settingsSec.isList(settingName)
                             ? settingsSec.getStringList(settingName)
                             : List.of(String.valueOf(settingsSec.get(settingName)));
@@ -118,7 +125,7 @@ final class OBUDataTransfer {
                     }
                 }
             }
-            obuDao.importContextData(name, type, ownerStr, settingsToImport);
+            obuDao.importContextData(name, type, owner, settingsToImport);
             count++;
         }
         return count;

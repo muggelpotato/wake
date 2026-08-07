@@ -9,7 +9,6 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -35,12 +34,12 @@ public final class ActiveContexts {
         if (sandboxName == null) {
             sandboxes.remove(uuid);
         } else {
-            sandboxes.put(uuid, canonical(sandboxName));
+            sandboxes.put(uuid, OBUContextManager.canonical(sandboxName));
         }
     }
 
     public void selectContext(@NonNull UUID uuid, @NonNull String contextName) {
-        contexts.put(uuid, canonical(contextName));
+        contexts.put(uuid, OBUContextManager.canonical(contextName));
     }
 
     public boolean hasSelection(@NonNull UUID uuid) {
@@ -48,7 +47,7 @@ public final class ActiveContexts {
     }
 
     public @NonNull Set<UUID> clearSandbox(@NonNull String sandboxName) {
-        String lower = canonical(sandboxName);
+        String lower = OBUContextManager.canonical(sandboxName);
         Set<UUID> cleared = new HashSet<>();
         for (Map.Entry<UUID, String> entry : sandboxes.entrySet()) {
             if (lower.equals(entry.getValue()) && sandboxes.remove(entry.getKey(), lower)) {
@@ -60,23 +59,19 @@ public final class ActiveContexts {
 
     public @Nullable String pinnedOn(@NonNull Boat boat) {
         String pinned = boat.getPersistentDataContainer().get(boatContextKey, PersistentDataType.STRING);
-        return pinned == null ? null : canonical(pinned);
+        return pinned == null ? null : OBUContextManager.canonical(pinned);
     }
 
     public void pin(@NonNull Boat boat, @Nullable String contextName) {
         if (contextName == null) {
             boat.getPersistentDataContainer().remove(boatContextKey);
         } else {
-            boat.getPersistentDataContainer().set(boatContextKey, PersistentDataType.STRING, canonical(contextName));
+            boat.getPersistentDataContainer().set(boatContextKey, PersistentDataType.STRING, OBUContextManager.canonical(contextName));
         }
     }
 
     public void forgetPlayer(@NonNull UUID uuid) {
         sandboxes.remove(uuid);
         contexts.remove(uuid);
-    }
-
-    static @NonNull String canonical(@NonNull String contextName) {
-        return contextName.toLowerCase(Locale.ROOT);
     }
 }

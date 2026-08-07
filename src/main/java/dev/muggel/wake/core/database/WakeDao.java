@@ -122,6 +122,10 @@ public abstract class WakeDao {
         db.queueWrite(errorMessage, null, db.currentActor(), query, params);
     }
 
+    protected static void importUpdate(@NonNull List<SqlStatement> statements) throws SQLException {
+        DatabaseManager.execute(statements);
+    }
+
     /** The in-memory mirror of one of this DAO's tables */
     protected <V> @NonNull CachedStore<V> mirror(@NonNull String table, CachedStore.@NonNull Loader<V> loader) {
         CachedStore<V> store = new CachedStore<>(plugin, syncScope(), table, loader);
@@ -138,6 +142,9 @@ public abstract class WakeDao {
 
     protected final <T> @Nullable T read(@NonNull String subject, @NonNull SqlRead<T> body) {
         DatabaseManager database = plugin.getDatabaseManager();
+        if (database.isDegraded()) {
+            return null;
+        }
         try {
             T result = body.run();
             database.readSucceeded(subject);

@@ -127,17 +127,12 @@ public class OBUModule extends WakeModule {
     public void reload() {
         OBUContextManager manager = this.contextManager;
         ContextDelivery service = this.delivery;
-        OBUSyncManager sync = this.syncManager;
-        if (manager == null || service == null || sync == null) return;
+        if (manager == null || service == null) return;
         schedulePurgerSweep();
         manager.reloadAsync(changedContexts -> {
-            if (service.isStale() || changedContexts.isEmpty()) return;
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                if (service.isAffectedBy(changedContexts, player)) {
-                    service.resyncActiveSelection(player);
-                }
+            if (!service.isStale()) {
+                service.resyncAffected(changedContexts);
             }
-            sync.resyncPinnedBoats();
         });
     }
 
@@ -169,13 +164,21 @@ public class OBUModule extends WakeModule {
 
     @Override
     protected int onExportData(@NonNull YamlConfiguration yaml) throws SQLException {
-        OBUDataTransfer transfer = this.dataTransfer;
-        return exportState(yaml) + (transfer == null ? 0 : transfer.export(yaml));
+        OBUDataTransfer transfer = dataTransfer();
+        return exportState(yaml) + transfer.export(yaml);
     }
 
     @Override
     protected int onImportData(@NonNull YamlConfiguration yaml) throws SQLException {
+        OBUDataTransfer transfer = dataTransfer();
+        return importState(yaml) + transfer.importFrom(yaml);
+    }
+
+    private @NonNull OBUDataTransfer dataTransfer() throws SQLException {
         OBUDataTransfer transfer = this.dataTransfer;
-        return importState(yaml) + (transfer == null ? 0 : transfer.importFrom(yaml));
+        if (transfer == null) {
+            throw new SQLException("The OBU module was switched off while its data was being transferred");
+        }
+        return transfer;
     }
 }

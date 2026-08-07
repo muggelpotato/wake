@@ -16,19 +16,22 @@ import dev.muggel.wake.core.database.WakeDao;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.lang.reflect.Type;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 
+import static dev.muggel.wake.features.obu.contexts.OBUContextManager.canonical;
+
 public class OBUDao extends WakeDao {
     private static final String UPSERT_CONTEXT = "REPLACE INTO wake_obu_contexts (name, type, owner_uuid, last_accessed_at) VALUES (?, ?, ?, ?)";
     private static final Gson GSON = new Gson();
+    private static final Type ARGS_TYPE = new TypeToken<List<String>>(){}.getType();
     private final CachedStore<OBUContext> contexts = mirror("wake_obu_contexts", this::loadContexts);
     public OBUDao(@NonNull Wake plugin) {
         super(plugin);
@@ -80,16 +83,12 @@ public class OBUDao extends WakeDao {
         }
     }
 
-    private static @NonNull String canonical(@NonNull String name) {
-        return name.toLowerCase(Locale.ROOT);
-    }
-
     public @NonNull CachedStore<OBUContext> contexts() {
         return contexts;
     }
 
     public @Nullable Boolean hasAnyContexts() {
-        return read("wake_obu_contexts", () -> DB.getFirstColumn("SELECT name FROM wake_obu_contexts LIMIT 1") != null);
+        return read("obu contexts", () -> DB.getFirstColumn("SELECT name FROM wake_obu_contexts LIMIT 1") != null);
     }
 
     private @NonNull Map<String, OBUContext> loadContexts(@Nullable Set<String> keys) throws SQLException {
@@ -99,31 +98,57 @@ public class OBUDao extends WakeDao {
         selectByKeys("SELECT * FROM wake_obu_contexts", "name", keys, contextRows::add);
         selectByKeys("SELECT context_name, definition_name, args FROM wake_obu_settings", "context_name", keys, row -> {
             OBUDefinition def = OBUDefinition.byName(row.getString("definition_name"));
-            if (def == null) return;
-            List<String> argsList = GSON.fromJson(row.getString("args"), new TypeToken<List<String>>(){}.getType());
-            settingsByContext.computeIfAbsent(canonical(row.getString("context_name")), k -> new ArrayList<>())
-                    .add(new OBUSetting(def, argsList != null ? argsList : List.of()));
+            String contextName = row.getString("context_name");
+            if (def == null || def.isOneShot() || contextName == null) return;
+            OBUSetting setting = readSetting(def, row.getString("args"));
+            if (setting == null) {
+                plugin.getLogger().warning("Skipping OBU setting '" + def.commandName() + "' of context '" + contextName + "': the client cannot be sent that value");
+                return;
+            }
+            settingsByContext.computeIfAbsent(contextName, k -> new ArrayList<>()).add(setting);
         });
         for (DbRow row : contextRows) {
-            String name = canonical(row.getString("name"));
-            String ownerStr = row.getString("owner_uuid");
-            UUID owner;
-            ContextType type;
-            try {
-                owner = ownerStr != null ? UUID.fromString(ownerStr) : null;
-                type = ContextType.valueOf(row.getString("type"));
-            } catch (IllegalArgumentException e) {
-                plugin.getLogger().warning("Skipping malformed OBU context row '" + name + "': " + e.getMessage());
-                continue;
+            OBUContext context = readContext(row, settingsByContext);
+            if (context != null) {
+                found.put(context.name(), context);
             }
-            found.put(name, new OBUContext(name, type, owner,
-                    settingsByContext.getOrDefault(name, List.of())));
         }
-        found.put(OBUContextManager.EMPTY_CONTEXT,
-                new OBUContext(OBUContextManager.EMPTY_CONTEXT, ContextType.SERVER, null, List.of()));
-        found.putIfAbsent(OBUContextManager.DEFAULT_CONTEXT,
-                new OBUContext(OBUContextManager.DEFAULT_CONTEXT, ContextType.SERVER, null, List.of()));
+        found.put(OBUContextManager.EMPTY_CONTEXT, new OBUContext(OBUContextManager.EMPTY_CONTEXT, ContextType.SERVER, null, List.of()));
+        found.putIfAbsent(OBUContextManager.DEFAULT_CONTEXT, new OBUContext(OBUContextManager.DEFAULT_CONTEXT, ContextType.SERVER, null, List.of()));
         return found;
+    }
+
+    private @Nullable OBUContext readContext(@NonNull DbRow row, @NonNull Map<String, List<OBUSetting>> settingsByContext) {
+        String name = row.getString("name");
+        if (name == null) {
+            plugin.getLogger().warning("Skipping an OBU context row that has no name");
+            return null;
+        }
+        String typeName = row.getString("type");
+        String ownerStr = row.getString("owner_uuid");
+        UUID owner;
+        ContextType type;
+        try {
+            owner = ownerStr != null ? UUID.fromString(ownerStr) : null;
+            type = ContextType.valueOf(typeName == null ? "" : typeName);
+        } catch (IllegalArgumentException malformed) {
+            plugin.getLogger().warning("Skipping malformed OBU context row '" + name + "': " + malformed.getMessage());
+            return null;
+        }
+        if (OBUContextManager.isUnaddressable(name, type, owner)) {
+            plugin.getLogger().warning("Skipping OBU context row '" + name + "': no command could reach a context stored under that name");
+            return null;
+        }
+        return new OBUContext(name, type, owner, settingsByContext.getOrDefault(name, List.of()));
+    }
+
+    private static @Nullable OBUSetting readSetting(@NonNull OBUDefinition def, @Nullable String args) {
+        try {
+            List<String> stored = GSON.fromJson(args, ARGS_TYPE);
+            return OBUSetting.of(def, stored != null ? stored : List.of());
+        } catch (RuntimeException unreadable) {
+            return null;
+        }
     }
 
     public void saveContext(@NonNull OBUContext context, @NonNull List<SqlStatement> extraStatements) {
@@ -170,22 +195,14 @@ public class OBUDao extends WakeDao {
                 new Object[]{canonical(contextName), uniqueKey});
     }
 
-    public void importContextData(@NonNull String name, @NonNull ContextType type, @Nullable String ownerUuid, @NonNull List<OBUSetting> settings) throws SQLException {
+    public void importContextData(@NonNull String name, @NonNull ContextType type, @Nullable UUID owner, @NonNull List<OBUSetting> settings) throws SQLException {
         String canonicalName = canonical(name);
-        for (SqlStatement delete : deleteStatements(canonicalName)) {
-            DB.executeUpdate(delete.sql(), delete.params());
-        }
-        DB.executeUpdate(UPSERT_CONTEXT, canonicalName, type.name(), ownerUuid, System.currentTimeMillis());
-
+        List<SqlStatement> statements = new ArrayList<>(deleteStatements(canonicalName));
+        statements.add(new SqlStatement(UPSERT_CONTEXT, new Object[]{canonicalName, type.name(), owner != null ? owner.toString() : null, System.currentTimeMillis()}));
         for (OBUSetting setting : settings) {
-            SqlStatement upsert = settingUpsert(canonicalName, setting);
-            DB.executeUpdate(upsert.sql(), upsert.params());
+            statements.add(settingUpsert(canonicalName, setting));
         }
-        UUID owner = null;
-        try {
-            owner = ownerUuid != null ? UUID.fromString(ownerUuid) : null;
-        } catch (IllegalArgumentException ignored) {
-        }
+        importUpdate(statements);
         contexts.announce(canonicalName, new OBUContext(canonicalName, type, owner, settings));
     }
 
@@ -201,9 +218,6 @@ public class OBUDao extends WakeDao {
     }
 
     public @Nullable OBUPlayerState getPlayerState(@NonNull UUID uuid) {
-        if (plugin.getDatabaseManager().isDegraded()) {
-            return null;
-        }
         return read("player state", () -> {
             var row = DB.getFirstRow("SELECT active_sandbox, active_context FROM wake_obu_player_states WHERE player_uuid = ?", uuid.toString());
             return row == null
@@ -219,14 +233,14 @@ public class OBUDao extends WakeDao {
     }
 
     public @Nullable List<String> getOldSandboxes(long cutoffTimeMillis) {
-        if (plugin.getDatabaseManager().isDegraded()) {
-            return null;
-        }
         return read("old sandboxes", () -> {
             List<String> oldSandboxes = new ArrayList<>();
-            var results = DB.getResults("SELECT name FROM wake_obu_contexts WHERE type = 'SANDBOX' AND last_accessed_at < ?", cutoffTimeMillis);
+            var results = DB.getResults("SELECT name FROM wake_obu_contexts WHERE type = ? AND last_accessed_at < ?", ContextType.SANDBOX.name(), cutoffTimeMillis);
             for (var row : results) {
-                oldSandboxes.add(row.getString("name"));
+                String name = row.getString("name");
+                if (name != null && name.equals(canonical(name))) {
+                    oldSandboxes.add(name);
+                }
             }
             return oldSandboxes;
         });

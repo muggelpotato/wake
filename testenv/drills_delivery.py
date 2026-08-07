@@ -18,8 +18,18 @@ The sandbox purge is here too: with the keep window cut to seconds a real sweep 
 watches, so what it takes, what a recent access spares, and what an off switch stops are all read
 back off the listing rather than reasoned about.
 
-So is the store the whole surface stands on: what an empty one seeds, and the names the import door
-has to refuse because no command would ever have written them.
+So is the store the whole surface stands on: what an empty one seeds, the names and the settings the
+import door has to refuse because no command would ever have written them, and the same rows arriving
+through the other door -- the table itself, where a hand-run INSERT, an older build or a server sharing
+the database can leave a row nothing validated. Each of those must cost that row and no other, because
+the read that trips over one is the read that loads every context there is.
+
+The export is drilled as the backup it claims to be: a sandbox key with its `@uuid` and owner, a context
+holding nothing, and a repeatable setting whose argument is a list, all through export -> drop -> import
+-> export and compared line for line. An import carrying no contexts at all is beside it, because the
+two halves of an import are counted apart, and an export taken over a store that never managed to read
+the table is beside that, because a file that looks like a full backup and is an empty one is the one
+failure an export must never have.
 
 What a client *does* with any of it is not here, because it needs a client. That half is TESTPLAN §2.
 
@@ -31,12 +41,14 @@ Runs against sqlite and mariadb alike. Exits non-zero if a drill fails.
 import argparse
 import os
 import re
+import sqlite3
 import sys
 import time
 from collections.abc import Callable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import CODES, Log, ROOT, Rcon, bad, failures, ok, set_module_enabled, step  # noqa: E402
+from drills import (CODES, Log, ROOT, Rcon, WAKE, bad, detect_backend, docker, failures, ok,  # noqa: E402
+                    set_module_enabled, state, step)
 
 SETTLE = 1.0
 TAG = "wakedelivery"
@@ -52,8 +64,18 @@ UNKNOWN_CONTEXT = "nosuchcontextanywhere"
 # two players who were never here: a sandbox key is only ever built from its owner's id
 GRAFT_OWNER = "0f1e2d3c-4b5a-4968-8778-695a4b3c2d1e"
 OTHER_OWNER = "1a2b3c4d-5e6f-4708-8192-a3b4c5d6e7f8"
+# rows only a hand-run INSERT, an older build or another server leaves behind
+RAW_NO_TYPE = "deliverynotype"
+RAW_UNADDRESSABLE = "delivery.dotted"
+RAW_SETTINGS = "deliveryrawsettings"
+RAW_MIXED_CASE = "DeliveryMixedCase"
+RAW_STALE_SANDBOX = "DeliveryStaleBox"
+# a name and an owner that only ever meet in an export file
+ROUND_SANDBOX = f"roundtrip@{GRAFT_OWNER}"
+ROUND_EMPTY = "roundempty"
 
 rcon = None
+mariadb = None
 
 
 def run(command):
@@ -90,6 +112,52 @@ def wait_until(condition: Callable[[], bool], timeout=40.0):
             return True
         time.sleep(0.5)
     return False
+
+
+def write_rows_raw(statements):
+    """Runs SQL straight at the obu tables, behind the server's back, on whichever backend it is using."""
+    if mariadb:
+        container, user, password, database = mariadb
+        docker("exec", container, "mariadb", f"-u{user}", f"-p{password}", database, "-N", "-B",
+               "-e", "; ".join(statements))
+        return
+    connection = sqlite3.connect(str(WAKE / "wake.db"), timeout=10)
+    try:
+        for sql in statements:
+            connection.execute(sql)
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def context_names_raw():
+    """Every name in wake_obu_contexts as the table actually spells it, read past the server's cache."""
+    if mariadb:
+        container, user, password, database = mariadb
+        out = docker("exec", container, "mariadb", f"-u{user}", f"-p{password}", database, "-N", "-B",
+                     "-e", "SELECT name FROM wake_obu_contexts")
+        return [line.strip() for line in out.splitlines() if line.strip()]
+    uri = "file:" + (WAKE / "wake.db").resolve().as_posix() + "?mode=ro"
+    connection = sqlite3.connect(uri, uri=True, timeout=10)
+    try:
+        return [row[0] for row in connection.execute("SELECT name FROM wake_obu_contexts")]
+    finally:
+        connection.close()
+
+
+def reread_store():
+    """Cycles the module, which is what makes the server read a row nothing announced to it.
+
+    A reload will not: the store goes back to the table for the keys it was told moved, and a row written
+    behind its back moved none. Disabling drops the store, and enabling builds one that has never read."""
+    set_module_enabled("obu", False)
+    try:
+        rcon.run("wake reload")
+        time.sleep(SETTLE)
+    finally:
+        set_module_enabled("obu", True)
+        rcon.run("wake reload")
+        time.sleep(SETTLE * 2)
 
 
 def boat_present():
@@ -359,9 +427,9 @@ def graft_export(sections):
         return None
     good = EXPORT.read_text(encoding="utf-8", errors="replace")
     edited = good
-    for section, body in sections.items():
-        edited = (edited.replace(f"{section}:\n", f"{section}:\n{body}", 1) if f"{section}:\n" in edited
-                  else edited + f"{section}:\n{body}")
+    for heading, body in sections.items():
+        edited = (edited.replace(f"{heading}:\n", f"{heading}:\n{body}", 1) if f"{heading}:\n" in edited
+                  else edited + f"{heading}:\n{body}")
     EXPORT.write_text(edited, encoding="utf-8")
     try:
         log = Log()
@@ -380,24 +448,40 @@ def drill_imported_names():
     guard would then make it undeletable. A sandbox keyed to a uuid that is not its owner's, or a
     server context carrying the `@` that splits a sandbox key, is worse than wrong: it is a row no
     command can ever name again, so it only ever surfaces as a number in the count and as a purge
-    much later. The one well-formed graft in the same file is what says this is a door, not a wall."""
+    much later. An owner that is not a uuid at all is the third kind, and the one a typo produces.
+    A name in the wrong case is the fourth, and the one an admin is likeliest to write: it would be
+    stored under a spelling every lookup and every delete folds away from.
+
+    A name carrying a `.` never survives to be judged -- yaml reads it as a path, so the file's
+    `graftdot.child` reaches the importer as an ordinary `graftdot` and lands as one. That is worth
+    nothing more than knowing: what matters is that no dot can reach the store, because that is the row
+    an export would silently fold away next time. The one well-formed graft in the same file is what
+    says this is a door, not a wall."""
     console = graft_export({"sandbox":
                             "  default:\n    settings:\n      stepsize: '9.0'\n"
                             f"  default@{GRAFT_OWNER}:\n    owner_uuid: {GRAFT_OWNER}\n"
                             f"  graftstray@{GRAFT_OWNER}:\n    owner_uuid: {OTHER_OWNER}\n"
+                            "  graftbadowner:\n    owner_uuid: not-a-uuid\n"
                             f"  graftok@{GRAFT_OWNER}:\n    owner_uuid: {GRAFT_OWNER}\n"
                             "    settings:\n      stepsize: '1.5'\n",
-                            "server": "  graftat@server:\n    settings:\n      stepsize: '9.0'\n"})
+                            "server": "  graftat@server:\n    settings:\n      stepsize: '9.0'\n"
+                                      "  GraftMixedCase:\n    settings:\n      stepsize: '9.0'\n"
+                                      "  graftdot.child: {}\n"})
     if console is None:
         bad("the export/import round trip never finished, so there is nothing to judge")
         return
     truthy("the import named both reserved names it refused, keyed and bare",
            console.count("that name is reserved") == 2, console.strip()[-600:])
-    truthy("and named the two nothing could have addressed, for the other reason",
-           console.count("no command could reach a context stored under that name") == 2, console.strip()[-600:])
+    truthy("and named the three nothing could have addressed, for the other reason",
+           console.count("no command could reach a context stored under that name") == 3, console.strip()[-600:])
+    truthy("and the owner that is not a uuid, for a third",
+           "invalid owner_uuid 'not-a-uuid'" in console, console.strip()[-600:])
     listing = run("wobu -context").lower()
-    for refused in (f"default@{GRAFT_OWNER}".lower(), f"graftstray@{GRAFT_OWNER}".lower(), "graftat@server"):
+    for refused in (f"default@{GRAFT_OWNER}".lower(), f"graftstray@{GRAFT_OWNER}".lower(),
+                    "graftat@server", "graftbadowner", "graftmixedcase"):
         truthy(f"{refused} is not in the store", refused not in listing, listing.strip()[:400])
+    truthy("and nothing carrying a dot reached it either", ".child" not in listing, listing.strip()[:400])
+    rcon.run("wobu -context -delete graftdot")
     says("no sandbox answers to the reserved name", "wobu -sandbox view default", "does not exist")
     says("and default is still the protected server context", "wobu -context -delete default", "cannot delete")
 
@@ -406,6 +490,304 @@ def drill_imported_names():
            f"graftok@{GRAFT_OWNER}".lower() in listing, listing.strip()[:400])
     says("and it carries what the file gave it", f"wobu -sandbox view graftok@{GRAFT_OWNER}", "stepsize")
     rcon.run(f"wobu -sandbox delete graftok@{GRAFT_OWNER}")
+
+
+def export_now():
+    """Writes the module's cache out and answers with the file and the count it reported, or (None, 0)."""
+    log = Log()
+    rcon.run("wake database export obu")
+    if not log.await_line("Database export completed for module obu", 30):
+        return None, 0
+    reported = re.search(r"export completed for module obu \((\d+) records\)", log.read())
+    return EXPORT.read_text(encoding="utf-8", errors="replace"), int(reported.group(1)) if reported else -1
+
+
+def section(text, name):
+    """One top-level block of an export file, as the lines under it."""
+    found = re.search(rf"(?m)^{re.escape(name)}:\n((?:[ \t]+.*\n?)*)", text)
+    return found.group(1) if found else ""
+
+
+def drill_rows_no_command_wrote():
+    """The table is the other door into the store, and nothing on the way in validates what comes through
+    it: an older build, a hand-run INSERT, a server sharing the database. Each such row has to cost that
+    row alone, because the read that trips over one is the read that loads every context there is -- a
+    loader that throws leaves the whole store unread, on this reload and on every one after it.
+
+    A NULL type is the sharp one: `valueOf` on it is a NullPointerException, which is not the
+    IllegalArgumentException a malformed row is caught by. A name carrying a `.` is the other kind: no
+    command can name it, and an export would fold it into a nested section and lose it without a word.
+    A name that is merely spelt in another case is the quiet one, and the reason the door judges the
+    stored spelling rather than a folded copy of it: sqlite matches `WHERE name = ?` exactly, so a row
+    taken into the cache under a name the delete can never match is a context that comes back from the
+    dead on every reload. The purge sweep reads the same column and has to agree.
+
+    The settings rows are the same question one level down -- one value the wire cannot carry must never
+    cost a context the rest of what it holds, a setting filed under another spelling of the context must
+    not attach to it, and one that acts once rather than describing a state is not something a context
+    can hold at all, whatever put it there."""
+    fresh = int(time.time() * 1000)
+    stale = 0  # a sandbox stamped 0 is older than any keep window, so every sweep sees it
+    # a day ahead, so the three-second window below can only ever be about the mis-cased row
+    untouchable = fresh + 86_400_000
+    write_rows_raw([
+        f"REPLACE INTO wake_obu_contexts (name, type, owner_uuid, last_accessed_at) VALUES ('{RAW_NO_TYPE}', NULL, NULL, {fresh})",
+        f"REPLACE INTO wake_obu_contexts (name, type, owner_uuid, last_accessed_at) VALUES ('{RAW_UNADDRESSABLE}', 'SERVER', NULL, {fresh})",
+        f"REPLACE INTO wake_obu_contexts (name, type, owner_uuid, last_accessed_at) VALUES ('{RAW_MIXED_CASE}', 'SERVER', NULL, {fresh})",
+        f"REPLACE INTO wake_obu_contexts (name, type, owner_uuid, last_accessed_at) VALUES ('{RAW_STALE_SANDBOX}', 'SANDBOX', NULL, {stale})",
+        f"REPLACE INTO wake_obu_contexts (name, type, owner_uuid, last_accessed_at) VALUES ('{RAW_SETTINGS}', 'SANDBOX', NULL, {untouchable})",
+        f"REPLACE INTO wake_obu_settings (context_name, unique_key, definition_name, args) VALUES ('{RAW_SETTINGS}', '1', 'stepsize', 'not json at all')",
+        f"REPLACE INTO wake_obu_settings (context_name, unique_key, definition_name, args) VALUES ('{RAW_SETTINGS}', '2', 'defaultslipperiness', '[\"nonsense\"]')",
+        f"REPLACE INTO wake_obu_settings (context_name, unique_key, definition_name, args) VALUES ('{RAW_SETTINGS}', '7', 'jumpforce', '[\"0.75\"]')",
+        f"REPLACE INTO wake_obu_settings (context_name, unique_key, definition_name, args) VALUES ('{RAW_SETTINGS}', '43', 'applyimpulserelative', '[\"0.0\",\"5.0\",\"0.0\"]')",
+        f"REPLACE INTO wake_obu_settings (context_name, unique_key, definition_name, args) VALUES ('{RAW_SETTINGS.title()}', '45', 'setmaxspeed', '[\"9.0\"]')",
+    ])
+    log = Log()
+    reread_store()
+    try:
+        counts = run("wobu -settings query-context-quantity")
+        truthy("the table was still read", "has not been read" not in counts, counts.strip()[:200])
+        listing = run("wobu -context").lower()
+        truthy("every context the store already had is still in it", KNOWN_CONTEXT in listing, listing.strip()[:300])
+        truthy("the row with no type is not one of them", RAW_NO_TYPE not in listing, listing.strip()[:300])
+        truthy("nor the one no command could ever name", RAW_UNADDRESSABLE not in listing, listing.strip()[:300])
+        truthy("nor the one spelt in a case no write produces",
+               RAW_MIXED_CASE.lower() not in listing, listing.strip()[:300])
+        console = log.read()
+        truthy("the console named the type it could not read",
+               f"malformed OBU context row '{RAW_NO_TYPE}'" in console, console.strip()[-600:])
+        truthy("and named the name nothing could reach",
+               f"'{RAW_UNADDRESSABLE}': no command could reach" in console, console.strip()[-600:])
+        truthy("and named the mis-cased one under the spelling the table actually holds",
+               f"'{RAW_MIXED_CASE}': no command could reach" in console, console.strip()[-600:])
+
+        step("and a context whose setting rows are broken keeps the ones that are not")
+        view = run(f"wobu -sandbox view {RAW_SETTINGS}").lower()
+        truthy("the context itself came through", RAW_SETTINGS in view, view.strip()[:300])
+        truthy("carrying the setting that reads back", "jumpforce" in view, view.strip()[:300])
+        truthy("with the row that is not json dropped", "stepsize" not in view, view.strip()[:300])
+        truthy("and the value the wire cannot carry dropped beside it",
+               "defaultslipperiness" not in view, view.strip()[:300])
+        truthy("both of them named on the console",
+               "'stepsize' of context" in console and "'defaultslipperiness' of context" in console,
+               console.strip()[-600:])
+        truthy("the impulse no context can hold never reached it either",
+               "applyimpulserelative" not in view, view.strip()[:300])
+        truthy("nor the setting filed under another spelling of its context",
+               "setmaxspeed" not in view, view.strip()[:300])
+
+        step("and the sweep leaves the row it could never delete rather than reporting it taken")
+        log = Log()
+        says("the keep window is cut to three seconds", "wobu -settings keep-unused-sandboxes 3s", "kept for")
+        time.sleep(SETTLE * 8)
+        truthy("no sweep claimed the sandbox stamped older than any window",
+               "Purged" not in log.read(), log.read().strip()[-400:])
+        truthy("and the row is still in the table, where it can be seen and fixed",
+               RAW_STALE_SANDBOX in context_names_raw(), str(context_names_raw()[:8]))
+        truthy("with nothing on the console", not traces(log), str(traces(log)[:2]))
+    finally:
+        rcon.run("wobu -settings keep-unused-sandboxes 30d")
+        write_rows_raw([f"DELETE FROM wake_obu_settings WHERE context_name IN "
+                        f"('{RAW_SETTINGS}', '{RAW_SETTINGS.title()}')",
+                        f"DELETE FROM wake_obu_contexts WHERE name IN "
+                        f"('{RAW_NO_TYPE}', '{RAW_UNADDRESSABLE}', '{RAW_MIXED_CASE}', "
+                        f"'{RAW_STALE_SANDBOX}', '{RAW_SETTINGS}')"])
+        reread_store()
+
+
+def drill_import_settings_door():
+    """A settings block in an export file is the one place a setting arrives without a command argument
+    type behind it, so it is where the door has to stand.
+
+    Two of them are not settings at all: `-reset` clears a context and an impulse fires once at whoever
+    is aimed at, and `applySetting` stores neither -- so a file naming one has to be refused rather than
+    written, or the table ends up holding a row the loader will never hand back and nothing can delete.
+    The third shape is the same setting twice: the table keys settings by identity, so the file's last
+    word is the one that survives, and the cache has to say the same thing the table does."""
+    console = graft_export({"sandbox": "  doorprobe:\n    settings:\n      '-reset': ''\n"
+                                       "      applyimpulserelative: '0.0 5.0 0.0'\n"
+                                       "      stepsize:\n        - '1.5'\n        - '2.5'\n"})
+    if console is None:
+        bad("the graft never imported, so there is nothing to judge")
+        return
+    try:
+        truthy("the import named both settings no context can hold",
+               console.count("acts once, so no context holds it") == 2, console.strip()[-600:])
+        view = run("wobu -sandbox view doorprobe").lower()
+        truthy("neither reached the context", "reset" not in view and "applyimpulse" not in view,
+               view.strip()[:400])
+        truthy("while the setting beside them did, as the file's last word",
+               "stepsize" in view and "2.5" in view and "1.5" not in view, view.strip()[:400])
+
+        step("and the export it comes back out of says the same")
+        text, _ = export_now()
+        if text is None:
+            bad("the export never finished, so the row behind the view is unread")
+            return
+        block = re.search(r"(?ms)^  doorprobe:\n((?:[ \t]+.*\n?)*)", text)
+        body = block.group(1) if block else ""
+        truthy("one stepsize, not a list, and nothing that acts once",
+               body.count("stepsize") == 1 and "2.5" in body and "1.5" not in body
+               and "reset" not in body and "impulse" not in body, body[:400] or text[:400])
+    finally:
+        rcon.run("wobu -sandbox delete doorprobe")
+        time.sleep(SETTLE)
+
+
+def drill_export_of_a_store_never_read():
+    """An export writes the cache, so a cache that never read the table would write a file that looks like
+    a full backup and is an empty one. That is the trap the export has to refuse instead of spring.
+
+    It is reached by breaking the loader rather than the database: with a column renamed behind the
+    server's back the first read of a fresh store throws, which is a failed read and not an empty table,
+    so the store stays unread for as long as the module is up. Nothing else in the outage machinery is
+    involved -- the write path is healthy, so `/wake database export` does not refuse it up front."""
+    good = EXPORT.read_text(encoding="utf-8", errors="replace") if EXPORT.is_file() else None
+    if good is None:
+        bad("there is no export file to protect, so the drill would prove nothing")
+        return
+    set_module_enabled("obu", False)
+    rcon.run("wake reload")
+    time.sleep(SETTLE)
+    write_rows_raw(["ALTER TABLE wake_obu_settings RENAME COLUMN args TO args_hidden"])
+    log = Log()
+    try:
+        set_module_enabled("obu", True)
+        rcon.run("wake reload")
+        time.sleep(SETTLE * 2)
+        counts = run("wobu -settings query-context-quantity")
+        truthy("the store says it never read the table", "has not been read" in counts, counts.strip()[:200])
+        truthy("and the console says so once, as a failed read",
+               log.read().count("Failed to read wake_obu_contexts") == 1, log.read().strip()[-500:])
+
+        step("so the export refuses rather than writing a file with nothing in it")
+        log = Log()
+        rcon.run("wake database export obu")
+        truthy("the export reported failure", log.await_line("Database export failed for module obu", 30),
+               log.read().strip()[-400:])
+        truthy("naming what it could not read", "OBU contexts could not be read" in log.read(),
+               log.read().strip()[-400:])
+        truthy("and the file that was already there is untouched",
+               EXPORT.read_text(encoding="utf-8", errors="replace") == good,
+               EXPORT.read_text(encoding="utf-8", errors="replace")[:300])
+        truthy("with no half-written file left beside it",
+               not EXPORT.with_suffix(".yml.tmp").is_file(), str(EXPORT.parent))
+    finally:
+        set_module_enabled("obu", False)
+        rcon.run("wake reload")
+        time.sleep(SETTLE)
+        # noinspection SqlResolve
+        write_rows_raw(["ALTER TABLE wake_obu_settings RENAME COLUMN args_hidden TO args"])
+        set_module_enabled("obu", True)
+        rcon.run("wake reload")
+        time.sleep(SETTLE * 2)
+    truthy("and the store reads again once the column is back",
+           "has not been read" not in run("wobu -settings query-context-quantity")
+           and KNOWN_CONTEXT in run("wobu -context").lower(), run("wobu -context").strip()[:300])
+
+
+def drill_export_round_trip():
+    """An export looks like a backup, so everything an admin can reach has to come back out of it identical.
+
+    Three shapes are the ones naive string handling loses. A sandbox key carries an `@uuid` and an owner
+    beside it. A context with nothing in it is a section with no body, which is easy to write and easy to
+    read as absent. And a setting's arguments are written joined by a space and read back by splitting on
+    one, so a value holding a space would come back as two. The graft door is what puts a player-owned
+    sandbox here without a second player."""
+    console = graft_export({
+        "sandbox": f"  {ROUND_SANDBOX}:\n    owner_uuid: {GRAFT_OWNER}\n"
+                   "    settings:\n      stepsize: '1.5'\n      setblocksetting:\n"
+                   "        - 'JUMPS 2 stone'\n        - 'WALLTAP_MULTIPLIER 1 ice, blue_ice'\n",
+        "server": f"  {ROUND_EMPTY}: {{}}\n"})
+    if console is None:
+        bad("the graft never imported, so there is nothing to round-trip")
+        return
+    try:
+        before, counted = export_now()
+        if before is None:
+            bad("the export never finished, so there is nothing to judge")
+            return
+        sandboxes, servers, switches = section(before, "sandbox"), section(before, "server"), section(before, "obu")
+        truthy("the sandbox is under its own section, keyed and owned",
+               f"  {ROUND_SANDBOX}:" in sandboxes and f"owner_uuid: {GRAFT_OWNER}" in sandboxes,
+               sandboxes.strip()[:400])
+        truthy("the context holding nothing is still a section of its own",
+               re.search(rf"(?m)^  {ROUND_EMPTY}: \{{}}$", servers) is not None, servers.strip()[:400])
+        contexts = len(re.findall(r"(?m)^ {2}[\w@-]+:(?: \{\})?$", servers + sandboxes))
+        truthy(f"and it is counted like any other ({contexts} contexts + {len(switches.splitlines())} switches)",
+               counted == contexts + len(switches.splitlines()), f"reported {counted}")
+        truthy("a list argument came out as one word, the spaces inside it gone at the door",
+               "JUMPS 2.0 minecraft:stone" in sandboxes
+               and "WALLTAP_MULTIPLIER 1.0 minecraft:ice,minecraft:blue_ice" in sandboxes,
+               sandboxes.strip()[:400])
+
+        step("wipe the store and put the file back into it")
+        log = Log()
+        rcon.run("wake database drop obu confirm")
+        if not log.await_line("Database drop completed for module obu", 30):
+            bad("the drop never finished, so the import below would prove nothing")
+            return
+        truthy("the store is empty", KNOWN_CONTEXT not in run("wobu -context").lower(),
+               run("wobu -context").strip()[:300])
+        log = Log()
+        rcon.run("wake database import obu confirm")
+        if not log.await_line("Database import completed for module obu", 30):
+            bad("the import never finished, so the store is not back")
+            return
+        after, restored = export_now()
+        if after is None:
+            bad("the second export never finished")
+            return
+        for label, was in (("sandbox", sandboxes), ("server", servers), ("obu", switches)):
+            now = section(after, label)
+            truthy(f"the {label} section came back line for line",
+                   sorted(was.splitlines()) == sorted(now.splitlines()),
+                   f"lost {[line for line in was.splitlines() if line not in now][:3]}")
+        truthy("and the count with it", restored == counted, f"{counted} out, {restored} back")
+        says("the sandbox reads back the repeatable it was given",
+             f"wobu -sandbox view {ROUND_SANDBOX}", "walltap_multiplier")
+        truthy("with nothing on the console", not traces(log), str(traces(log)[:2]))
+
+        step("and a second import is a merge, not a mirror: it never deletes what the file does not name")
+        says("a context the file has never heard of is created", "wobu -sandbox create roundlater", "created")
+        rcon.run("wake database import obu confirm")
+        time.sleep(SETTLE * 2)
+        truthy("it is still there afterwards", "roundlater" in run("wobu -context").lower(),
+               run("wobu -context").strip()[:300])
+        rcon.run("wobu -sandbox delete roundlater")
+    finally:
+        rcon.run(f"wobu -sandbox delete {ROUND_SANDBOX}")
+        rcon.run(f"wobu -context -delete {ROUND_EMPTY}")
+        time.sleep(SETTLE)
+
+
+def drill_import_without_contexts():
+    """A file carrying the module's switches and no contexts at all is a real import, and the two halves of
+    an import are counted separately -- so it has to land the switches and leave the store exactly as it
+    found it, without walking every online player and every pinned boat for contexts nobody imported."""
+    good, _ = export_now()
+    if good is None:
+        bad("the export never finished, so there is no file to trim")
+        return
+    listing = run("wobu -context")
+    EXPORT.write_text('version: 1\nobu:\n  keep_unused_sandboxes: "31d"\n', encoding="utf-8")
+    log = Log()
+    try:
+        rcon.run("wake database import obu confirm")
+        truthy("the import finished", log.await_line("Database import completed for module obu", 30),
+               log.read().strip()[-300:])
+        truthy("counting the one switch it carried and no context",
+               "for module obu (1 records)" in log.read(), log.read().strip()[-300:])
+        truthy("the switch reached the database", state("obu.keep_unused_sandboxes", mariadb) == "31d",
+               repr(state("obu.keep_unused_sandboxes", mariadb)))
+        truthy("and the store is exactly what it was", run("wobu -context") == listing,
+               run("wobu -context").strip()[:300])
+        truthy("with nothing on the console", not traces(log), str(traces(log)[:2]))
+    finally:
+        EXPORT.write_text(good, encoding="utf-8")
+        rcon.run("wake database import obu confirm")
+        time.sleep(SETTLE)
+        rcon.run("wobu -settings keep-unused-sandboxes 30d")
 
 
 def drill_publish_collision():
@@ -648,11 +1030,12 @@ def drill_settings_switches():
 
 
 def main():
-    global rcon
+    global rcon, mariadb
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=25575)
     parser.add_argument("--password", default="wake-dev")
+    parser.add_argument("--mariadb-container", default="wake-testenv-mariadb-1")
     args = parser.parse_args()
 
     try:
@@ -660,6 +1043,8 @@ def main():
     except OSError as error:
         raise SystemExit(f"cannot reach RCON at {args.host}:{args.port} ({error}). "
                          f"Start ./gradlew runServer first.")
+    mariadb = detect_backend(args.mariadb_container)
+    print(f"backend: {'mariadb' if mariadb else 'sqlite'}")
 
     rcon.run("forceload add 0 0")
     try:
@@ -667,6 +1052,9 @@ def main():
                       drill_pin_storage, drill_boat_overrides, drill_context_replaces_overrides,
                       drill_chunk_unload_eviction, drill_override_eviction,
                       drill_module_cycle, drill_reserved_contexts, drill_imported_names,
+                      drill_rows_no_command_wrote, drill_import_settings_door,
+                      drill_export_round_trip, drill_import_without_contexts,
+                      drill_export_of_a_store_never_read,
                       drill_publish_collision, drill_context_listing,
                       drill_context_delete, drill_pinned_to_a_deleted_context,
                       drill_publish_under_a_pinned_boat, drill_sweep_over_pinned_boats,

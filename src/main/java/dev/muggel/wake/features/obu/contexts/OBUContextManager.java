@@ -74,11 +74,15 @@ public class OBUContextManager {
     }
 
     public @Nullable OBUContext getContext(@NonNull String name) {
-        return contexts.get(name.toLowerCase(Locale.ROOT));
+        return contexts.get(canonical(name));
+    }
+
+    public static @NonNull String canonical(@NonNull String name) {
+        return name.toLowerCase(Locale.ROOT);
     }
 
     public static @NonNull String sandboxKey(@NonNull String name, @NonNull UUID owner) {
-        return name.toLowerCase(Locale.ROOT) + "@" + owner;
+        return canonical(name) + "@" + owner;
     }
 
     public static @NonNull String displayName(@NonNull String contextName) {
@@ -86,13 +90,14 @@ public class OBUContextManager {
         return at == -1 ? contextName : contextName.substring(0, at);
     }
 
-    public static boolean isAddressable(@NonNull String name, @NonNull ContextType type, @Nullable UUID owner) {
+    public static boolean isUnaddressable(@NonNull String name, @NonNull ContextType type, @Nullable UUID owner) {
         String display = displayName(name);
-        return NAME_PATTERN.matcher(display).matches() && name.equals(type == ContextType.SANDBOX && owner != null ? sandboxKey(display, owner) : display);
+        String key = type == ContextType.SANDBOX && owner != null ? sandboxKey(display, owner) : display;
+        return !NAME_PATTERN.matcher(display).matches() || !name.equals(key);
     }
 
     public boolean createSandbox(@NonNull String key, @Nullable UUID ownerUuid) {
-        String lower = key.toLowerCase(Locale.ROOT);
+        String lower = canonical(key);
         if (isReserved(displayName(lower)) || contexts.containsKey(lower)) {
             return false;
         }
@@ -101,14 +106,14 @@ public class OBUContextManager {
     }
 
     public boolean deleteContext(@NonNull String name) {
-        String lower = name.toLowerCase(Locale.ROOT);
+        String lower = canonical(name);
         if (isReserved(lower)) return false;
         dao.deleteContext(lower);
         return true;
     }
 
     public boolean publishSandbox(@NonNull String name) {
-        String lower = name.toLowerCase(Locale.ROOT);
+        String lower = canonical(name);
         OBUContext context = contexts.get(lower);
         if (context == null || !context.isSandbox()) return false;
         String display = displayName(lower);
@@ -120,7 +125,7 @@ public class OBUContextManager {
     }
 
     public void addSettings(@NonNull String name, @NonNull List<OBUSetting> newSettings) {
-        String lower = name.toLowerCase(Locale.ROOT);
+        String lower = canonical(name);
         OBUContext context = contexts.get(lower);
         if (context == null || newSettings.isEmpty()) return;
         LinkedHashMap<String, OBUSetting> merged = new LinkedHashMap<>();
@@ -134,7 +139,7 @@ public class OBUContextManager {
     }
 
     public boolean removeContextSetting(@NonNull String name, String uniqueKey) {
-        String lower = name.toLowerCase(Locale.ROOT);
+        String lower = canonical(name);
         OBUContext context = contexts.get(lower);
         if (context == null) return false;
         List<OBUSetting> settings = new ArrayList<>(context.settings());

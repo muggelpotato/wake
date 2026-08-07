@@ -133,7 +133,7 @@ public class DatabaseManager {
         });
     }
 
-    private static void execute(@NonNull List<SqlStatement> statements) throws SQLException {
+    static void execute(@NonNull List<SqlStatement> statements) throws SQLException {
         if (statements.isEmpty()) {
             return;
         }

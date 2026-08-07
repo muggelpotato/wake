@@ -1,0 +1,19 @@
+id: no-folded-name-from-storage
+language: Java
+severity: error
+message: A name read out of a table is judged as it is stored, never folded — canonicalise on the way in, not on the way out.
+note: |
+  CLAUDE.md (OBU): the stored spelling, the setting's identity key and the bytes on the wire must all
+  agree. Every write canonicalises, so a row spelt any other way is one no command wrote — and one the
+  `WHERE name = ?` behind a delete, keyed on the canonical spelling, can never match again. Folding it
+  here takes it into the cache under a name no write can reach, so the row survives every delete and
+  comes back on every reload, and on a case-sensitive backend two spellings of one name collide in the
+  loaded map. Judge the column as it stands and skip the row, the same way an unaddressable one is
+  skipped (see OBUDao.readContext).
+files:
+  - "**/*Dao.java"
+rule:
+  any:
+    - pattern: canonical($ROW.getString($$$))
+    - pattern: $CLASS.canonical($ROW.getString($$$))
+    - pattern: $ROW.getString($$$).toLowerCase($$$)

@@ -72,7 +72,19 @@ public final class ContextDelivery implements OBUService {
         applyContext(player.getUniqueId(), context.name());
     }
 
-    public boolean isAffectedBy(@NonNull Set<String> changedContexts, @NonNull Player player) {
+    public void resyncAffected(@NonNull Set<String> changedContexts) {
+        if (changedContexts.isEmpty()) {
+            return;
+        }
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (isAffectedBy(changedContexts, player)) {
+                resyncActiveSelection(player);
+            }
+        }
+        syncManager.resyncPinnedBoats();
+    }
+
+    private boolean isAffectedBy(@NonNull Set<String> changedContexts, @NonNull Player player) {
         UUID uuid = player.getUniqueId();
         String sandbox = active.sandboxOf(uuid);
         if (sandbox != null) {
@@ -83,7 +95,7 @@ public final class ContextDelivery implements OBUService {
                 || (OBUContextManager.inheritsDefault(context) && changedContexts.contains(OBUContextManager.DEFAULT_CONTEXT));
     }
 
-    public void resyncActiveSelection(@NonNull Player player) {
+    private void resyncActiveSelection(@NonNull Player player) {
         UUID uuid = player.getUniqueId();
         String sandbox = active.sandboxOf(uuid);
         if (sandbox != null) {
@@ -145,7 +157,7 @@ public final class ContextDelivery implements OBUService {
     public @NonNull Map<Player, String> deleteContextsAndEvict(@NonNull Collection<String> names) {
         Set<String> gone = new HashSet<>();
         for (String name : names) {
-            String lower = ActiveContexts.canonical(name);
+            String lower = OBUContextManager.canonical(name);
             if (contextManager.deleteContext(lower)) {
                 gone.add(lower);
             }

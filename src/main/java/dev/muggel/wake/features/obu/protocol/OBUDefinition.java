@@ -123,6 +123,10 @@ public enum OBUDefinition {
         return this == applyimpulse || this == applyimpulserelative;
     }
 
+    public boolean isOneShot() {
+        return this == reset || isActionSetting();
+    }
+
     public boolean isGlobalSetting() {
         return this == setinterpolationten || this == setresetonworldload;
     }
