@@ -112,9 +112,7 @@ public class BoostpadDetectorListener implements Listener {
     }
 
     private @NonNull List<PadHit> findHits(@NonNull Boat boat, @NonNull Legs legs, @NonNull Map<Material, BoostpadConfig> materialConfigs) {
-        double scale = OBUBoostpadIntegration.getVehicleScale(plugin, boat.getUniqueId());
-        double sizing = scale > 0 ? scale : 1.0;
-        double hull = HULL_HALF * sizing - GRAZE_MARGIN;
+        double hull = HULL_HALF * OBUBoostpadIntegration.getVehicleScale(plugin, boat) - GRAZE_MARGIN;
         double reach = extent(boostpads.getMaxPadding(), hull);
         World world = boat.getWorld();
         int legCount = legs.count();

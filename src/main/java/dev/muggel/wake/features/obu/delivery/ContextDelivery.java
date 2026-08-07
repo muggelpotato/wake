@@ -198,8 +198,9 @@ public final class ContextDelivery implements OBUService {
     }
 
     @Override
-    public double getVehicleScale(@NonNull UUID uuid) {
-        return syncManager.scaleOf(uuid);
+    public double getVehicleScale(@NonNull Boat boat) {
+        double scale = syncManager.scaleOf(boat.getUniqueId());
+        return scale > 0 ? scale : 1.0;
     }
 
     @Override

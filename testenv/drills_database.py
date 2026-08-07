@@ -288,7 +288,7 @@ def drill_obu_export_shape(rcon: Rcon, log: Log, mariadb):
     lost = [line for line in before.splitlines() if line.strip() and line not in after]
     truthy("the round trip changed nothing under server:", not lost, f"lost {lost[:3]}")
     truthy("including both entries of the repeatable one",
-           after.count("WALLTAP_MULTIPLIER") == 1 and after.count("JUMPS 2 stone") == 1, after[-200:])
+           after.count("WALLTAP_MULTIPLIER") == 1 and after.count("JUMPS 2.0 minecraft:stone") == 1, after[-200:])
 
 
 def drill_refused_while_degraded(rcon: Rcon, log: Log, mariadb):

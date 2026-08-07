@@ -17,20 +17,18 @@ import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
 import dev.muggel.wake.features.obu.clients.ClientRegistry.ClientState;
-import io.papermc.paper.event.player.PlayerTrackEntityEvent;
-import org.bukkit.entity.Boat;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.vehicle.VehicleEnterEvent;
-import org.bukkit.event.vehicle.VehicleExitEvent;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class HandshakeListener extends PacketListenerAbstract implements Listener {
@@ -89,16 +87,14 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     }
 
     private static @Nullable HandshakeData parseHandshakeData(byte @Nullable [] data) {
-        if (data == null) {
+        if (data == null || data.length < Short.BYTES + Integer.BYTES) {
             return null;
         }
         ByteBuffer buf = ByteBuffer.wrap(data);
-        if (data.length >= 7) {
-            if (buf.getShort() != 0) return null;
-        } else if (data.length != 5) {
+        if (buf.getShort() != 0) {
             return null;
         }
-        return new HandshakeData(buf.getInt(), buf.get() != 0);
+        return new HandshakeData(buf.getInt(), buf.hasRemaining() && buf.get() != 0);
     }
 
     @EventHandler
@@ -116,32 +112,6 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
         delivery.cleanupPlayer(event.getPlayer());
     }
 
-    @EventHandler
-    public void onEntityTrack(@NonNull PlayerTrackEntityEvent event) {
-        if (event.getEntity() instanceof Boat boat) {
-            syncManager.syncToViewer(boat, event.getPlayer());
-        }
-    }
-
-    @EventHandler
-    public void onVehicleEnter(@NonNull VehicleEnterEvent event) {
-        if (event.getVehicle() instanceof Boat boat && event.getEntered() instanceof Player player) {
-            Scheduling.onMain(plugin, () -> {
-                syncManager.syncPlayer(player);
-                if (!(player.getVehicle() instanceof Boat)) {
-                    syncManager.broadcastSync(boat);
-                }
-            });
-        }
-    }
-
-    @EventHandler
-    public void onVehicleExit(@NonNull VehicleExitEvent event) {
-        if (event.getVehicle() instanceof Boat boat && event.getExited() instanceof Player) {
-            Scheduling.onMain(plugin, () -> syncManager.broadcastSync(boat));
-        }
-    }
-
     private void logVersion(@NonNull User user, @NonNull HandshakeData handshake) {
         plugin.getLogger().info(user.getName() + " is running OpenBoatUtils version " + handshake.versionId() + (handshake.isUnstable() ? " [UNSTABLE BUILD]" : ""));
     }
@@ -157,7 +127,8 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     private void handleOBUPlayer(@NonNull Player player, @NonNull User user, @NonNull HandshakeData handshake) {
         boolean rejected = OBUDefinition.REJECTED_VERSIONS.contains(handshake.versionId());
         ClientState verdict = rejected ? ClientState.UNSUPPORTED : ClientState.DRIVEN;
-        if (!clients.claim(player.getUniqueId(), verdict)) {
+        UUID uuid = player.getUniqueId();
+        if (!clients.claim(uuid, verdict)) {
             return;
         }
         logVersion(user, handshake);
@@ -165,11 +136,12 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
             warnUnsupported(player);
             return;
         }
-        delivery.loadPlayerState(player.getUniqueId(), state -> driveClient(player, handshake.versionId(), state));
+        delivery.loadPlayerState(uuid, state -> driveClient(uuid, handshake.versionId(), state));
     }
 
-    private void driveClient(@NonNull Player player, int versionId, @Nullable OBUPlayerState state) {
-        if (!player.isOnline() || delivery.isStale()) {
+    private void driveClient(@NonNull UUID uuid, int versionId, @Nullable OBUPlayerState state) {
+        Player player = Bukkit.getPlayer(uuid);
+        if (player == null || delivery.isStale()) {
             return;
         }
         if (versionId < OBUDefinition.LATEST_SUPPORTED_VERSION) {

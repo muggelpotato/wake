@@ -6,6 +6,7 @@ import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
@@ -17,41 +18,44 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class BoatLagInterceptor extends PacketListenerAbstract implements Listener {
-    private final Set<UUID> boatDrivers = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> boatRiders = ConcurrentHashMap.newKeySet();
+    private final ClientRegistry clients;
+    public BoatLagInterceptor(@NonNull ClientRegistry clients) {
+        this.clients = clients;
+    }
 
-    public void adoptDriver(@NonNull Player player) {
+    public void adoptRider(@NonNull Player player) {
         if (player.getVehicle() instanceof Boat) {
-            boatDrivers.add(player.getUniqueId());
+            boatRiders.add(player.getUniqueId());
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onVehicleEnter(@NonNull VehicleEnterEvent event) {
         if (event.getVehicle() instanceof Boat && event.getEntered() instanceof Player player) {
-            boatDrivers.add(player.getUniqueId());
+            boatRiders.add(player.getUniqueId());
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onVehicleExit(@NonNull VehicleExitEvent event) {
         if (event.getExited() instanceof Player player) {
-            boatDrivers.remove(player.getUniqueId());
+            boatRiders.remove(player.getUniqueId());
         }
     }
 
     @EventHandler
     public void onPlayerQuit(@NonNull PlayerQuitEvent event) {
-        boatDrivers.remove(event.getPlayer().getUniqueId());
+        boatRiders.remove(event.getPlayer().getUniqueId());
     }
 
     @Override
-    @SuppressWarnings("ConstantValue")
     public void onPacketSend(@NonNull PacketSendEvent event) {
-        if (event.getPacketType() != PacketType.Play.Server.VEHICLE_MOVE) {
+        if (event.getPacketType() != PacketType.Play.Server.VEHICLE_MOVE || boatRiders.isEmpty()) {
             return;
         }
         UUID uuid = event.getUser().getUUID();
-        if (uuid != null && boatDrivers.contains(uuid)) {
+        if (boatRiders.contains(uuid) && clients.isDriven(uuid)) {
             event.setCancelled(true);
         }
     }

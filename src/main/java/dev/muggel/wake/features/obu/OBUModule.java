@@ -22,7 +22,7 @@ import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.delivery.ActiveContexts;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
-import dev.muggel.wake.features.obu.delivery.VehicleCleanupListener;
+import dev.muggel.wake.features.obu.delivery.BoatSyncListener;
 import dev.muggel.wake.features.obu.contexts.SandboxPurger;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -64,17 +64,17 @@ public class OBUModule extends WakeModule {
         HandshakeListener handshakeListener = new HandshakeListener(plugin, delivery, contextManager, syncManager, clients);
         registerListener(handshakeListener);
         registerPacketListener(handshakeListener);
-        BoatLagInterceptor boatLagInterceptor = new BoatLagInterceptor();
+        BoatLagInterceptor boatLagInterceptor = new BoatLagInterceptor(clients);
         registerListener(boatLagInterceptor);
         registerPacketListener(boatLagInterceptor);
         for (Player player : Bukkit.getOnlinePlayers()) {
             delivery.requestClientVersion(player);
-            boatLagInterceptor.adoptDriver(player);
+            boatLagInterceptor.adoptRider(player);
         }
         this.sandboxPurger = new SandboxPurger(plugin, obuDao, delivery);
         schedulePurgerSweep();
 
-        registerListener(new VehicleCleanupListener(syncManager));
+        registerListener(new BoatSyncListener(plugin, syncManager));
         seedDataIfEmpty(() -> {
             Boolean hasContexts = dao.hasAnyContexts();
             return hasContexts == null ? null : !hasContexts;

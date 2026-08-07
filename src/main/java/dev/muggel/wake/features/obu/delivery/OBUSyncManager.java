@@ -170,6 +170,9 @@ public final class OBUSyncManager {
     }
 
     public void broadcastSync(@NonNull Boat boat) {
+        if (!boat.isValid()) {
+            return;
+        }
         List<OBUSetting> settings = settingsOn(boat);
         Set<Player> viewers = new HashSet<>(boat.getTrackedBy());
         Player driver = driverOf(boat);

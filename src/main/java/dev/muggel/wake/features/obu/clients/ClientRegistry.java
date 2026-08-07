@@ -25,7 +25,6 @@ public final class ClientRegistry {
         clients.put(uuid, ClientState.UNKNOWN);
     }
 
-    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public boolean isDriven(@NonNull UUID uuid) {
         return clients.get(uuid) == ClientState.DRIVEN;
     }
