@@ -26,7 +26,8 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import ROOT, WAKE, Log, Rcon, bad, failures, ok, set_module_enabled, step  # noqa: E402
+from drills import (ROOT, WAKE, Log, Rcon, bad, failures, ok,  # noqa: E402
+                    reload_outcomes, set_module_enabled, step)
 
 CONFIG = WAKE / "config.yml"
 EXPORT = WAKE / "exports" / "axiom_data.yml"
@@ -34,13 +35,6 @@ BUNDLED = ROOT / "src" / "main" / "resources" / "defaults" / "axiom_default.yml"
 COMPLETED = re.compile(r"Database (\w+) completed for module (\w+) \((\d+) records\)")
 SKIPPED = re.compile(r"Skipping invalid Axiom model key: (.*)")
 LISTED = re.compile(r"(?m)^displays:[ \t]*\n((?:[ \t]*-.*\n?)*)")
-OUTCOMES = [
-    ("enabled", re.compile(r"(?<!Dis)Enabled module: (\w+)")),
-    ("disabled", re.compile(r"Disabled module: (\w+)")),
-    ("reloaded", re.compile(r"Reloaded module: (\w+)")),
-    ("incompatible", re.compile(r"incompatible: (\w+)")),
-    ("failed", re.compile(r"Failed to sync module: (\w+)")),
-]
 # an import file edited by hand: two pairs that each name one model, and three keys Paper will not read
 UNUSABLE = ["muggel:banana", "MUGGEL:BANANA", "banana", "minecraft:banana",
             "''", "not a key", "a:b:c", "muggel:boats/oak_racer"]
@@ -50,16 +44,6 @@ SETTLE = 1.5
 
 def truthy(label, condition, detail=""):
     (ok if condition else bad)(label if condition else f"{label} -- {detail}")
-
-
-def reload_outcomes(rcon: Rcon):
-    """What /wake reload reported for each module, as a list per module so a doubled line shows."""
-    reply = rcon.run("wake reload")
-    seen = {}
-    for name, pattern in OUTCOMES:
-        for module in pattern.findall(reply):
-            seen.setdefault(module, []).append(name)
-    return seen
 
 
 def cycle(rcon: Rcon, enabled):

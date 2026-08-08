@@ -39,8 +39,9 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import (Log, Rcon, bad, detect_backend, docker, failures, ok, outage,  # noqa: E402
-                    set_module_enabled, state, state_keys, step, switch, write_state_raw)
+from drills import (Log, Rcon, bad, detect_backend, failures, ok, outage,  # noqa: E402
+                    reload_outcomes, set_module_enabled, state, state_keys, step, switch,
+                    write_schema_version, write_state_raw)
 
 WAKE = Path(__file__).resolve().parents[1] / "run" / "plugins" / "wake"
 CONFIG = WAKE / "config.yml"
@@ -48,13 +49,6 @@ EXPORTS = WAKE / "exports"
 UNKNOWN = "Unknown or incomplete command"
 MOVE_EVENT = "org.bukkit.event.player.PlayerMoveEvent"
 COMPLETED = re.compile(r"Database (\w+) completed for module (\w+) \((\d+) records\)")
-OUTCOMES = [
-    ("enabled", re.compile(r"(?<!Dis)Enabled module: (\w+)")),
-    ("disabled", re.compile(r"Disabled module: (\w+)")),
-    ("reloaded", re.compile(r"Reloaded module: (\w+)")),
-    ("incompatible", re.compile(r"incompatible: (\w+)")),
-    ("failed", re.compile(r"Failed to sync module: (\w+)")),
-]
 SETTLE = 1.5
 
 
@@ -67,35 +61,10 @@ def different(raw):
     return {"true": "false", "false": "true"}.get(raw, '"zzdrill"')
 
 
-def reload_outcomes(rcon: Rcon):
-    """What /wake reload reported for each module, as a list per module so a doubled line shows."""
-    reply = rcon.run("wake reload")
-    seen = {}
-    for name, pattern in OUTCOMES:
-        for module in pattern.findall(reply):
-            seen.setdefault(module, []).append(name)
-    return seen
-
-
 def cycle(rcon: Rcon, module, enabled):
     """Flips the module in config.yml and reloads, answering with what the reload said about it."""
     set_module_enabled(module, enabled)
     return reload_outcomes(rcon).get(module, [])
-
-
-def write_schema_version(module, version, mariadb=None):
-    """Stamps a schema version behind the server's back: a DAO that reads one it cannot support throws."""
-    if mariadb:
-        container, user, password, database = mariadb
-        docker("exec", container, "mariadb", f"-u{user}", f"-p{password}", database, "-N", "-B",
-               "-e", f"REPLACE INTO wake_schema_version (module, version) VALUES ('{module}', {version})")
-        return
-    connection = sqlite3.connect(str(WAKE / "wake.db"), timeout=10)
-    try:
-        connection.execute("REPLACE INTO wake_schema_version (module, version) VALUES (?, ?)", (module, version))
-        connection.commit()
-    finally:
-        connection.close()
 
 
 def database(rcon: Rcon, log: Log, command, verb, module, timeout=20):

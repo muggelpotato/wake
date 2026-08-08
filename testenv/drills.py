@@ -4,14 +4,23 @@
 Forces a database outage and confirms the journal replays, and checks that a change reaches the
 other backend. Every step prints what it did and what it saw.
 
-    python testenv/drills.py            # boot + outage
+    python testenv/drills.py            # boot + reloads + outage
     python testenv/drills.py --sync     # also the cross-server drill (needs the mariadb stack)
+    python testenv/drills.py --lifecycle  # also the plugin lifecycle -- STOPS THE SERVER, run it last
+
+`--lifecycle` covers what only a boot and a shutdown can show, so it ends the session: it stops the
+running server over RCON and reads its shutdown back, then boots two more servers of its own from the
+jar run-paper already downloaded -- one whose database never answers, to watch Wake disable itself
+against a half-built object, and one on the restored config, to prove the first left nothing behind.
+Start `./gradlew runServer` again afterwards. It needs a current `./gradlew shadowJar`, since it adds
+the same `build/libs` jar runServer does.
 
 Needs a server up with RCON (./gradlew runServer). Exits non-zero if a drill fails.
 """
 
 import argparse
 import io
+import json
 import os
 import re
 import socket
@@ -19,6 +28,7 @@ import sqlite3
 import struct
 import subprocess
 import sys
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -28,12 +38,26 @@ if hasattr(sys.stdout, "buffer"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parents[1]
-WAKE = ROOT / "run" / "plugins" / "wake"
-LOG = ROOT / "run" / "logs" / "latest.log"
+RUN = ROOT / "run"
+WAKE = RUN / "plugins" / "wake"
+LOG = RUN / "logs" / "latest.log"
 JOURNAL = WAKE / "outage-journal.jsonl"
+SERVER_JARS = Path.home() / ".gradle" / "caches" / "run-task-jars" / "paper" / "jars"
+PLUGIN_JARS = ROOT / "build" / "libs"
 # trailing §x: rcon-cli rewrites the six hex digits as ANSI escapes but leaves the marker behind
 CODES = re.compile(r"§x(?:§[0-9a-fA-F]){6}|§[0-9a-fk-orA-FK-OR]|\x1b\[[0-9;]*m|§x")
 STATUS = re.compile(r"Status:\s*(\w+)")
+# a stack trace carries no plugin tag of its own, so the frames are read as part of whatever logged them
+TRACE = re.compile(r"^(?:\s+at |\s*Caused by:|[\w.$]+(?:Exception|Error)(?::|$))")
+# the console writes "[12:00:00 ERROR]:" where the log file writes "[Server thread/ERROR]:"
+LEVEL = re.compile(r"[/ ](ERROR|WARN)\]")
+OUTCOMES = [
+    ("enabled", re.compile(r"(?<!Dis)Enabled module: (\w+)")),
+    ("disabled", re.compile(r"Disabled module: (\w+)")),
+    ("reloaded", re.compile(r"Reloaded module: (\w+)")),
+    ("incompatible", re.compile(r"incompatible: (\w+)")),
+    ("failed", re.compile(r"Failed to sync module: (\w+)")),
+]
 
 failures = []
 
@@ -152,6 +176,37 @@ def write_state_raw(key, raw_value, mariadb=None):
         connection.close()
 
 
+def schema_version(module, mariadb=None):
+    """The schema version stamped for a module, or None when it has never been stamped."""
+    if mariadb:
+        container, user, password, database = mariadb
+        value = docker("exec", container, "mariadb", f"-u{user}", f"-p{password}", database, "-N", "-B",
+                       "-e", f"SELECT version FROM wake_schema_version WHERE module = '{module}'").strip()
+        return int(value) if value else None
+    uri = "file:" + (WAKE / "wake.db").resolve().as_posix() + "?mode=ro"
+    connection = sqlite3.connect(uri, uri=True, timeout=5)
+    try:
+        row = connection.execute("SELECT version FROM wake_schema_version WHERE module = ?", (module,)).fetchone()
+    finally:
+        connection.close()
+    return row[0] if row else None
+
+
+def write_schema_version(module, version, mariadb=None):
+    """Stamps a schema version behind the server's back: a DAO that reads one it cannot support throws."""
+    if mariadb:
+        container, user, password, database = mariadb
+        docker("exec", container, "mariadb", f"-u{user}", f"-p{password}", database, "-N", "-B",
+               "-e", f"REPLACE INTO wake_schema_version (module, version) VALUES ('{module}', {version})")
+        return
+    connection = sqlite3.connect(str(WAKE / "wake.db"), timeout=10)
+    try:
+        connection.execute("REPLACE INTO wake_schema_version (module, version) VALUES (?, ?)", (module, version))
+        connection.commit()
+    finally:
+        connection.close()
+
+
 def set_module_enabled(module, enabled):
     """Flips `modules.<module>.enabled` in the live config, which is what a `/wake reload` acts on."""
     config = WAKE / "config.yml"
@@ -167,6 +222,16 @@ def switch(text):
     """The Status: line a listing prints, which is read out of the cache rather than the table."""
     found = STATUS.search(CODES.sub("", text))
     return found.group(1).lower() if found else None
+
+
+def reload_outcomes(rcon: Rcon):
+    """What /wake reload reported for each module, as a list per module so a doubled line shows."""
+    reply = rcon.run("wake reload")
+    seen = {}
+    for name, pattern in OUTCOMES:
+        for module in pattern.findall(reply):
+            seen.setdefault(module, []).append(name)
+    return seen
 
 
 def state_keys(prefix, mariadb=None):
@@ -192,6 +257,99 @@ def docker(*args):
     if result.returncode != 0:
         raise RuntimeError(f"docker {' '.join(args)}: {(result.stderr or result.stdout).strip()}")
     return result.stdout
+
+
+def wake_errors(text, level=None):
+    """Wake's own ERROR/WARN lines and the stack traces under them, in log order."""
+    found = []
+    tagged = False
+    for line in text.splitlines():
+        if "[wake]" in line:
+            seen = LEVEL.search(line)
+            tagged = bool(seen) and (level is None or seen.group(1) == level)
+            if tagged:
+                found.append(line.strip())
+        elif tagged and TRACE.match(line):
+            found.append(line.strip())
+        elif line.strip():
+            tagged = False
+    return found
+
+
+def port_answers(port, host="127.0.0.1"):
+    try:
+        socket.create_connection((host, port), timeout=2).close()
+        return True
+    except OSError:
+        return False
+
+
+def await_port(port, answering, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if port_answers(port) == answering:
+            return True
+        time.sleep(1)
+    return False
+
+
+def server_jar():
+    """The paper jar runServer already downloaded, newest build."""
+    builds = [jar for jar in SERVER_JARS.glob("*/*.jar") if jar.stem.isdigit()]
+    return max(builds, key=lambda jar: (jar.parent.name, int(jar.stem))) if builds else None
+
+
+def plugin_jar():
+    """The shadow jar runServer adds, which is what a lifecycle drill has to boot."""
+    built = [jar for jar in PLUGIN_JARS.glob("wake-*.jar") if not jar.name.endswith("-sources.jar")]
+    return max(built, key=lambda jar: jar.stat().st_mtime) if built else None
+
+
+class Headless:
+    """A server of the drill's own, booted from the jar rather than through gradle, and driven over its console."""
+
+    def __init__(self, jar, plugin):
+        self.lines = []
+        self.process = subprocess.Popen(
+            ["java", "-Xms1G", "-Xmx2G", "-jar", str(jar), "--nogui", f"-add-plugin={plugin}"],
+            cwd=str(RUN), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace", bufsize=1)
+        self.reader = threading.Thread(target=self._pump, daemon=True)
+        self.reader.start()
+
+    def _pump(self):
+        for line in self.process.stdout:
+            self.lines.append(CODES.sub("", line.rstrip("\r\n")))
+
+    def log(self):
+        return "\n".join(self.lines)
+
+    def await_line(self, needle, timeout):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if needle in self.log():
+                return True
+            if self.process.poll() is not None:
+                return needle in self.log()
+            time.sleep(0.5)
+        return False
+
+    def stop(self, timeout=180):
+        """`stop` down the console, never a kill: a killed JVM proves nothing about what Wake wound down."""
+        if self.process.poll() is None:
+            try:
+                self.process.stdin.write("stop\n")
+                self.process.stdin.flush()
+            except OSError:
+                pass
+        try:
+            self.process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait(timeout=30)
+            return False
+        self.reader.join(timeout=10)
+        return True
 
 
 @contextmanager
@@ -263,6 +421,53 @@ def drill_boot(rcon: Rcon):
         bad("/wake help did not resolve")
     else:
         ok("commands respond over RCON")
+
+
+def drill_repeated_reload(rcon: Rcon, log: Log):
+    """`/wake reload` has to be able to run all day.
+
+    Every step of it reads what the one before settled -- the file, the language, the caches, then the
+    modules -- so a reload that half-applies shows as an outcome changing between rounds. What the
+    console cannot see is the registration side, and that is where a reload would leak: Paper is asked
+    for the listener count instead, because a re-registered listener answers every event twice.
+    """
+    print("\nrepeated reload")
+    tick = "com.destroystokyo.paper.event.server.ServerTickStartEvent"
+
+    def clock_registrations():
+        return rcon.run(f"paper dumplisteners {tick}").count("TickClock")
+
+    log.reset()
+    before = clock_registrations()
+    if before != 1:
+        bad(f"the tick clock is on {tick.rsplit('.', 1)[1]} {before} time(s) before the drill starts")
+        return
+    rounds = [reload_outcomes(rcon) for _ in range(5)]
+    step(f"reloaded 5 times, first round said {rounds[0]}")
+    drifted = [index for index, outcome in enumerate(rounds, 1) if outcome != rounds[0]]
+    if drifted:
+        bad(f"round(s) {drifted} answered differently: {[rounds[index - 1] for index in drifted]}")
+    elif any(len(names) != 1 for names in rounds[0].values()):
+        bad(f"a module was named more than once in one reload: {rounds[0]}")
+    else:
+        ok(f"every round named {', '.join(sorted(rounds[0]))} exactly once, with the same outcome")
+
+    after = clock_registrations()
+    if after == before:
+        ok(f"the core listener is still registered once, not {before} + 5")
+    else:
+        bad(f"the tick clock is registered {after} time(s) after five reloads, was {before}")
+
+    noise = wake_errors(log.read())
+    if noise:
+        bad(f"a reload logged {len(noise)} error line(s), first: {noise[0][:140]}")
+    else:
+        ok("no reload logged an error")
+
+    if "Unknown or incomplete" in rcon.run("wake help"):
+        bad("the command tree stopped resolving after the reloads")
+    else:
+        ok("the command tree still resolves")
 
 
 def drill_outage(rcon: Rcon, log: Log, mariadb: Optional[tuple]):
@@ -463,12 +668,246 @@ def drill_boot_replay(rcon: Rcon, log: Log, backend: str, mariadb: tuple):
         rcon.run("dd boostpad toggle")
 
 
+def drill_clean_stop(rcon: Rcon, host, port):
+    """`stop` over RCON: everything Wake registered has to come back off before the JVM does.
+
+    A leak has no line of its own, so it is read off what comes after the teardown. A task or listener
+    that outlived the disable either logs past Wake's own last line or trips Bukkit's refusal to serve a
+    disabled plugin, and a writer thread that never drained says so itself.
+    """
+    print("\nclean stop")
+    step("queueing a burst of writes, then stopping the server over RCON in the same breath")
+    for _ in range(10):
+        rcon.run("wake hints true")
+        rcon.run("wake hints false")
+    try:
+        rcon.run("stop")
+    except (OSError, SystemExit):
+        pass  # the server is entitled to drop the connection rather than answer
+    if not await_port(port, False, 240):
+        bad("the server was still answering 240s after stop")
+        return False
+    ok("the server process let go of its port")
+
+    whole = CODES.sub("", LOG.read_text(encoding="utf-8", errors="replace"))
+    if "Stopping server" not in whole:
+        bad("no 'Stopping server' line in the log, so the shutdown is not the one being read")
+        return False
+    tail = whole[whole.rindex("Stopping server"):]
+
+    if "Disabling wake" in tail and "Wake has been disabled" in tail:
+        ok("the disable ran through to its last line")
+    else:
+        bad("the log has no complete Wake teardown between 'Stopping server' and the end")
+        return False
+
+    noise = wake_errors(tail)
+    if noise:
+        bad(f"the teardown logged {len(noise)} error line(s), first: {noise[0][:140]}")
+    else:
+        ok("nothing failed on the way down")
+
+    after = [line for line in tail[tail.index("Wake has been disabled"):].splitlines()[1:] if "[wake]" in line]
+    if after:
+        bad(f"{len(after)} wake line(s) after its own teardown finished, first: {after[0][:140]}")
+    else:
+        ok("nothing of Wake's ran once it said it was done")
+
+    refused = [line for line in tail.splitlines()
+               if "IllegalPluginAccess" in line or "while not enabled" in line or "attempted to register" in line]
+    if refused:
+        bad(f"something of Wake's outlived the disable and Bukkit refused it: {refused[0][:140]}")
+    elif "Timed out flushing pending database writes" in tail:
+        bad("the writer thread did not drain within its shutdown window")
+    elif "queued after the database was shut down" in tail:
+        bad("a write was queued behind the pool closing, so the burst outlived the layer that had to take it")
+    else:
+        ok("no task, listener or write was left behind, and every write in the burst landed before the pool closed")
+    return True
+
+
+def boot_headless(jar, plugin, why, timeout=300):
+    """Boots a server of the drill's own and answers with it once it is up, or None."""
+    server = Headless(jar, plugin)
+    if server.await_line("Done (", timeout):
+        return server
+    bad(f"the server booted {why} never finished starting within {timeout}s")
+    server.stop()
+    return None
+
+
+def half_built_teardown(text):
+    """What a disable running against a half-built plugin owes, whatever stage it failed at."""
+    if "NullPointerException" in text:
+        frame = next(line for line in text.splitlines() if "NullPointerException" in line)
+        bad(f"the half-built teardown dereferenced something: {frame.strip()[:140]}")
+    elif "Error occurred while disabling" in text:
+        bad("Bukkit reported an error out of onDisable")
+    else:
+        ok("the teardown against a half-built plugin threw nothing")
+
+    if "Wake has been disabled" in text:
+        ok("the teardown still ran to its last line")
+    else:
+        bad("Wake never logged that it finished disabling")
+
+    if "has been enabled" in text:
+        bad("a module enabled even though the boot had already failed")
+    else:
+        ok("no module was enabled behind the failure")
+
+    # a disable that lands mid-onEnable has to be the end of it. Bukkit closes the plugin's classloader
+    # on the way out, so a boot that carries on dies on the first class it has not loaded yet -- read off
+    # anything Wake logs past its own teardown, a registration Bukkit refuses, or an enable error behind it
+    after = text[text.index("Wake has been disabled"):].splitlines()[1:] if "Wake has been disabled" in text else []
+    carried_on = [line for line in after if "[wake]" in line or "IllegalPluginAccess" in line
+                  or "Error occurred while enabling" in line]
+    if carried_on:
+        bad(f"the boot carried on after Wake was disabled underneath it: {carried_on[0][:140]}")
+    else:
+        ok("the teardown was the end of the boot, so onEnable did not carry on past it")
+
+
+def tree_is_gone(host, port, password):
+    """The server has to still be up, and the disabled plugin's commands gone with it."""
+    try:
+        probe = Rcon(host, port, password)
+    except (OSError, SystemExit) as error:
+        bad(f"the server did not stay up to answer RCON ({error})")
+        return
+    reply = probe.run("wake help")
+    if "Unknown or incomplete" in reply:
+        ok("the server is up and the command tree is gone with the plugin")
+    else:
+        bad(f"the disabled plugin still answers /wake help: {reply.strip()[:120]!r}")
+
+
+def drill_boot_without_database(jar, plugin, host, port, password):
+    """A database that never answers has to take Wake down and leave the server standing.
+
+    `onEnable` disables the plugin from inside itself, so `onDisable` runs against an object that only
+    got half built: no state store, no modules, no command tree. What proves that path is not the error
+    Wake logs on purpose, it is that nothing follows it -- one error, no second trace, and a teardown
+    that still reaches its last line.
+    """
+    print("\nboot with the database unreachable")
+    config = WAKE / "config.yml"
+    saved = config.read_text(encoding="utf-8")
+    # port 1 rather than a stopped container: the connection is refused at once, so the drill watches the
+    # pool's connection test fail rather than a socket timeout
+    broken, types = re.subn(r'(?m)^(\s+type:\s*)"?\w+"?', r'\1"mariadb"', saved, count=1)
+    broken, ports = re.subn(r"(?m)^(\s+port:\s*)\d+", r"\g<1>1", broken, count=1)
+    if types != 1 or ports != 1:
+        bad(f"could not point {config.name} at an unreachable database")
+        return
+    # a stand-in for what the last run left behind: nothing replays it, so what it holds does not matter
+    left_behind = json.dumps({"q": "REPLACE INTO wake_state (state_key, state_value) VALUES (?, ?)",
+                              "p": [{"t": "s", "v": "core.journal_drill"}, {"t": "s", "v": "kept"}]}) + "\n"
+    server = None
+    try:
+        config.write_text(broken, encoding="utf-8")
+        JOURNAL.write_text(left_behind, encoding="utf-8")
+        step("booting with database.type: mariadb on a port nothing listens on, a journal left on disk")
+        server = boot_headless(jar, plugin, "without a database")
+        if server is None:
+            return
+        text = server.log()
+
+        errors = [line for line in wake_errors(text, "ERROR") if "[wake]" in line]
+        if len(errors) == 1 and "Database initialization failed" in errors[0]:
+            ok("Wake reported the failure once and named it")
+        else:
+            bad(f"expected one wake error naming the failed init, saw {len(errors)}: {errors[:2]}")
+
+        half_built_teardown(text)
+        tree_is_gone(host, port, password)
+
+        if JOURNAL.is_file() and JOURNAL.read_text(encoding="utf-8") == left_behind:
+            ok("the journal the last run left is still on disk, byte for byte")
+        else:
+            bad("the failed boot took the outage journal with it")
+    finally:
+        if server is not None and not server.stop():
+            bad("the server booted without a database had to be killed instead of stopping")
+        JOURNAL.unlink(missing_ok=True)
+        config.write_text(saved, encoding="utf-8")
+        step("restored config.yml and cleared the drill's journal")
+
+
+def drill_boot_with_unreadable_state(jar, plugin, host, port, password, mariadb):
+    """A state store this build cannot read has to take Wake down the same way an unreachable one does.
+
+    It fails a step further in than the pool does -- the database is open and the sync service is up by
+    the time the store refuses -- so it is the other half of the same question. Whatever `onEnable` got
+    as far as building is what `onDisable` is handed, and it has to reverse exactly that much.
+    """
+    print("\nboot on a state schema this build cannot read")
+    stamped = schema_version("state", mariadb)
+    if stamped is None:
+        bad("the state schema has never been stamped, so there is nothing to raise")
+        return
+    server = None
+    try:
+        write_schema_version("state", stamped + 98, mariadb)
+        step(f"stamping wake_schema_version for state at v{stamped + 98}, which this build cannot support")
+        server = boot_headless(jar, plugin, "on an unsupported state schema")
+        if server is None:
+            return
+        text = server.log()
+
+        errors = [line for line in wake_errors(text, "ERROR") if "[wake]" in line]
+        named = "update the Wake jar" in text
+        if len(errors) == 1 and named:
+            ok("Wake reported the failure once and the trace names the version it refused")
+        else:
+            bad(f"expected one wake error and a named cause, saw {len(errors)} error(s), cause named: {named}")
+
+        half_built_teardown(text)
+        tree_is_gone(host, port, password)
+    finally:
+        if server is not None and not server.stop():
+            bad("the server booted on a bad schema had to be killed instead of stopping")
+        write_schema_version("state", stamped, mariadb)
+        step(f"restored the state schema stamp to v{stamped}")
+
+
+def drill_boot_after_failure(jar, plugin):
+    """The failed boot must have left nothing behind: the next one on the real config has to be clean."""
+    print("\nboot again on the restored config")
+    server = boot_headless(jar, plugin, "on the restored config")
+    if server is None:
+        return
+    text = server.log()
+
+    enabled = re.findall(r"Module '(\w+)' has been enabled", text)
+    if enabled:
+        ok(f"modules enabled: {', '.join(enabled)}")
+    else:
+        bad("no module reported enabling")
+
+    noise = wake_errors(text[:text.index("Done (")] if "Done (" in text else text)
+    if noise:
+        bad(f"the boot logged {len(noise)} error line(s), first: {noise[0][:140]}")
+    else:
+        ok("no errors or stack traces at boot")
+
+    if not server.stop():
+        bad("the server had to be killed instead of stopping")
+        return
+    if "Wake has been disabled" in server.log():
+        ok("and it stopped as cleanly as it started")
+    else:
+        bad("the second server never finished its teardown")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=25575)
     parser.add_argument("--password", default="wake-dev")
     parser.add_argument("--sync", action="store_true", help="also run the cross-server drill")
+    parser.add_argument("--lifecycle", action="store_true",
+                        help="also the boot and shutdown drills -- STOPS THE SERVER, so run it last")
     parser.add_argument("--mariadb-container", default="wake-testenv-mariadb-1")
     parser.add_argument("--backend", default="wake-testenv-paper2-1")
     args = parser.parse_args()
@@ -485,6 +924,7 @@ def main():
 
     try:
         drill_boot(rcon)
+        drill_repeated_reload(rcon, log)
         drill_outage(rcon, log, mariadb)
         if args.sync:
             if mariadb:
@@ -492,6 +932,15 @@ def main():
                 drill_boot_replay(rcon, log, args.backend, mariadb)
             else:
                 print("\ncross-server sync\n  skipped: needs database.type: mariadb")
+        if args.lifecycle:
+            jar, plugin = server_jar(), plugin_jar()
+            if jar is None or plugin is None:
+                print(f"\nlifecycle\n  skipped: no {'paper jar under ' + str(SERVER_JARS) if jar is None else 'wake jar under ' + str(PLUGIN_JARS)}")
+            elif drill_clean_stop(rcon, args.host, args.port):
+                drill_boot_without_database(jar, plugin, args.host, args.port, args.password)
+                drill_boot_with_unreadable_state(jar, plugin, args.host, args.port, args.password, mariadb)
+                drill_boot_after_failure(jar, plugin)
+                print("\n  the server is down: start ./gradlew runServer again")
     except RuntimeError as error:
         bad(str(error))
 
