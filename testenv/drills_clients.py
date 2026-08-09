@@ -35,6 +35,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from drills import ROOT  # noqa: E402
 
 CLASSES = ROOT / "build" / "classes" / "java" / "main"
+# the paper-api those classes were compiled against, never the newest cached: checkVersions fills the same
+# cache with every version Wake claims, and the newest of those is built for a JVM this probe cannot run on
+COMPILED_AGAINST = re.compile(r'compileOnly\("io\.papermc\.paper:paper-api:([^"]+)"')
 OBU_SOURCE = ROOT / "OBUSOURCE" / "OpenBoatUtils" / "src" / "main" / "java" / "dev" / "o7moon" / "openboatutils"
 
 PROBE = r"""
@@ -194,9 +197,21 @@ def equals(facts, name, expected, note=None):
         bad(name, f"{got!r}, expected {expected!r}")
 
 
+def obu_source(*parts):
+    """A file out of the mod's own checkout, which is a reference rather than a dependency: OBUSOURCE is
+    gitignored, so a fresh clone has none and the drills that read it have to say so."""
+    path = OBU_SOURCE.joinpath(*parts)
+    if not path.is_file():
+        raise SystemExit(
+            f"{path} is missing -- this drill reads the mod's own source. Clone it with\n"
+            "    git clone https://github.com/OpenBoatUtils/OpenBoatUtils.git OBUSOURCE/OpenBoatUtils"
+        )
+    return path.read_text(encoding="utf-8")
+
+
 def constant(name, kind):
     """A `public static final` out of the mod's own source, so the drill never restates one itself."""
-    source = (OBU_SOURCE / "OpenBoatUtils.java").read_text(encoding="utf-8")
+    source = obu_source("OpenBoatUtils.java")
     found = re.search(rf"public static final {kind} {name} = ([^;]+);", source)
     if not found:
         raise SystemExit(f"no `{kind} {name}` in the mod's OpenBoatUtils.java -- OBUSOURCE moved on.")
@@ -205,7 +220,7 @@ def constant(name, kind):
 
 def transaction_marker():
     """The short the mod wraps a transaction in, taken off its own reply path so the drill cannot drift."""
-    source = (OBU_SOURCE / "network" / "ClientboundSettingsPacket.java").read_text(encoding="utf-8")
+    source = obu_source("network", "ClientboundSettingsPacket.java")
     if "packet.writeShort(Short.MAX_VALUE);" not in source:
         raise SystemExit("the mod no longer answers a transaction with Short.MAX_VALUE -- OBUSOURCE moved on.")
     return 0x7FFF
@@ -253,10 +268,14 @@ def jars():
     to be there too -- whatever of them the build pulled in, which is why that half is a sweep and not a list.
     """
     modules = Path(os.environ.get("GRADLE_USER_HOME") or (Path.home() / ".gradle")) / "caches/modules-2/files-2.1"
-    for module in ("io.papermc.paper/paper-api", "com.github.retrooper/packetevents-api"):
-        jar = newest(modules / module)
+    declared = COMPILED_AGAINST.search((ROOT / "build.gradle.kts").read_text(encoding="utf-8"))
+    if not declared:
+        raise SystemExit("no compileOnly paper-api line in build.gradle.kts -- nothing says which api the classes hold")
+    for module, what in ((modules / "io.papermc.paper/paper-api" / declared.group(1), f"paper-api {declared.group(1)}"),
+                         (modules / "com.github.retrooper/packetevents-api", "packetevents-api")):
+        jar = newest(module)
         if jar is None:
-            raise SystemExit(f"no jar for {module} -- run ./gradlew compileJava once.")
+            raise SystemExit(f"no jar for {what} -- run ./gradlew compileJava once.")
         yield jar
     for module in sorted((modules / "net.kyori").glob("*")):
         jar = newest(module)
@@ -265,7 +284,8 @@ def jars():
 
 
 def newest(module):
-    found = [jar for jar in module.glob("*/*/*.jar") if "sources" not in jar.name]
+    """The newest jar under a cache entry, whether that entry is a module or one pinned version of one."""
+    found = [jar for jar in module.rglob("*.jar") if "sources" not in jar.name]
     return sorted(found)[-1] if found else None
 
 

@@ -9,6 +9,7 @@ val paperGlobalFile = file("run/config/paper-global.yml")
 val serverPropsFile = file("run/server.properties")
 val runPluginsDir = file("run/plugins")
 val paper2PluginsDir = file("testenv/paper2/plugins")
+val paper2GlobalFile = file("testenv/paper2/config/paper-global.yml")
 val forwardingSecretFile = file("testenv/velocity/forwarding.secret")
 val shadowJarFile = tasks.named("shadowJar", AbstractArchiveTask::class).flatMap { it.archiveFile }
 
@@ -60,6 +61,7 @@ val testEnvUp = tasks.register("testEnvUp") {
     val serverProps = serverPropsFile
     val runPlugins = runPluginsDir
     val paper2Plugins = paper2PluginsDir
+    val paper2Global = paper2GlobalFile
     val jarSrc = shadowJarFile
     doLast {
         val log = logger
@@ -118,6 +120,10 @@ val testEnvUp = tasks.register("testEnvUp") {
         }
         secretFile.parentFile?.mkdirs()
         secretFile.writeText(secret)
+        paper2Global.parentFile?.mkdirs()
+        paper2Global.writeText(
+            "proxies:\n  velocity:\n    enabled: true\n    online-mode: true\n    secret: '$secret'\n"
+        )
         compose(arrayOf("up", "-d", "--wait", "--quiet-pull", "mariadb", "valkey")) { log.lifecycle(it) }
         compose(arrayOf("up", "-d", "--force-recreate", "--quiet-pull", "paper2", "velocity")) { log.lifecycle(it) }
     }
