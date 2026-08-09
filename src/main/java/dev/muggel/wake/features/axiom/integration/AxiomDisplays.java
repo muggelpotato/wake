@@ -26,7 +26,7 @@ public final class AxiomDisplays {
     private static final String PLUGIN_NAME = "AxiomPaper";
     private static final String DISPLAY_API_CLASS = "com.moulberry.axiom.paperapi.AxiomCustomDisplayAPI";
     private static final Comparator<NamespacedKey> PICKER_ORDER = Comparator.comparing(NamespacedKey::getKey).thenComparing(NamespacedKey::getNamespace);
-    private static final boolean ITEM_MODELS = itemModelsSupported();
+    private static final @Nullable Method SET_ITEM_MODEL = itemModelSetter();
     private final Wake plugin;
     private final Object api;
     private final Method createMethod;
@@ -44,7 +44,7 @@ public final class AxiomDisplays {
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("AxiomPaper is installed but its display API is not the one this build integrates with", e);
         }
-        if (!ITEM_MODELS) {
+        if (SET_ITEM_MODEL == null) {
             plugin.getLogger().warning("Custom item models are not supported on this server version (requires Paper 1.21.2+)");
         }
     }
@@ -91,8 +91,12 @@ public final class AxiomDisplays {
     private @NonNull ItemStack item(@NonNull NamespacedKey model) {
         ItemStack item = new ItemStack(Material.PAPER);
         item.editMeta(meta -> {
-            if (ITEM_MODELS) {
-                meta.setItemModel(model);
+            if (SET_ITEM_MODEL != null) {
+                try {
+                    SET_ITEM_MODEL.invoke(meta, model);
+                } catch (ReflectiveOperationException e) {
+                    plugin.getLogger().log(Level.SEVERE, "Failed to set the item model for " + model, e);
+                }
             }
             meta.displayName(plugin.getMessageManager().getComponent("axiom.display_name", Placeholder.unparsed("name", displayName(model.getKey()))));
         });
@@ -112,12 +116,11 @@ public final class AxiomDisplays {
         return name.isEmpty() ? itemId : name;
     }
 
-    private static boolean itemModelsSupported() {
+    private static @Nullable Method itemModelSetter() {
         try {
-            ItemMeta.class.getMethod("setItemModel", NamespacedKey.class);
-            return true;
+            return ItemMeta.class.getMethod("setItemModel", NamespacedKey.class);
         } catch (NoSuchMethodException olderThanPaper1_21_2) {
-            return false;
+            return null;
         }
     }
 }

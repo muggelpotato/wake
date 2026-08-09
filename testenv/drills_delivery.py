@@ -47,12 +47,12 @@ import time
 from collections.abc import Callable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import (CODES, Log, ROOT, Rcon, WAKE, bad, detect_backend, docker, failures, ok,  # noqa: E402
+from drills import (CODES, Log, Rcon, WAKE, bad, detect_backend, docker, failures, ok,  # noqa: E402
                     set_module_enabled, state, step)
 
 SETTLE = 1.0
 TAG = "wakedelivery"
-EXPORT = ROOT / "run" / "plugins" / "wake" / "exports" / "obu_data.yml"
+EXPORT = WAKE / "exports" / "obu_data.yml"
 # a boat summoned twice under this id is, to everything keyed by UUID, the same boat
 FIXED_UUID = "[I;16,32,48,64]"
 # where CraftBukkit keeps an entity's persistent data container inside its nbt

@@ -391,7 +391,7 @@ def drill_import_rows():
     drop("ordertest")
     run("wo -sandbox create ordertest")
     run(f'wo -sandbox import "{share("1:0.6")}" ordertest')  # warm it so a wrong order would say "exists"
-    reply = run(f'wo -sandbox import "not-a-code" ordertest')
+    reply = run('wo -sandbox import "not-a-code" ordertest')
     truthy("the code is reported, not the collision", "failed to import" in reply.lower(), reply)
     says("and the sandbox that was already there is untouched", "wo -sandbox view ordertest", "no settings configured")
     drop("ordertest")

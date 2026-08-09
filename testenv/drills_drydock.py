@@ -49,7 +49,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from drills import WAKE, Rcon, bad, detect_backend, failures, ok, set_module_enabled, state, step, switch  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPORT = ROOT / "run" / "plugins" / "wake" / "exports" / "drydock_data.yml"
+EXPORT = WAKE / "exports" / "drydock_data.yml"
 RECORD = ROOT / "src" / "main" / "java" / "dev" / "muggel" / "wake" / "features" / "drydock" / "boostpads" / "BoostpadConfig.java"
 SETTLE = 1.5
 PAD = "minecraft:smooth_stone"  # a block the shipped defaults leave without a pad

@@ -29,6 +29,7 @@ import argparse
 import base64
 import gzip
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -44,6 +45,9 @@ PARSE_ERROR = ("Incorrect argument", "Unknown or incomplete", "Expected", "must 
                "Invalid option", "Invalid block", "Invalid entity", "<--[HERE]")
 
 CLASSES = ROOT / "build" / "classes" / "java" / "main"
+# the paper-api those classes were compiled against, never the newest cached: checkVersions fills the same
+# cache with every version Wake claims, and the newest of those is built for a JVM this probe cannot run on
+COMPILED_AGAINST = re.compile(r'compileOnly\("io\.papermc\.paper:paper-api:([^"]+)"')
 
 failures = []
 rcon = None
@@ -617,8 +621,11 @@ def toolchain(name):
 def compile_classpath():
     """The two jars the protocol package needs to load: paper-api for the argument types, brigadier for their base"""
     gradle = Path(os.environ.get("GRADLE_USER_HOME") or (Path.home() / ".gradle"))
+    declared = COMPILED_AGAINST.search((ROOT / "build.gradle.kts").read_text(encoding="utf-8"))
+    if not declared:
+        raise SystemExit("no compileOnly paper-api line in build.gradle.kts -- nothing says which api the classes hold")
     jars = []
-    for pattern in ("caches/modules-2/files-2.1/io.papermc.paper/paper-api/*/*/paper-api-*.jar",
+    for pattern in (f"caches/modules-2/files-2.1/io.papermc.paper/paper-api/{declared.group(1)}/*/paper-api-*.jar",
                     "caches/modules-2/files-2.1/com.mojang/brigadier/*/*/brigadier-*.jar"):
         found = [jar for jar in gradle.glob(pattern) if "sources" not in jar.name]
         if not found:

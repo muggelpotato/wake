@@ -7,6 +7,13 @@ import dev.muggel.wake.core.VehiclePath.Legs;
 import dev.muggel.wake.features.drydock.api.PlayerHitBoostpadEvent;
 import dev.muggel.wake.features.drydock.integration.OBUBoostpadIntegration;
 import com.destroystokyo.paper.event.server.ServerTickEndEvent;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListenerAbstract;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.packettype.PacketTypeCommon;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerInput;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientSteerVehicle;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -17,7 +24,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityRemoveEvent;
-import org.bukkit.event.player.PlayerInputEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.vehicle.VehicleMoveEvent;
 import org.bukkit.util.Vector;
 import org.jspecify.annotations.NonNull;
@@ -30,8 +37,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class BoostpadDetectorListener implements Listener {
+public class BoostpadDetectorListener extends PacketListenerAbstract implements Listener {
     public static final String STATE_KEY_ENABLED = "drydock.boostpads_enabled";
     public static final boolean DEFAULT_ENABLED = false;
     public static final String STATE_KEY_EARLY_OUT_X = "drydock.boostpads_early_out_x";
@@ -47,7 +55,8 @@ public class BoostpadDetectorListener implements Listener {
     private final Wake plugin;
     private final BoostpadRegistry boostpads;
     private final Map<UUID, Map<String, Long>> lastBoostTimes = new HashMap<>();
-    private final Set<UUID> jumpPresses = new HashSet<>();
+    private final Set<UUID> jumpPresses = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> jumpHeld = ConcurrentHashMap.newKeySet();
     private boolean isRegistered = false;
     public BoostpadDetectorListener(@NonNull Wake plugin, BoostpadRegistry boostpads) {
         this.plugin = plugin;
@@ -59,6 +68,7 @@ public class BoostpadDetectorListener implements Listener {
         boolean shouldBeRegistered = enabled && !boostpads.getBoostpadConfigs().isEmpty();
         if (shouldBeRegistered && !isRegistered) {
             Bukkit.getPluginManager().registerEvents(this, plugin);
+            PacketEvents.getAPI().getEventManager().registerListener(this);
             plugin.getVehiclePath().claim();
             isRegistered = true;
         } else if (!shouldBeRegistered) {
@@ -71,10 +81,32 @@ public class BoostpadDetectorListener implements Listener {
             return;
         }
         HandlerList.unregisterAll(this);
+        PacketEvents.getAPI().getEventManager().unregisterListener(this);
         plugin.getVehiclePath().release();
         lastBoostTimes.clear();
         jumpPresses.clear();
+        jumpHeld.clear();
         isRegistered = false;
+    }
+
+    @Override
+    public void onPacketReceive(@NonNull PacketReceiveEvent event) {
+        PacketTypeCommon type = event.getPacketType();
+        boolean jump;
+        if (type == PacketType.Play.Client.PLAYER_INPUT) {
+            jump = new WrapperPlayClientPlayerInput(event).isJump();
+        } else if (type == PacketType.Play.Client.STEER_VEHICLE) {
+            jump = new WrapperPlayClientSteerVehicle(event).isJump();
+        } else {
+            return;
+        }
+        UUID uuid = event.getUser().getUUID();
+        if (jump) {
+            jumpPresses.add(uuid);
+            jumpHeld.add(uuid);
+        } else {
+            jumpHeld.remove(uuid);
+        }
     }
 
     @EventHandler
@@ -85,10 +117,8 @@ public class BoostpadDetectorListener implements Listener {
     }
 
     @EventHandler
-    public void onPlayerInput(@NonNull PlayerInputEvent event) {
-        if (event.getInput().isJump() && event.getPlayer().getVehicle() instanceof Boat) {
-            jumpPresses.add(event.getPlayer().getUniqueId());
-        }
+    public void onPlayerQuit(@NonNull PlayerQuitEvent event) {
+        jumpHeld.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler
@@ -107,7 +137,8 @@ public class BoostpadDetectorListener implements Listener {
         }
         List<PadHit> hits = findHits(boat, plugin.getVehiclePath().legs(event), materialConfigs);
         if (!hits.isEmpty()) {
-            fireBoosts(boat, player, hits, jumpPresses.contains(player.getUniqueId()) || player.getCurrentInput().isJump());
+            UUID uuid = player.getUniqueId();
+            fireBoosts(boat, player, hits, jumpPresses.contains(uuid) || jumpHeld.contains(uuid));
         }
     }
 

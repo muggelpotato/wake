@@ -17,10 +17,10 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import CODES, Rcon, bad, failures, ok, step  # noqa: E402
+from drills import CODES, LOG, WAKE, Rcon, bad, failures, ok, step  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-PRIMARY_EXPORTS = ROOT / "run" / "plugins" / "wake" / "exports"
+PRIMARY_EXPORTS = WAKE / "exports"
 DOCKER = os.environ.get("DOCKER", "docker")
 PAPER2 = "wake-testenv-paper2-1"
 MARIADB = "wake-testenv-mariadb-1"
@@ -654,9 +654,8 @@ def drill_unusable_redis_settings(primary: Rcon):
 
 
 def primary_log_since(mark):
-    log = ROOT / "run" / "logs" / "latest.log"
-    with log.open(encoding="utf-8", errors="replace") as handle:
-        handle.seek(min(mark, log.stat().st_size))
+    with LOG.open(encoding="utf-8", errors="replace") as handle:
+        handle.seek(min(mark, LOG.stat().st_size))
         return CODES.sub("", handle.read())
 
 
@@ -667,8 +666,7 @@ def drill_bus_down_is_quiet(primary: Rcon):
     re-arms the warning, a bus down for an afternoon fills the console with the same line and its
     stack trace, and the one thing worth seeing -- that it came back -- is buried in it."""
     step("a bus that stays down warns once, not once per retry")
-    log = ROOT / "run" / "logs" / "latest.log"
-    mark = log.stat().st_size if log.is_file() else 0
+    mark = LOG.stat().st_size if LOG.is_file() else 0
     docker("stop", "wake-testenv-valkey-1")
     try:
         # well past several retry windows, writing throughout so every one of them has something to publish
@@ -748,11 +746,7 @@ def backend2_log_lines():
 
 def drill_no_errors(since, backend_since):
     step("no errors in either server's log since these drills began")
-    log = ROOT / "run" / "logs" / "latest.log"
-    with log.open(encoding="utf-8", errors="replace") as handle:
-        handle.seek(min(since, log.stat().st_size))
-        primary_log = handle.read()
-    noise = [line for line in primary_log.splitlines()
+    noise = [line for line in primary_log_since(since).splitlines()
              if ("wake" in line.lower() and ("SEVERE" in line or "Exception" in line))]
     truthy("primary log is clean of wake errors", not noise, " | ".join(noise[-3:]))
     # from where this run started, not the tail: a container keeps its log across restarts, so an
@@ -771,8 +765,7 @@ def main():
     args = parser.parse_args()
 
     primary = Rcon(args.host, args.port, args.password)
-    log = ROOT / "run" / "logs" / "latest.log"
-    since = log.stat().st_size if log.is_file() else 0
+    since = LOG.stat().st_size if LOG.is_file() else 0
     backend_since = backend2_log_lines()
     print("change-log drills against the mariadb proxy network\n")
     drill_no_change_table()

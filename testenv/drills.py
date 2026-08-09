@@ -38,7 +38,9 @@ if hasattr(sys.stdout, "buffer"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parents[1]
-RUN = ROOT / "run"
+# drills_versions.py points this at testenv/matrix/<version>, so every path below follows whichever
+# server is under drill rather than the one runServer happens to own
+RUN = Path(os.environ.get("WAKE_RUN") or ROOT / "run")
 WAKE = RUN / "plugins" / "wake"
 LOG = RUN / "logs" / "latest.log"
 JOURNAL = WAKE / "outage-journal.jsonl"
@@ -294,9 +296,15 @@ def await_port(port, answering, timeout):
 
 
 def server_jar():
-    """The paper jar runServer already downloaded, newest build."""
-    builds = [jar for jar in SERVER_JARS.glob("*/*.jar") if jar.stem.isdigit()]
-    return max(builds, key=lambda jar: (jar.parent.name, int(jar.stem))) if builds else None
+    """The paper jar run-paper downloaded for the version this run directory last booted, newest build.
+
+    Never simply the newest cached: the matrix tasks fill that cache with every version Wake claims, and
+    booting a 1.21 world on the 26.2 jar upgrades the world instead of drilling the lifecycle.
+    """
+    booted = [home for home in (RUN / "versions").glob("*") if home.is_dir()]
+    version = max(booted, key=lambda home: home.stat().st_mtime).name if booted else None
+    builds = [jar for jar in SERVER_JARS.glob(f"{version}/*.jar") if jar.stem.isdigit()] if version else []
+    return max(builds, key=lambda jar: int(jar.stem)) if builds else None
 
 
 def plugin_jar():
@@ -416,6 +424,15 @@ def drill_boot(rcon: Rcon):
         bad(f"wake logged {len(errors)} error(s) at boot, first: {errors[0].strip()}")
     else:
         ok("no wake errors or stack traces")
+
+    # Bukkit warns at registration for a listener on a deprecated event. EntityRemoveEvent is one Wake carries
+    # knowingly -- 1.21 through 1.21.3 deprecated it and 1.21.4 took that back -- so only the rest is news
+    warned = [line for line in text.splitlines() if "[wake]" in line and "is Deprecated" in line
+              and "EntityRemoveEvent" not in line]
+    if warned:
+        bad(f"a listener registered on a deprecated event: {warned[0].strip()[:150]}")
+    else:
+        ok("no listener on an event this version deprecated, beyond the one Wake carries")
 
     if "Unknown or incomplete" in rcon.run("wake help"):
         bad("/wake help did not resolve")

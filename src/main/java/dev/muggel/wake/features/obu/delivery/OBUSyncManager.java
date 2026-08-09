@@ -163,7 +163,7 @@ public final class OBUSyncManager {
 
     public void syncTrackedBoats(@NonNull Player viewer) {
         for (Boat boat : viewer.getWorld().getEntitiesByClass(Boat.class)) {
-            if (boat.isTrackedBy(viewer)) {
+            if (boat.getTrackedBy().contains(viewer)) {
                 syncToViewer(boat, viewer);
             }
         }

@@ -25,11 +25,11 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import (JOURNAL, Log, Rcon, await_file, bad, detect_backend, failures, ok, outage,  # noqa: E402
+from drills import (JOURNAL, WAKE, Log, Rcon, await_file, bad, detect_backend, failures, ok, outage,  # noqa: E402
                     set_module_enabled, state, state_keys, step, write_state_raw)
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPORTS = ROOT / "run" / "plugins" / "wake" / "exports"
+EXPORTS = WAKE / "exports"
 SEED = ROOT / "src" / "main" / "resources" / "defaults" / "obu_default.yml"
 # the reply reaches the sender after the command returned, so the console line is what a script can read
 COMPLETED = re.compile(r"Database (\w+) completed for module (\w+) \((\d+) records\)")

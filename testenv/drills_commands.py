@@ -27,10 +27,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # also installs the utf-8 stdout wrapper the section-sign colour codes need
-from drills import Log, Rcon, CODES  # noqa: E402
+from drills import CODES, WAKE, Log, Rcon  # noqa: E402
 
 UNKNOWN = "Unknown or incomplete command"
-CONFIG = Path(__file__).resolve().parents[1] / "run" / "plugins" / "wake" / "config.yml"
+CONFIG = WAKE / "config.yml"
 # root -> (a sub-command a console can run under it, its aliases)
 ROOTS = {
     "wake": ("help", ["wa"]),

@@ -22,6 +22,7 @@ jobs:
           cache: gradle
       - run: chmod +x ./gradlew
       - run: ./gradlew build
+      - run: ./gradlew checkVersions --continue
   lint:
     name: ast-grep
     runs-on: ubuntu-latest

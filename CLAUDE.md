@@ -47,7 +47,11 @@ a new one is a feature module, and features are toggleable.
    start and run correctly with none of them present.
 4. **No NMS.** Paper API only; manipulate packets exclusively through PacketEvents. Prefer robust,
    version-portable approaches over clever ones — cross-version support (1.21→1.26+) outranks
-   elegance.
+   elegance. The build compiles against the *newest* Paper, so nothing stops a call the floor does not
+   have: it links here and throws on the older server the jar still claims. An API newer than the
+   floor is therefore reached the way a third-party one is — a runtime capability check and reflection
+   — or a packet whose wrapper spans the range, or not at all. What holds that line is a compile
+   against every claimed version, not review.
 5. **Event-driven, never poll.** Compute state reactively when it changes, not on a repeating
    timer. Hot events must early-out cheaply; a listener that only matters when its feature is in
    use should register only then. Low-frequency maintenance tasks are fine.

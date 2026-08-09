@@ -33,17 +33,14 @@ Needs a server up with RCON (./gradlew runServer). Exits non-zero if a drill fai
 import argparse
 import os
 import re
-import sqlite3
 import sys
 import time
-from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import (Log, Rcon, bad, detect_backend, failures, ok, outage,  # noqa: E402
+from drills import (WAKE, Log, Rcon, bad, detect_backend, failures, ok, outage,  # noqa: E402
                     reload_outcomes, set_module_enabled, state, state_keys, step, switch,
                     write_schema_version, write_state_raw)
 
-WAKE = Path(__file__).resolve().parents[1] / "run" / "plugins" / "wake"
 CONFIG = WAKE / "config.yml"
 EXPORTS = WAKE / "exports"
 UNKNOWN = "Unknown or incomplete command"
