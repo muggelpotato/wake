@@ -5,6 +5,7 @@ import dev.muggel.wake.core.database.SqlStatement;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.contexts.OBUContext.ContextType;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
+import dev.muggel.wake.features.obu.protocol.SettingMerge;
 import dev.muggel.wake.features.obu.OBUDao;
 import org.jetbrains.annotations.Unmodifiable;
 import org.jspecify.annotations.NonNull;
@@ -128,14 +129,15 @@ public class OBUContextManager {
         String lower = canonical(name);
         OBUContext context = contexts.get(lower);
         if (context == null || newSettings.isEmpty()) return;
-        LinkedHashMap<String, OBUSetting> merged = new LinkedHashMap<>();
-        for (OBUSetting s : context.settings()) merged.put(s.uniqueKey(), s);
-        for (OBUSetting s : newSettings) merged.put(s.uniqueKey(), s);
+        LinkedHashMap<String, OBUSetting> stale = new LinkedHashMap<>();
+        for (OBUSetting s : context.settings()) stale.put(s.uniqueKey(), s);
+        List<OBUSetting> folded = SettingMerge.fold(context.settings(), newSettings);
         List<SqlStatement> settingWrites = new ArrayList<>();
-        for (OBUSetting s : newSettings) {
-            settingWrites.add(dao.settingUpsert(lower, s));
+        for (OBUSetting s : folded) {
+            if (!s.equals(stale.remove(s.uniqueKey()))) settingWrites.add(dao.settingUpsert(lower, s));
         }
-        dao.saveContext(new OBUContext(lower, context.type(), context.ownerUuid(), new ArrayList<>(merged.values())), settingWrites);
+        for (String key : stale.keySet()) settingWrites.add(dao.settingDelete(lower, key));
+        dao.saveContext(new OBUContext(lower, context.type(), context.ownerUuid(), folded), settingWrites);
     }
 
     public boolean removeContextSetting(@NonNull String name, String uniqueKey) {

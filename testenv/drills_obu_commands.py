@@ -42,7 +42,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from drills import CODES, ROOT, Log, Rcon, WAKE, detect_backend, docker, set_module_enabled  # noqa: E402
-from drills_obu import DEFINITIONS  # noqa: E402
+from drills_obu import DEFINITIONS, settings_of  # noqa: E402
 
 SETTLE = 1.0
 STAND_TAG = "wakeobucmd"
@@ -60,6 +60,8 @@ DEFAULT_ONLY_SETTINGS = ["collisionmode", "falldamage", "setinterpolationten"]
 INTERNAL = ["wake:empty", "wake:personal"]
 # the cap SandboxImportCommand stops adding at
 MAX_IMPORT_SETTINGS = 256
+# the width wake_obu_settings.unique_key is declared with, which SettingMerge bounds a union by
+UNIQUE_KEY_WIDTH = 255
 
 failures = []
 rcon = None
@@ -92,6 +94,11 @@ def says(label, command, needle):
     reply = run(command)
     truthy(label, needle.lower() in reply.lower(), f"{command!r} -> {reply}")
     return reply
+
+
+def setting_lines(sandbox):
+    """What `-sandbox view` says a sandbox holds, sorted -- a read of the table brings no order with it."""
+    return sorted(settings_of(run(f"wo -sandbox view {sandbox}")))
 
 
 def share(*entries):
@@ -154,15 +161,21 @@ def context_row(name):
 
 def settings_count(name):
     """How many setting rows a context holds, read past the server's cache."""
+    return len(setting_keys(name))
+
+
+def setting_keys(name):
+    """Every unique_key a context has stored, read past the server's cache."""
     if mariadb:
         container, user, password, database = mariadb
         out = docker("exec", container, "mariadb", f"-u{user}", f"-p{password}", database, "-N", "-B",
-                     "-e", f"SELECT COUNT(*) FROM wake_obu_settings WHERE context_name = '{name}'")
-        return int(out.strip() or 0)
+                     "-e", f"SELECT unique_key FROM wake_obu_settings WHERE context_name = '{name}'")
+        return sorted(line.strip() for line in out.splitlines() if line.strip())
     uri = "file:" + (WAKE / "wake.db").resolve().as_posix() + "?mode=ro"
     connection = sqlite3.connect(uri, uri=True, timeout=10)
     try:
-        return connection.execute("SELECT COUNT(*) FROM wake_obu_settings WHERE context_name = ?", (name,)).fetchone()[0]
+        return sorted(row[0] for row in connection.execute(
+            "SELECT unique_key FROM wake_obu_settings WHERE context_name = ?", (name,)))
     finally:
         connection.close()
 
@@ -379,8 +392,10 @@ def drill_import_rows():
 
     print("\nand the cap is reported, never silently applied")
     drop("captest")
-    # a block per entry, so every one is its own key and the cap is a count the table can be asked for
-    code = share(*[f"22:othermod:block{index}" for index in range(MAX_IMPORT_SETTINGS + 20)])
+    # a value and a block of its own per entry, so no two of them fold together and the cap is a count
+    # the table can be asked for; one value across them all would land as a single folded entry. The
+    # names are as short as they are because RCON caps the packet the code rides in at ~1.4kB
+    code = share(*[f"3:{index:03d} x:{index:03d}" for index in range(MAX_IMPORT_SETTINGS + 20)])
     reply = says("a code past the cap imports", f'wo -sandbox import "{code}" captest', "imported")
     truthy("and reports the excess as skipped", "skipped 20" in reply.lower(), reply)
     held = await_count("captest", MAX_IMPORT_SETTINGS)
@@ -395,6 +410,96 @@ def drill_import_rows():
     truthy("the code is reported, not the collision", "failed to import" in reply.lower(), reply)
     says("and the sandbox that was already there is untouched", "wo -sandbox view ordertest", "no settings configured")
     drop("ordertest")
+
+
+def drill_folded_rows():
+    """Folding decides rows, not only list entries, so the table has to end up saying what the cache does.
+
+    A fold that reached only the cache reads right until something reads the table again, and then the
+    invocations are back as rows -- one block under two values, which is the state folding exists to
+    prevent. Only a store that has re-read can tell the two apart, so the listing is taken twice with a
+    module cycle between them. A sandbox is claimed empty, so the row a fold *renames* needs a player
+    standing in one: that half is TESTPLAN section 4."""
+    print("\nwhat folding leaves in the table is what the cache says it holds")
+    drop("foldrows")
+    # 0.9 keeps packed_ice, 0.4 takes ice off it, the two removals join, and stepsize folds with nothing
+    code = share("3:0.9 ice", "3:0.9 packed_ice", "3:0.4 ice", "22:stone", "22:dirt", "1:0.6")
+    says("a code whose settings fold imports", f'wo -sandbox import "{code}" foldrows', "imported")
+    held = await_count("foldrows", 4)
+    truthy("the table holds a row per folded setting, not one per invocation", held == 4, f"holds {held}")
+    cached = setting_lines("foldrows")
+    truthy("and the cache lists the same four", len(cached) == 4, repr(cached))
+    reread_store()
+    truthy("a store that has read the table back lists exactly what the cache did",
+           setting_lines("foldrows") == cached, f"{setting_lines('foldrows')} vs {cached}")
+    drop("foldrows")
+
+    print("\nand a union stops at the width the key column is declared with")
+    drop("foldwide")
+    # nine blocks at one value: their sorted keys joined pass the column well before the ninth
+    code = share(*[f"3:0.9 othermod:{'a' * 30}{index}" for index in range(9)])
+    says("a code whose blocks would union past the column imports",
+         f'wo -sandbox import "{code}" foldwide', "imported")
+    rows = await_count("foldwide", 2)
+    truthy(f"the union started a second row rather than overrunning ({rows} rows)", rows > 1, f"holds {rows}")
+    widest = max((len(key) for key in setting_keys("foldwide")), default=0)
+    truthy(f"and no key it wrote is wider than the column ({widest} of {UNIQUE_KEY_WIDTH})",
+           0 < widest <= UNIQUE_KEY_WIDTH, f"the widest key is {widest}")
+    drop("foldwide")
+
+    print("\nand a list too long for one key arrives as buckets, never as a row the column refuses")
+    drop("foldspill")
+    blocks = ",".join(f"othermod:block{index:02d}" for index in range(25))
+    says("a twenty-five block list imports in one setting",
+         f'wo -sandbox import "{share(f"3:0.9 {blocks}")}" foldspill', "imported")
+    await_count("foldspill", 2)
+    keys = setting_keys("foldspill")
+    truthy(f"it landed as more than one setting ({len(keys)} buckets)", len(keys) > 1, repr(keys))
+    truthy("with every key inside the column",
+           all(len(key) <= UNIQUE_KEY_WIDTH for key in keys), [len(key) for key in keys])
+    carried = sum(key.count(",") + 1 for key in keys)
+    truthy(f"and no block lost on the way into them ({carried} of 25)", carried == 25, repr(keys))
+    drop("foldspill")
+
+    print("\nand a block one bucket already holds is never added to a second")
+    spilled = [f"othermod:block{index:02d}" for index in range(25)]
+    twice = (f"3:0.9 {','.join(spilled)}", f"3:0.9 {spilled[0]}")
+    # then every *other* block to a second value: two buckets that both kept the first one are left
+    # spelling one unique_key, and one key is one row -- the cache would claim a setting the table lost
+    for name, code, rows in (("folddup", twice, 2),
+                             ("foldcollide", twice + (f"3:0.4 {','.join(spilled[1:])}",), 3)):
+        drop(name)
+        says(f"a code that re-enters its own buckets imports ({name})",
+             f'wo -sandbox import "{share(*code)}" {name}', "imported")
+        await_count(name, rows)
+        keys = setting_keys(name)
+        carried = sorted(entry for key in keys for entry in key.split(":", 1)[1].split(","))
+        truthy(f"every block sits in exactly one setting ({len(carried)} of 25)", carried == spilled, repr(keys))
+        truthy("and no two of them spell one row",
+               len(keys) == len(setting_lines(name)), f"{len(keys)} rows vs {setting_lines(name)}")
+        drop(name)
+
+    print("\nand an entry no key could hold even alone is dropped rather than written")
+    drop("foldhuge")
+    # one statement the database turns back fails the transaction its whole write shares
+    code = share("22:othermod:" + "a" * 260, "1:0.6")
+    says("a code carrying one imports", f'wo -sandbox import "{code}" foldhuge', "imported")
+    await_count("foldhuge", 1)
+    keys = setting_keys("foldhuge")
+    truthy("the entry no key holds never reached the table", keys == ["1"], repr(keys))
+    drop("foldhuge")
+
+    # what the key is spelled with is what the width is spent on, and a foreign key is the one thing
+    # that cannot be shortened: only the server it came from can resolve it back to a block
+    print("\nand the key spells the default namespace bare and every other one whole")
+    drop("foldnames")
+    code = share("3:0.9 minecraft:ice, othermod:turbo_ice, packed_ice")
+    says("a mixed-namespace list imports", f'wo -sandbox import "{code}" foldnames', "imported")
+    await_count("foldnames", 1)
+    keys = setting_keys("foldnames")
+    truthy("one key, the vanilla blocks bare in it and the foreign one untouched",
+           keys == ["3:ice,othermod:turbo_ice,packed_ice"], repr(keys))
+    drop("foldnames")
 
 
 def drill_export():
@@ -540,6 +645,7 @@ def main():
         drill_name_argument()
         drill_share_code_door()
         drill_import_rows()
+        drill_folded_rows()
         drill_export()
         drill_clear_targets()
         drill_context_targets()

@@ -6,6 +6,7 @@ import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
+import dev.muggel.wake.features.obu.protocol.SettingMerge;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -125,7 +126,7 @@ final class OBUDataTransfer {
                     }
                 }
             }
-            obuDao.importContextData(name, type, owner, settingsToImport);
+            obuDao.importContextData(name, type, owner, SettingMerge.fold(List.of(), settingsToImport));
             count++;
         }
         return count;

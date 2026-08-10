@@ -104,6 +104,17 @@ def caret(label, command, pointed_at):
         bad(label, f"the cursor sits at {line!r}, not at {pointed_at!r}")
 
 
+def settings_of(view):
+    """The setting lines a `-sandbox view` reply carries, as (name, value) pairs in the order they arrive."""
+    held = []
+    for line in view.splitlines():
+        if "→" not in line:
+            continue
+        name, _, value = line.partition("→")
+        held.append((name.rsplit("○", 1)[-1].strip(), value.strip()))
+    return held
+
+
 def share(*entries):
     """A share code is gzipped, then url-safe base64 without padding. See SandboxCommandHelper"""
     payload = (";".join(entries) + ";").encode()
@@ -164,7 +175,7 @@ def drill_storage():
     print("\nstorage, display and export")
     rcon.run("wo -sandbox delete codectest")
     # 1=stepsize(float) 27=collisionmode(collision_enum) 30=setcollisionresolution(byte)
-    # 3=blockslipperiness(float, block_list), stored already namespaced, which is what display must strip
+    # 3=blockslipperiness(float, block_list), whose namespace the door takes off, so nothing below carries one
     code = share("1:0.6", "27:NO_ENTITIES", "30:3", "3:0.9 minecraft:ice")
     expect("a share code of every stored type imports", f'wo -sandbox import "{code}" codectest', "imported")
     if "skip" in run(f'wo -sandbox import "{code}" codectest2').lower():
@@ -233,12 +244,53 @@ def drill_block_canonicalisation():
     rcon.run("wo -sandbox delete spacedtest")
     code = share("3:0.9 ice stone")
     expect("a spaced list imports", f'wo -sandbox import "{code}" spacedtest', "imported")
-    view = run("wo -sandbox view spacedtest")
-    if "ice" in view and "stone" in view:
-        ok("every block in a spaced list survived, none folded away")
+    # the second block rides in the hover, which no console reply carries, so what the line can show
+    # is that the list holds more than the one entry it names
+    held = settings_of(run("wo -sandbox view spacedtest"))
+    if held == [("blockslipperiness", "0.9, [2]")]:
+        ok("a spaced list is one setting naming more than one block, not one block")
     else:
-        bad("spaced list", f"a block went missing between the code and storage: {view}")
+        bad("spaced list", f"a block went missing between the code and storage: {held}")
     rcon.run("wo -sandbox delete spacedtest")
+
+
+def drill_setting_folding():
+    """A list entry belongs to exactly one setting. A second invocation carrying the same value joins
+    the entry that already holds one; one carrying another value takes the entry off it. Two settings
+    naming one block would be two packet entries for that block, and the wire order between them is a
+    HashMap's, so the client would apply whichever arrived last."""
+    print("\nsettings that name a list fold into one entry per block")
+    for label, code, expected in (
+            ("two blocks at one value are one setting",
+             ("3:0.9 ice", "3:0.9 packed_ice"),
+             [("blockslipperiness", "0.9, [2]")]),
+            ("and two values stay two settings",
+             ("3:0.9 ice", "3:0.4 stone"),
+             [("blockslipperiness", "0.9, ice"), ("blockslipperiness", "0.4, stone")]),
+            ("a later value takes the block off the entry that held it",
+             ("3:0.9 ice", "3:0.9 packed_ice", "3:0.4 ice"),
+             [("blockslipperiness", "0.9, packed_ice"), ("blockslipperiness", "0.4, ice")]),
+            ("and an entry that loses every block it named disappears",
+             ("3:0.9 ice", "3:0.4 ice"),
+             [("blockslipperiness", "0.4, ice")]),
+            ("a setting that is nothing but a list is always one entry",
+             ("22:ice", "22:packed_ice", "22:stone"),
+             [("removeblockslipperiness", "[3]")]),
+            ("setblocksetting folds inside one per-block setting",
+             ("26:JUMPS 2 stone", "26:JUMPS 2 ice"),
+             [("setblocksetting", "JUMPS, 2.0, [2]")]),
+            ("and never across two",
+             ("26:JUMPS 2 stone", "26:COYOTE_TIME 2 stone"),
+             [("setblocksetting", "JUMPS, 2.0, stone"), ("setblocksetting", "COYOTE_TIME, 2.0, stone")]),
+    ):
+        rcon.run("wo -sandbox delete foldtest")
+        run(f'wo -sandbox import "{share(*code)}" foldtest')
+        held = settings_of(run("wo -sandbox view foldtest"))
+        if held == expected:
+            ok(label)
+        else:
+            bad(label, f"{list(code)} landed as {held}, not as {expected}")
+    rcon.run("wo -sandbox delete foldtest")
 
 
 def drill_unwritable_lists():
@@ -408,16 +460,16 @@ public final class WireProbe {
     private static void keys() {
         say("key_singular", of(OBUDefinition.stepsize, "0.6").uniqueKey());
         say("key_enum_only", of(OBUDefinition.collisionmode, "vanilla").uniqueKey());
-        say("key_blocks", key(OBUDefinition.blockslipperiness, "0.9", "minecraft:ice"));
-        say("key_blocks_other_value", key(OBUDefinition.blockslipperiness, "0.98", "minecraft:ice"));
-        say("key_blocks_other_set", key(OBUDefinition.blockslipperiness, "0.9", "minecraft:stone"));
-        say("key_remove_blocks", key(OBUDefinition.removeblockslipperiness, "minecraft:ice"));
-        say("key_per_block", key(OBUDefinition.setblocksetting, "JUMP_FORCE", "0.36", "minecraft:ice"));
-        say("key_per_block_other_setting", key(OBUDefinition.setblocksetting, "MAX_SPEED", "0.36", "minecraft:ice"));
-        say("key_filter", key(OBUDefinition.addcollisionfilter, "minecraft:pig"));
-        say("key_blocks_two", key(OBUDefinition.blockslipperiness, "0.9", "minecraft:ice,minecraft:stone"));
-        say("key_blocks_reordered", key(OBUDefinition.blockslipperiness, "0.9", "minecraft:stone,minecraft:ice"));
-        say("key_per_block_reordered", key(OBUDefinition.setblocksetting, "JUMP_FORCE", "0.36", "minecraft:stone,minecraft:ice"));
+        say("key_blocks", key(OBUDefinition.blockslipperiness, "0.9", "ice"));
+        say("key_blocks_other_value", key(OBUDefinition.blockslipperiness, "0.98", "ice"));
+        say("key_blocks_other_set", key(OBUDefinition.blockslipperiness, "0.9", "stone"));
+        say("key_remove_blocks", key(OBUDefinition.removeblockslipperiness, "ice"));
+        say("key_per_block", key(OBUDefinition.setblocksetting, "JUMP_FORCE", "0.36", "ice"));
+        say("key_per_block_other_setting", key(OBUDefinition.setblocksetting, "MAX_SPEED", "0.36", "ice"));
+        say("key_filter", key(OBUDefinition.addcollisionfilter, "pig"));
+        say("key_blocks_two", key(OBUDefinition.blockslipperiness, "0.9", "ice,stone"));
+        say("key_blocks_reordered", key(OBUDefinition.blockslipperiness, "0.9", "stone,ice"));
+        say("key_per_block_reordered", key(OBUDefinition.setblocksetting, "JUMP_FORCE", "0.36", "stone,ice"));
         say("key_short_args", key(OBUDefinition.blockslipperiness, "0.9"));
         say("key_no_args", key(OBUDefinition.clearslipperiness));
         say("key_uncanonical", key(OBUDefinition.blockslipperiness, "0.9", "ICE"));
@@ -722,18 +774,18 @@ def drill_keys(facts):
     print("\nand a setting's identity is its blocks, never its value")
     fact(facts, "key_singular", "1")
     fact(facts, "key_enum_only", "27")
-    fact(facts, "key_blocks", "3:minecraft:ice")
-    fact(facts, "key_blocks_other_value", "3:minecraft:ice")
-    fact(facts, "key_blocks_other_set", "3:minecraft:stone")
-    fact(facts, "key_remove_blocks", "22:minecraft:ice")
-    fact(facts, "key_per_block", "26:JUMP_FORCE:minecraft:ice")
-    fact(facts, "key_per_block_other_setting", "26:MAX_SPEED:minecraft:ice")
-    fact(facts, "key_filter", "31:minecraft:pig")
+    fact(facts, "key_blocks", "3:ice")
+    fact(facts, "key_blocks_other_value", "3:ice")
+    fact(facts, "key_blocks_other_set", "3:stone")
+    fact(facts, "key_remove_blocks", "22:ice")
+    fact(facts, "key_per_block", "26:JUMP_FORCE:ice")
+    fact(facts, "key_per_block_other_setting", "26:MAX_SPEED:ice")
+    fact(facts, "key_filter", "31:pig")
     # a named set is the same set whichever order it was typed in, or setting it again in another
     # order stores a second row and which of the two the client ends up applying is arbitrary
-    fact(facts, "key_blocks_two", "3:minecraft:ice,minecraft:stone")
-    fact(facts, "key_blocks_reordered", "3:minecraft:ice,minecraft:stone")
-    fact(facts, "key_per_block_reordered", "26:JUMP_FORCE:minecraft:ice,minecraft:stone")
+    fact(facts, "key_blocks_two", "3:ice,stone")
+    fact(facts, "key_blocks_reordered", "3:ice,stone")
+    fact(facts, "key_per_block_reordered", "26:JUMP_FORCE:ice,stone")
     fact(facts, "key_short_args", "3")
     fact(facts, "key_no_args", "23")
     # a key is built from the argument as stored, so an uncanonical one is a *different* block as far
@@ -808,6 +860,7 @@ def main():
         drill_parsing()
         drill_storage()
         drill_block_canonicalisation()
+        drill_setting_folding()
         drill_unwritable_lists()
         drill_encodability_gate()
 

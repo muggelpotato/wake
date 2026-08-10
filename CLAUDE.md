@@ -105,7 +105,9 @@ reachable from code: both directions are checked by `drills_text.py`, not by eye
   are served from cache. Never issue raw database calls from feature/module code — that belongs in a
   data-access object.
 - **SQL must be parameterized and portable** across the supported databases (SQLite and MariaDB) —
-  never concatenate values into a query, never rely on one dialect's types or functions.
+  never concatenate values into a query, never rely on one dialect's types or functions. A value
+  bound for a declared-width column is bounded in code: SQLite stores an oversized one and MariaDB
+  refuses it, so the two disagree and the refusal arrives as a journaled write that can never land.
 - **Assume the database can vanish and that another server shares it.** A write that fails
   transiently is journaled and replayed, never dropped; a read that fails leaves the cache alone,
   because an empty result is not an empty table. A cached table is a mirror: a change made here is

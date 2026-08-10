@@ -8,6 +8,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import dev.muggel.wake.core.commands.CommandHelper;
 import io.papermc.paper.command.brigadier.argument.CustomArgumentType;
 import org.bukkit.NamespacedKey;
 import org.jetbrains.annotations.Contract;
@@ -24,7 +25,7 @@ import java.util.regex.Pattern;
 
 /**
  * A greedy, space- or comma-separated list of keys. <br>
- * Parses to a comma-joined string of namespaced keys. <br>
+ * Parses to a comma-joined string of keys. <br>
  * Retrieve with {@code ctx.getArgument(name, String.class)}.
  */
 public final class KeyListArgumentType implements CustomArgumentType<String, String> {
@@ -85,7 +86,7 @@ public final class KeyListArgumentType implements CustomArgumentType<String, Str
         for (String entry : SEPARATORS.split(raw)) {
             if (entry.isEmpty()) continue;
             String canonical = canonical(entry);
-            entries.add(canonical != null ? canonical : entry);
+            entries.add(canonical != null ? canonical : CommandHelper.stripNamespace(entry));
         }
         return String.join(",", entries);
     }
@@ -109,6 +110,6 @@ public final class KeyListArgumentType implements CustomArgumentType<String, Str
             }
         }
         NamespacedKey key = ArgumentHelper.resolveKey(entry);
-        return key != null && keys.get().contains(key) ? key.toString() : null;
+        return key != null && keys.get().contains(key) ? CommandHelper.stripNamespace(key.toString()) : null;
     }
 }

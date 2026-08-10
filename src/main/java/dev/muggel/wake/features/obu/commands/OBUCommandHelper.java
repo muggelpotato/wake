@@ -17,6 +17,8 @@ import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
 import dev.muggel.wake.features.obu.clients.ClientRegistry.ClientState;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TextComponent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Boat;
@@ -27,7 +29,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.StringJoiner;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
@@ -100,20 +101,32 @@ public final class OBUCommandHelper {
         List<String> shown = new ArrayList<>(args.size());
         for (int i = 0; i < args.size(); i++) {
             boolean list = i < types.size() && types.get(i).isList();
-            shown.add(list ? stripNamespaces(args.get(i)) : args.get(i));
+            shown.add(list ? args.get(i).replace(",", ", ") : args.get(i));
         }
         return shown;
     }
 
-    private static @NonNull String stripNamespaces(@NonNull String list) {
-        StringJoiner shown = new StringJoiner(", ");
-        for (String entry : list.split(",")) {
-            String trimmed = entry.trim();
-            if (!trimmed.isEmpty()) {
-                shown.add(CommandHelper.stripNamespace(trimmed));
+    public static @NonNull Component displayValue(@NonNull Wake plugin, @NonNull OBUSetting setting) {
+        List<SettingType> types = setting.definition().types();
+        List<String> args = setting.args();
+        TextComponent.Builder value = Component.text();
+        for (int i = 0; i < args.size(); i++) {
+            if (i > 0) {
+                value.append(Component.text(", "));
             }
+            String arg = args.get(i);
+            List<String> entries = i < types.size() && types.get(i).isList() ? List.of(arg.split(",")) : List.of();
+            value.append(entries.size() > 1 ? collapsed(plugin, entries) : Component.text(arg));
         }
-        return shown.toString();
+        return value.build();
+    }
+
+    private static @NonNull Component collapsed(@NonNull Wake plugin, @NonNull List<String> entries) {
+        Component hover = plugin.getMessageManager().getComponent("commands.obu.status.collapsed_header", Placeholder.unparsed("count", String.valueOf(entries.size())));
+        for (String entry : entries) {
+            hover = hover.append(Component.newline()).append(plugin.getMessageManager().getComponent("commands.obu.status.collapsed_entry", Placeholder.unparsed("entry", entry)));
+        }
+        return plugin.getMessageManager().getComponent("commands.obu.status.collapsed_count", Placeholder.unparsed("count", String.valueOf(entries.size()))).hoverEvent(HoverEvent.showText(hover));
     }
 
     public static @NonNull CompletableFuture<Suggestions> suggestContexts(

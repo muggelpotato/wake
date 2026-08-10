@@ -1,6 +1,7 @@
 obu:
   persistent_player_states: true
   boat_lag_fix: true
+  collapse_default_context: true
   keep_unused_sandboxes: "30d"
 server:
   default:

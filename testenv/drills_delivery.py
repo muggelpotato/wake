@@ -262,6 +262,27 @@ def drill_boat_overrides():
     step("a player-wide setting is refused on a boat rather than stored on it")
     boat_says("setinterpolationten names the reason", "wobu setinterpolationten true", "applies to players")
     boat_says("and left no override behind", "wobu -clear setinterpolationten", "is not active")
+
+    # a fold rebuilds the override map whole, and losing the last entry drops the boat's uuid with it:
+    # a rebuild that loses the settings beside the one it folded, or a boat that empties and can never
+    # take another, would both read as an override that is simply not there
+    step("a second setting on the same list folds into the entry already there, and the rest stand")
+    as_boat("wobu blockslipperiness 0.9 ice")
+    as_boat("wobu blockslipperiness 0.9 packed_ice")
+    as_boat("wobu stepsize 1.5")
+    boat_says("the folded list clears in one go", "wobu -clear blockslipperiness", "cleared blockslipperiness")
+    boat_says("with nothing of it left behind", "wobu -clear blockslipperiness", "is not active")
+    boat_says("and the setting beside it survived the rebuild", "wobu -clear stepsize", "cleared stepsize")
+    boat_says("clearing the last one leaves the boat holding nothing", "wobu -clear stepsize", "is not active")
+    boat_says("and it takes an override again afterwards", "wobu stepsize 1.5", "set stepsize")
+
+    step("and a block moved to another value leaves the entry it came from under a new key")
+    as_boat("wobu blockslipperiness 0.9 ice,stone")
+    as_boat("wobu blockslipperiness 0.4 ice")
+    boat_says("the set it was typed as answers to nothing", "wobu -clear 3:ice,stone", "unknown obu setting")
+    boat_says("the block it kept is the whole of the first entry", "wobu -clear 3:stone", "cleared blockslipperiness")
+    boat_says("and the block that moved is the whole of the second", "wobu -clear 3:ice", "cleared blockslipperiness")
+    as_boat("wobu -reset")
     rcon.run(f"kill @e[tag={TAG}]")
 
 
@@ -603,10 +624,13 @@ def drill_import_settings_door():
     is aimed at, and `applySetting` stores neither -- so a file naming one has to be refused rather than
     written, or the table ends up holding a row the loader will never hand back and nothing can delete.
     The third shape is the same setting twice: the table keys settings by identity, so the file's last
-    word is the one that survives, and the cache has to say the same thing the table does."""
+    word is the one that survives, and the cache has to say the same thing the table does. The fourth
+    is the same setting twice over one list, which is not a replacement but a fold -- both blocks are
+    kept, in one entry, or the client is sent the same block twice and applies whichever arrived last."""
     console = graft_export({"sandbox": "  doorprobe:\n    settings:\n      '-reset': ''\n"
                                        "      applyimpulserelative: '0.0 5.0 0.0'\n"
-                                       "      stepsize:\n        - '1.5'\n        - '2.5'\n"})
+                                       "      stepsize:\n        - '1.5'\n        - '2.5'\n"
+                                       "      blockslipperiness:\n        - '0.9 ice'\n        - '0.9 packed_ice'\n"})
     if console is None:
         bad("the graft never imported, so there is nothing to judge")
         return
@@ -629,6 +653,9 @@ def drill_import_settings_door():
         truthy("one stepsize, not a list, and nothing that acts once",
                body.count("stepsize") == 1 and "2.5" in body and "1.5" not in body
                and "reset" not in body and "impulse" not in body, body[:400] or text[:400])
+        truthy("and one blockslipperiness carrying both blocks, not one entry per line",
+               body.count("blockslipperiness") == 1
+               and "ice,packed_ice" in body, body[:400] or text[:400])
     finally:
         rcon.run("wobu -sandbox delete doorprobe")
         time.sleep(SETTLE)
@@ -694,10 +721,14 @@ def drill_export_round_trip():
     read as absent. And a setting's arguments are written joined by a space and read back by splitting on
     one, so a value holding a space would come back as two. The graft door is what puts a player-owned
     sandbox here without a second player."""
+    # eight blocks whose keys together pass the width of the column that keys them, so the door cuts
+    # them into buckets -- and the export has to write those in a shape that imports as the same ones
+    spilling = ",".join(f"othermod:{'spill' * 6}{index}" for index in range(8))
     console = graft_export({
         "sandbox": f"  {ROUND_SANDBOX}:\n    owner_uuid: {GRAFT_OWNER}\n"
                    "    settings:\n      stepsize: '1.5'\n      setblocksetting:\n"
-                   "        - 'JUMPS 2 stone'\n        - 'WALLTAP_MULTIPLIER 1 ice, blue_ice'\n",
+                   "        - 'JUMPS 2 stone'\n        - 'WALLTAP_MULTIPLIER 1 ice, othermod:blue_ice'\n"
+                   f"      blockslipperiness: '0.9 {spilling}'\n",
         "server": f"  {ROUND_EMPTY}: {{}}\n"})
     if console is None:
         bad("the graft never imported, so there is nothing to round-trip")
@@ -716,10 +747,14 @@ def drill_export_round_trip():
         contexts = len(re.findall(r"(?m)^ {2}[\w@-]+:(?: \{\})?$", servers + sandboxes))
         truthy(f"and it is counted like any other ({contexts} contexts + {len(switches.splitlines())} switches)",
                counted == contexts + len(switches.splitlines()), f"reported {counted}")
+        # and the stored spelling is bare in the default namespace and whole in every other, because
+        # only the server a foreign key came from can resolve it back to a block
         truthy("a list argument came out as one word, the spaces inside it gone at the door",
-               "JUMPS 2.0 minecraft:stone" in sandboxes
-               and "WALLTAP_MULTIPLIER 1.0 minecraft:ice,minecraft:blue_ice" in sandboxes,
+               "JUMPS 2.0 stone" in sandboxes
+               and "WALLTAP_MULTIPLIER 1.0 ice,othermod:blue_ice" in sandboxes,
                sandboxes.strip()[:400])
+        truthy("and one too long for a single key came out as the buckets it was cut into",
+               sandboxes.count("- 0.9 othermod:spill") == 2, sandboxes.strip()[:400])
 
         step("wipe the store and put the file back into it")
         log = Log()
@@ -1002,12 +1037,14 @@ def drill_purge():
 def drill_settings_switches():
     """Every switch `-settings` carries, the answer it owes, and the row it has to land in.
 
-    Neither one shows from a console -- persistence only on a relog, the lag fix only on a client
-    computing its own physics -- so a key the command writes but nothing reads would still reply
-    `enabled`. The export is what binds the two: it sweeps the module's prefix, so the value set here
-    has to come back out under the name the reader asks for."""
+    None of them shows from a console -- persistence only on a relog, the lag fix only on a client
+    computing its own physics, the collapsed layer only inside `-status`, which needs a player -- so a
+    key the command writes but nothing reads would still reply `enabled`. The export is what binds the
+    two: it sweeps the module's prefix, so the value set here has to come back out under the name the
+    reader asks for."""
     switches = {"persistence": ("persistent player states", "persistent_player_states"),
-                "boat-lag-fix": ("boat lag fix", "boat_lag_fix")}
+                "boat-lag-fix": ("boat lag fix", "boat_lag_fix"),
+                "collapse-default-context": ("collapsed default context", "collapse_default_context")}
     try:
         for literal, (feature, _) in switches.items():
             on = run(f"wobu -settings {literal} true")

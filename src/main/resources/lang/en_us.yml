@@ -16,7 +16,7 @@
 #   <gradient:$secondary:$primary>...</gradient>
 #
 # Dynamic placeholders are filled by the plugin per message and only work in the message they already appear in (moving them to other keys does nothing):
-#   <alias> <aliases> <amount> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <count> <delay> <description> <duration> <error> <input> <literal> <module> <name> <padding> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
+#   <alias> <aliases> <amount> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <count> <delay> <description> <duration> <entry> <error> <input> <literal> <module> <name> <padding> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
 #
 # <prefix> inserts the `prefix` value you can modify below
 # ─────────────────────────────────────────────────────────────────────────────
@@ -166,6 +166,10 @@ commands:
       subtitle: "  <muted>●</muted> <neutral>Applied context</neutral> <accent><context></accent>"
       empty: "  <muted>●</muted> <muted_dark>(no settings applied)</muted_dark>"
       line: "    <muted>○</muted> <neutral><name> <muted>→</muted> <primary><value></primary></neutral>"
+      collapsed_layer: "    <muted>○ [<primary><count></primary>]</muted> <neutral>settings</neutral>"
+      collapsed_count: "<muted>[<primary><count></primary>]</muted>"
+      collapsed_header: "<gradient:$secondary:$primary>─── <count> entries ─────────</gradient>"
+      collapsed_entry: "  <muted>●</muted> <neutral><entry></neutral>"
       overridden: "    <muted>○</muted> <muted_dark><strikethrough><name> → <value></strikethrough></muted_dark>"
       suffix: " <overridden>(overridden)</overridden>"
       boat_suffix: " <overridden>(overridden by boat)</overridden>"
@@ -202,6 +206,7 @@ words:
     hints: 'Hints'
     persistent_states: 'Persistent player states'
     boat_lag_fix: 'Boat lag fix'
+    collapse_default_context: 'Collapsed default context'
     auto_kill: 'Auto-kill boat'
     boostpad_early_out_x: 'early-out (X)'
     boostpad_early_out_y: 'early-out (Y)'

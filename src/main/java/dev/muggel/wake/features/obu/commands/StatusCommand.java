@@ -12,6 +12,7 @@ import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.delivery.ActiveContexts;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Boat;
@@ -25,6 +26,9 @@ import java.util.Map;
 import java.util.Set;
 
 public class StatusCommand {
+    public static final String STATE_KEY_COLLAPSE_DEFAULT_CONTEXT = "obu.collapse_default_context";
+    public static final boolean DEFAULT_COLLAPSE_DEFAULT_CONTEXT = true;
+
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal("-status")
                 .withHelpKey("commands.obu.help.status")
@@ -120,28 +124,40 @@ public class StatusCommand {
             if (base.settings().isEmpty()) {
                 plugin.getMessageManager().send(sender, "commands.obu.status.empty");
             } else {
-                printSettings(plugin, sender, base.settings(), shadowed, boatShadowed);
+                printLayer(plugin, sender, base.name(), base.settings(), shadowed, boatShadowed);
             }
         }
         if (!inherited.isEmpty()) {
             plugin.getMessageManager().send(sender, "commands.obu.status.subtitle", Placeholder.parsed("context", OBUContextManager.DEFAULT_CONTEXT));
-            printSettings(plugin, sender, inherited, shadowed, boatShadowed);
+            printLayer(plugin, sender, OBUContextManager.DEFAULT_CONTEXT, inherited, shadowed, boatShadowed);
         }
+    }
+
+    private static void printLayer(Wake plugin, CommandSender audience, @NonNull String contextName, @NonNull List<OBUSetting> settings, @NonNull Set<String> overriddenKeys, @NonNull Set<String> boatOverriddenKeys) {
+        if (!OBUContextManager.DEFAULT_CONTEXT.equals(contextName) || !plugin.getStateDao().get(STATE_KEY_COLLAPSE_DEFAULT_CONTEXT, DEFAULT_COLLAPSE_DEFAULT_CONTEXT)) {
+            printSettings(plugin, audience, settings, overriddenKeys, boatOverriddenKeys);
+            return;
+        }
+        Component hover = plugin.getMessageManager().getComponent("commands.obu.context.settings", Placeholder.unparsed("context", contextName));
+        for (OBUSetting setting : settings) {
+            hover = hover.append(Component.newline()).append(settingLine(plugin, setting, overriddenKeys, boatOverriddenKeys, true));
+        }
+        audience.sendMessage(plugin.getMessageManager().getComponent("commands.obu.status.collapsed_layer", Placeholder.unparsed("count", String.valueOf(settings.size()))).hoverEvent(HoverEvent.showText(hover)));
     }
 
     private static void printSettings(Wake plugin, CommandSender audience, @NonNull List<OBUSetting> settings, @NonNull Set<String> overriddenKeys, @NonNull Set<String> boatOverriddenKeys) {
         for (OBUSetting setting : settings) {
-            boolean shadowedByBoat = boatOverriddenKeys.contains(setting.uniqueKey());
-            boolean shadowed = shadowedByBoat || overriddenKeys.contains(setting.uniqueKey());
-            Component line = plugin.getMessageManager().getComponent(
-                    shadowed ? "commands.obu.status.overridden" : "commands.obu.status.line",
-                    Placeholder.parsed("name", setting.definition().name()),
-                    Placeholder.unparsed("value", String.join(", ", OBUCommandHelper.displayArgs(setting))));
-            if (shadowed) {
-                line = line.append(plugin.getMessageManager().getComponent(
-                        shadowedByBoat ? "commands.obu.status.boat_suffix" : "commands.obu.status.suffix"));
-            }
-            audience.sendMessage(line);
+            audience.sendMessage(settingLine(plugin, setting, overriddenKeys, boatOverriddenKeys, false));
         }
+    }
+
+    private static @NonNull Component settingLine(Wake plugin, @NonNull OBUSetting setting, @NonNull Set<String> overriddenKeys, @NonNull Set<String> boatOverriddenKeys, boolean flat) {
+        boolean shadowedByBoat = boatOverriddenKeys.contains(setting.uniqueKey());
+        boolean shadowed = shadowedByBoat || overriddenKeys.contains(setting.uniqueKey());
+        Component line = plugin.getMessageManager().getComponent(
+                shadowed ? "commands.obu.status.overridden" : "commands.obu.status.line",
+                Placeholder.parsed("name", setting.definition().name()),
+                flat ? Placeholder.unparsed("value", String.join(", ", OBUCommandHelper.displayArgs(setting))) : Placeholder.component("value", OBUCommandHelper.displayValue(plugin, setting)));
+        return shadowed ? line.append(plugin.getMessageManager().getComponent(shadowedByBoat ? "commands.obu.status.boat_suffix" : "commands.obu.status.suffix")) : line;
     }
 }

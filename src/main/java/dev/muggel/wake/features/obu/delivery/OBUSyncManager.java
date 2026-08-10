@@ -5,6 +5,7 @@ import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
+import dev.muggel.wake.features.obu.protocol.SettingMerge;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Boat;
@@ -13,10 +14,9 @@ import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,15 +56,15 @@ public final class OBUSyncManager {
     }
 
     public void addLocalOverride(@NonNull UUID uuid, @NonNull OBUSetting setting) {
-        localOverrides.computeIfAbsent(uuid, k -> new ConcurrentHashMap<>())
-                .put(setting.uniqueKey(), setting);
+        localOverrides.compute(uuid, (k, held) -> byKey(SettingMerge.fold(held == null ? List.of() : held.values(), List.of(setting))));
     }
 
     public void removeLocalOverride(@NonNull UUID uuid, @NonNull String uniqueKey) {
-        Map<String, OBUSetting> map = localOverrides.get(uuid);
-        if (map != null) {
-            map.remove(uniqueKey);
-        }
+        localOverrides.computeIfPresent(uuid, (k, held) -> {
+            Map<String, OBUSetting> kept = new LinkedHashMap<>(held);
+            kept.remove(uniqueKey);
+            return kept.isEmpty() ? null : Collections.unmodifiableMap(kept);
+        });
     }
 
     public void clearLocalOverrides(@NonNull UUID uuid) {
@@ -73,61 +73,55 @@ public final class OBUSyncManager {
 
     public @NonNull Map<String, OBUSetting> getLocalOverrides(@NonNull UUID uuid) {
         Map<String, OBUSetting> overrides = localOverrides.get(uuid);
-        return overrides == null ? Map.of() : Map.copyOf(overrides);
+        return overrides == null ? Map.of() : overrides;
     }
 
-    private @NonNull Map<String, OBUSetting> playerTruth(@NonNull UUID uuid) {
-        Map<String, OBUSetting> truth = new HashMap<>();
+    private static @NonNull Map<String, OBUSetting> byKey(@NonNull List<OBUSetting> settings) {
+        Map<String, OBUSetting> byKey = new LinkedHashMap<>();
+        for (OBUSetting setting : settings) {
+            byKey.put(setting.uniqueKey(), setting);
+        }
+        return Collections.unmodifiableMap(byKey);
+    }
+
+    private @NonNull List<OBUSetting> playerTruth(@NonNull UUID uuid) {
+        List<OBUSetting> truth = List.of();
         String sandbox = active.sandboxOf(uuid);
         if (sandbox != null) {
-            merge(truth, contextManager.getContext(sandbox));
+            truth = merge(truth, contextManager.getContext(sandbox));
         } else {
             OBUContext context = contextManager.getContext(active.contextOf(uuid));
             if (context != null && OBUContextManager.inheritsDefault(context)) {
-                merge(truth, contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT));
+                truth = merge(truth, contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT));
             }
-            merge(truth, context);
+            truth = merge(truth, context);
         }
-        mergeOverrides(truth, uuid);
-        return truth;
+        return SettingMerge.fold(truth, getLocalOverrides(uuid).values());
     }
 
-    private @NonNull Map<String, OBUSetting> boatTruth(@NonNull Boat boat) {
-        Map<String, OBUSetting> truth = new HashMap<>();
+    private @NonNull List<OBUSetting> boatTruth(@NonNull Boat boat) {
+        List<OBUSetting> truth = List.of();
         String pinned = active.pinnedOn(boat);
         if (pinned != null) {
             OBUContext context = contextManager.getContext(pinned);
             if (context != null && OBUContextManager.inheritsDefault(context)) {
-                merge(truth, contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT));
+                truth = merge(truth, contextManager.getContext(OBUContextManager.DEFAULT_CONTEXT));
             }
-            merge(truth, context);
+            truth = merge(truth, context);
         }
         Player driver = driverOf(boat);
         if (driver != null) {
-            truth.putAll(playerTruth(driver.getUniqueId()));
+            truth = SettingMerge.fold(truth, playerTruth(driver.getUniqueId()));
         }
-        mergeOverrides(truth, boat.getUniqueId());
-        return truth;
+        return SettingMerge.fold(truth, getLocalOverrides(boat.getUniqueId()).values());
     }
 
-    private static void merge(@NonNull Map<String, OBUSetting> truth, @Nullable OBUContext context) {
-        if (context == null) {
-            return;
-        }
-        for (OBUSetting setting : context.settings()) {
-            truth.put(setting.uniqueKey(), setting);
-        }
-    }
-
-    private void mergeOverrides(@NonNull Map<String, OBUSetting> truth, @NonNull UUID uuid) {
-        Map<String, OBUSetting> overrides = localOverrides.get(uuid);
-        if (overrides != null) {
-            truth.putAll(overrides);
-        }
+    private static @NonNull List<OBUSetting> merge(@NonNull List<OBUSetting> truth, @Nullable OBUContext context) {
+        return context == null ? truth : SettingMerge.fold(truth, context.settings());
     }
 
     private @NonNull List<OBUSetting> settingsOn(@NonNull Boat boat) {
-        List<OBUSetting> settings = new ArrayList<>(boatTruth(boat).values());
+        List<OBUSetting> settings = boatTruth(boat);
         scales.update(boat.getUniqueId(), settings);
         return settings;
     }
@@ -137,7 +131,7 @@ public final class OBUSyncManager {
     }
 
     public void syncPlayer(@NonNull Player player) {
-        List<OBUSetting> truth = new ArrayList<>(playerTruth(player.getUniqueId()).values());
+        List<OBUSetting> truth = playerTruth(player.getUniqueId());
         if (truth.isEmpty()) {
             packetSender.sendWipePlayer(player);
         } else {
