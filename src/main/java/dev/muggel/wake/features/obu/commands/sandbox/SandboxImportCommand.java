@@ -82,12 +82,10 @@ public class SandboxImportCommand {
                         Placeholder.unparsed("count", String.valueOf(skipped)));
             }
         }
-        plugin.getMessageManager().send(sender, "commands.obu.sandbox.imported", Placeholder.unparsed("sandbox", name));
         if (subject instanceof Player p) {
             SandboxCommandHelper.enterSandbox(plugin, p, key);
-            plugin.getMessageManager().send(sender, "commands.obu.sandbox.switched", Placeholder.unparsed("sandbox", name));
-            SandboxCommandHelper.sendHintIfEnabled(plugin, sender);
         }
+        plugin.getMessageManager().send(sender, "commands.obu.sandbox.imported", Placeholder.unparsed("sandbox", name), SandboxCommandHelper.hint(plugin, subject));
         return Command.SINGLE_SUCCESS;
     }
 }

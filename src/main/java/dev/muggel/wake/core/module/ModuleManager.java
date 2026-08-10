@@ -75,7 +75,7 @@ public final class ModuleManager {
             } else {
                 continue;
             }
-            feedback.add(plugin.getMessageManager().getComponent("commands.reload." + outcome, Placeholder.parsed("module", id)));
+            feedback.add(plugin.getMessageManager().getComponent("commands.reload." + outcome, Placeholder.unparsed("module", id)));
         }
         return feedback;
     }

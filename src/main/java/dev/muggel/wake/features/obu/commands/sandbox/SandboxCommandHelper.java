@@ -13,6 +13,7 @@ import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.delivery.OBUSyncManager;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
@@ -32,8 +33,8 @@ final class SandboxCommandHelper {
     private static final int MAX_SHARE_CODE_BYTES = 65536;
     private SandboxCommandHelper() {}
 
-    static void sendHintIfEnabled(@NonNull Wake plugin, @NonNull CommandSender sender) {
-        CommandHelper.sendHint(plugin, sender, "commands.obu.sandbox.hint");
+    static @NonNull TagResolver hint(@NonNull Wake plugin, @NonNull CommandSender subject) {
+        return CommandHelper.hint(plugin, subject instanceof Player ? "commands.obu.sandbox.active_hint" : null);
     }
 
     static @Nullable OBUContext requireOwnSandbox(@NonNull Wake plugin, CommandSender sender, CommandSender subject, @NonNull String name) {

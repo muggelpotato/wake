@@ -95,18 +95,11 @@ public final class OBUCommandHelper {
                 : contextManager.getContext(OBUContextManager.sandboxKey(name, owner.getUniqueId()));
     }
 
-    public static @NonNull List<String> displayArgs(@NonNull OBUSetting setting) {
-        List<SettingType> types = setting.definition().types();
-        List<String> args = setting.args();
-        List<String> shown = new ArrayList<>(args.size());
-        for (int i = 0; i < args.size(); i++) {
-            boolean list = i < types.size() && types.get(i).isList();
-            shown.add(list ? args.get(i).replace(",", ", ") : args.get(i));
-        }
-        return shown;
+    public static @NonNull Component settingLine(@NonNull Wake plugin, @NonNull String key, @NonNull OBUSetting setting, boolean inHover) {
+        return plugin.getMessageManager().getComponent(key, Placeholder.unparsed("name", setting.definition().name()), Placeholder.component("value", displayValue(plugin, setting, inHover)));
     }
 
-    public static @NonNull Component displayValue(@NonNull Wake plugin, @NonNull OBUSetting setting) {
+    public static @NonNull Component displayValue(@NonNull Wake plugin, @NonNull OBUSetting setting, boolean inHover) {
         List<SettingType> types = setting.definition().types();
         List<String> args = setting.args();
         TextComponent.Builder value = Component.text();
@@ -116,7 +109,7 @@ public final class OBUCommandHelper {
             }
             String arg = args.get(i);
             List<String> entries = i < types.size() && types.get(i).isList() ? List.of(arg.split(",")) : List.of();
-            value.append(entries.size() > 1 ? collapsed(plugin, entries) : Component.text(arg));
+            value.append(entries.size() < 2 ? Component.text(arg) : inHover ? countChip(plugin, entries.size()) : collapsed(plugin, entries));
         }
         return value.build();
     }
@@ -126,7 +119,11 @@ public final class OBUCommandHelper {
         for (String entry : entries) {
             hover = hover.append(Component.newline()).append(plugin.getMessageManager().getComponent("commands.obu.status.collapsed_entry", Placeholder.unparsed("entry", entry)));
         }
-        return plugin.getMessageManager().getComponent("commands.obu.status.collapsed_count", Placeholder.unparsed("count", String.valueOf(entries.size()))).hoverEvent(HoverEvent.showText(hover));
+        return countChip(plugin, entries.size()).hoverEvent(HoverEvent.showText(hover));
+    }
+
+    public static @NonNull Component countChip(@NonNull Wake plugin, int count) {
+        return plugin.getMessageManager().getComponent("commands.obu.status.collapsed_count", Placeholder.unparsed("count", String.valueOf(count)));
     }
 
     public static @NonNull CompletableFuture<Suggestions> suggestContexts(

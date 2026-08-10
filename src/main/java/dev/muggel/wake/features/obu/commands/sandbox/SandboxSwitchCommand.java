@@ -29,8 +29,7 @@ public class SandboxSwitchCommand {
             return 0;
         }
         SandboxCommandHelper.enterSandbox(plugin, player, context.name());
-        plugin.getMessageManager().send(sender, "commands.obu.sandbox.switched", Placeholder.unparsed("sandbox", name));
-        SandboxCommandHelper.sendHintIfEnabled(plugin, sender);
+        plugin.getMessageManager().send(sender, "commands.obu.sandbox.switched", Placeholder.unparsed("sandbox", name), SandboxCommandHelper.hint(plugin, player));
         return Command.SINGLE_SUCCESS;
     }
 }

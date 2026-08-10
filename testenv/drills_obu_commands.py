@@ -58,6 +58,7 @@ SEEDED_CONTEXT = "harbour"
 DEFAULT_ONLY_SETTINGS = ["collisionmode", "falldamage", "setinterpolationten"]
 # the internal names, which no sandbox may take and which the name pattern already turns back
 INTERNAL = ["wake:empty", "wake:personal"]
+BULB = "\U0001F4A1"
 # the cap SandboxImportCommand stops adding at
 MAX_IMPORT_SETTINGS = 256
 # the width wake_obu_settings.unique_key is declared with, which SettingMerge bounds a union by
@@ -229,6 +230,15 @@ def drill_console_ownership():
     says("nor does export", "wo -sandbox export grafted", "does not exist")
     says("nor delete", "wo -sandbox delete grafted", "does not exist")
     truthy("so the grafted sandbox is still in the table", context_row(f"grafted@{GRAFT_OWNER}") is not None)
+
+    print("\nand it enters none of them, so only the hint that is not about entering one reaches it")
+    run("wake hints true")
+    drop("consolehint")
+    reply = says("creating one answers", "wo -sandbox create consolehint", "created")
+    truthy("carrying no sandbox-active bulb", BULB not in reply, reply)
+    reply = says("publishing it answers", "wo -sandbox publish consolehint", "published")
+    truthy("and that one does carry its bulb", BULB in reply, reply)
+    drop("consolehint")
 
 
 def drill_sandbox_is_not_a_context():
@@ -509,7 +519,7 @@ def drill_export():
     reply = says("an empty sandbox exports", "wo -sandbox export exportempty", "exported sandbox")
     truthy("and still offers the copy button", "share code" in reply.lower(), reply)
 
-    # a list argument, an enum and a scalar: every branch displayArgs has to walk on the way out
+    # a list argument, an enum and a scalar: every branch displayValue has to walk on the way out
     run(f'wo -sandbox import "{share("1:0.6", "27:NO_ENTITIES", "3:0.9 minecraft:ice")}" exportfull')
     reply = says("a sandbox holding every shape exports", "wo -sandbox export exportfull", "exported sandbox")
     truthy("with no error line beside it", "failed" not in reply.lower(), reply)

@@ -40,12 +40,10 @@ public class SandboxForkCommand {
             return 0;
         }
         contextManager.addSettings(newKey, sourceContext.settings());
-        plugin.getMessageManager().send(sender, "commands.obu.sandbox.forked", Placeholder.unparsed("source", OBUContextManager.displayName(sourceContext.name())), Placeholder.unparsed("sandbox", newName));
         if (subject instanceof Player p) {
             SandboxCommandHelper.enterSandbox(plugin, p, newKey);
-            plugin.getMessageManager().send(sender, "commands.obu.sandbox.switched", Placeholder.unparsed("sandbox", newName));
-            SandboxCommandHelper.sendHintIfEnabled(plugin, sender);
         }
+        plugin.getMessageManager().send(sender, "commands.obu.sandbox.forked", Placeholder.unparsed("source", OBUContextManager.displayName(sourceContext.name())), Placeholder.unparsed("sandbox", newName), SandboxCommandHelper.hint(plugin, subject));
         return Command.SINGLE_SUCCESS;
     }
 }

@@ -50,8 +50,8 @@ public class DefaultsCommand {
             return 0;
         }
         plugin.getMessageManager().send(sender, "commands.obu.defaults.vanilla",
-                Placeholder.parsed("setting", def.commandName()),
-                Placeholder.parsed("value", defValueStr));
+                Placeholder.unparsed("setting", def.commandName()),
+                Placeholder.unparsed("value", defValueStr));
         if (!(subject instanceof Player player)) {
             return Command.SINGLE_SUCCESS;
         }
@@ -73,14 +73,13 @@ public class DefaultsCommand {
             isServerDefault = effectiveSetting != null;
         }
         if (effectiveSetting == null) {
-            plugin.getMessageManager().send(sender, "commands.obu.defaults.active",
-                    Placeholder.parsed("value", defValueStr));
+            plugin.getMessageManager().send(sender, "commands.obu.defaults.active", Placeholder.unparsed("value", defValueStr));
             return Command.SINGLE_SUCCESS;
         }
         Component button = isServerDefault
                 ? plugin.getMessageManager().getComponent("commands.obu.defaults.blocked_btn")
                 : plugin.getMessageManager().getComponent("commands.obu.defaults.clear_btn", Placeholder.parsed("setting", def.commandName()));
-        plugin.getMessageManager().send(sender, "commands.obu.defaults.custom", Placeholder.unparsed("value", String.join(", ", OBUCommandHelper.displayArgs(effectiveSetting))), Placeholder.component("button", button));
+        plugin.getMessageManager().send(sender, "commands.obu.defaults.custom", Placeholder.component("value", OBUCommandHelper.displayValue(plugin, effectiveSetting, false)), Placeholder.component("button", button));
         return Command.SINGLE_SUCCESS;
     }
 

@@ -3,18 +3,21 @@
 
 Covers what `core/text` owns. The first half needs no server: it reads the bundled language file and
 the source that resolves it, and answers the two questions nobody can answer by eye -- every key the
-code asks for exists, and every key the file carries is reachable. It also holds the file's own
-header to the palette and to the placeholders, because a comment that has drifted is worse than none,
-and it keeps both lists clear of names that are already taken -- a name two resolvers claim goes to
-the nearer one, so a colour or a placeholder that collides quietly takes the other's place.
+code asks for exists, and every key the file carries is reachable. It also holds the file's colours
+section to the fallbacks in WakeColors and its header to both, and to the placeholders, because a
+comment that has drifted is worse than none, and it keeps both lists clear of names that are already
+taken -- a name two resolvers claim goes to the nearer one, so a colour or a placeholder that
+collides quietly takes the other's place. Last it pairs every `<hint>` with the call site that fills
+it, in both directions.
 
 The second half is the loading half, which only a reload can show: a deployed file overriding the
 bundled one key by key, a key deleted out of it falling back rather than reaching the player as
 `<some.key>`, a value that is not a string, one an admin blanked, a tag it cannot resolve, a file
-that is not YAML at all, one the server cannot open, and a language that is not there. Plus the
-three things every message depends on -- the palette reaching the client in both its `<tag>` and its
-`$var` form, the keys the code builds by concatenation resolving to something, and a value the
-player chose arriving as text rather than as markup.
+that is not YAML at all, one the server cannot open, a colour an admin recoloured and one they spelled
+wrong, and a language that is not there. Plus the four things every message depends on -- the palette
+reaching the client in both its `<tag>` and its `$var` form, the hints switch taking the bulb away,
+the keys the code builds by concatenation resolving to something, and a value the player chose
+arriving as text rather than as markup.
 
     python testenv/drills_text.py
 
@@ -39,10 +42,11 @@ SRC = ROOT / "src" / "main" / "java"
 DEPLOYED = WAKE / "lang" / "en_us.yml"
 CONFIG = WAKE / "config.yml"
 
+COLOUR_KEY = "colors."
 ENTRY = re.compile(r"^(\s*)([a-z_][a-z0-9_]*):(?: (.*))?$")
 KEY_LITERAL = re.compile(r'"([a-z][a-z0-9_]*(?:\.[a-z0-9_]*)+)"')
 PALETTE_ENTRY = re.compile(r'^\s+[A-Z_]+\("([a-z_]+)", 0x([0-9A-Fa-f]{6})\)')
-HEADER_COLOUR = re.compile(r"^#\s+<([a-z_]+)>\s+#([0-9A-Fa-f]{6})")
+HEADER_COLOUR = re.compile(r"^#\s+<([a-z_]+)>")
 # a tag carrying no arguments: <click:...> and friends bring their own and are never placeholders
 PLAIN_TAG = re.compile(r"(?<!\\)</?([a-z_]+)>")
 HEX_COLOUR = re.compile(r"§x((?:§[0-9a-fA-F]){6})")
@@ -57,6 +61,13 @@ STANDARD_TAGS = NAMED_COLOURS | {
     "hover", "font", "score", "nbt", "data", "selector", "sel", "head", "color", "colour", "c",
 }
 PALETTE_BYPASS = re.compile(r"<#[0-9a-fA-F]{6}>|<(?:c|colou?r):#|&[0-9a-fk-or]|</?(?:" + "|".join(NAMED_COLOURS) + r")>")
+BULB = "\U0001F4A1"
+MESSAGE_CALL = re.compile(r"\.(?:send|getComponent)\(")
+HINT_CALL = re.compile(r"\bhint\(")
+# the resolver reaches a call either as that call or under the name it was kept in
+HINT = re.compile(r"\bhint\b")
+# a key the source hands around under a name instead of writing it into the call
+LOCAL_KEY = re.compile(r"\bString (\w+) = ([^;]+);")
 
 # the message every live check reads back: a refusal a console can always provoke, carrying the
 # prefix's $variables, an <accent> tag and a value the sender chose
@@ -105,6 +116,29 @@ def palette():
     return dict(palette_entries())
 
 
+def spelled_palette(lang):
+    """[(tag, hex)] out of the language file's own colours section, in the order it lists them."""
+    return [(key[len(COLOUR_KEY):], value.lstrip("#").upper())
+            for key, value in lang.items() if key.startswith(COLOUR_KEY)]
+
+
+def messages(lang):
+    """The file without its colours section: the entries that are templates."""
+    return {key: value for key, value in lang.items() if not key.startswith(COLOUR_KEY)}
+
+
+def header_tags(comments):
+    """The tags the header's table lists, in order: the run of `<tag>` lines under its heading."""
+    at = next((index for index, line in enumerate(comments) if "Wake color tags" in line), -1)
+    listed = []
+    for line in comments[at + 1:]:
+        match = HEADER_COLOUR.match(line)
+        if not match:
+            break
+        listed.append(match.group(1))
+    return listed
+
+
 def source_keys(lang_roots, config_keys):
     """Message keys named in the source: the exact ones, and the prefixes a key is built onto."""
     exact, prefixes = {}, {}
@@ -136,11 +170,11 @@ def drill_keys(lang, exact, prefixes):
 
 def drill_palette(lang, comments):
     print("\nthe palette is the only source of colour")
-    bypassed = [key for key, value in lang.items() if PALETTE_BYPASS.search(value)]
+    bypassed = [key for key, value in messages(lang).items() if PALETTE_BYPASS.search(value)]
     for key in bypassed:
         bad("colour outside the palette", f"{key}: {lang[key]}")
     if not bypassed:
-        ok("no raw hex, legacy code or named colour in any value")
+        ok("no raw hex, legacy code or named colour in any message")
 
     # MessageManager stacks the palette in front of MiniMessage's own tags, so a name it reuses is a
     # standard tag quietly replaced everywhere; a name used twice does not boot at all
@@ -152,13 +186,18 @@ def drill_palette(lang, comments):
     if not clashes:
         ok(f"every one of the {len(tags)} tags is its own name and none is a MiniMessage tag")
 
+    # the file carries the palette an admin edits, WakeColors only what a tag it leaves out falls back to
     defined = [(tag, hex_value.upper()) for tag, hex_value in entries]
-    declared = [(match.group(1), match.group(2).upper())
-                for match in (HEADER_COLOUR.match(line) for line in comments) if match]
-    if declared == defined:
-        ok(f"the header's colour table matches WakeColors.java ({len(defined)} entries)")
+    spelled = spelled_palette(lang)
+    if spelled == defined:
+        ok(f"the colours section spells every one of WakeColors.java's defaults ({len(defined)} entries)")
     else:
-        bad("header colour table", f"file says {declared}, WakeColors says {defined}")
+        bad("colours section", f"file says {spelled}, WakeColors says {defined}")
+
+    if header_tags(comments) == tags:
+        ok("and the header's table names the same tags in the same order")
+    else:
+        bad("header colour table", f"header says {header_tags(comments)}, WakeColors says {tags}")
 
     variables = next((set(re.findall(r"\$([a-z_]+)", line)) for line in comments
                       if "Palette variables" in line), set())
@@ -191,6 +230,48 @@ def drill_placeholders(lang, comments):
         ok("and no placeholder name is one a colour tag or MiniMessage already answers to")
 
 
+def arguments(text, at):
+    """What sits between the parentheses of the call whose opening one is at `at`."""
+    depth = 0
+    for pos in range(at, len(text)):
+        depth += (text[pos] == "(") - (text[pos] == ")")
+        if depth == 0:
+            return text[at + 1:pos]
+    return text[at + 1:]
+
+
+def drill_hints(lang):
+    print("\nevery hint bulb and the line it sits on")
+    before = len(failures)
+    sources = {file: file.read_text(encoding="utf-8") for file in sorted(SRC.rglob("*.java"))}
+    anchors = {key for key, value in lang.items() if "<hint>" in value}
+    bulbs = {key for text in sources.values() for call in HINT_CALL.finditer(text)
+             for key in KEY_LITERAL.findall(arguments(text, call.end() - 1))}
+    filled = set()
+    for file, text in sources.items():
+        aliases = {name: KEY_LITERAL.findall(rhs) for name, rhs in LOCAL_KEY.findall(text)}
+        for call in MESSAGE_CALL.finditer(text):
+            args = arguments(text, call.end() - 1)
+            named = set(KEY_LITERAL.findall(args)) - bulbs
+            named.update(key for name, keys in aliases.items() if re.search(rf"\b{name}\b", args) for key in keys)
+            if HINT.search(args):
+                filled |= named
+                # a resolver on a line that anchors nothing is dropped without a word
+                for key in sorted(named - anchors):
+                    bad("hint filled into a line that anchors none", f"{key} <- {file.relative_to(ROOT)}")
+            else:
+                # an unfilled anchor reaches the player as `<hint>`
+                for key in sorted(named & anchors):
+                    bad("line sent without the hint it anchors", f"{key} <- {file.relative_to(ROOT)}")
+    for key in sorted(anchors - filled):
+        bad("line anchors a hint no call site fills", key)
+    for key, value in sorted((key, lang.get(key, "")) for key in bulbs):
+        if not value.startswith(" ") or "<prefix>" in value:
+            bad("bulb that is not a fragment of the line it joins", f"{key}: {value}")
+    if len(failures) == before:
+        ok(f"each of the {len(anchors)} anchored lines is filled by one of {len(bulbs)} bulbs, and no other line carries one")
+
+
 def colours(reply):
     """The hex colours a raw reply carries, the way the client receives them."""
     return {codes.replace("§", "").upper() for codes in HEX_COLOUR.findall(reply)}
@@ -213,6 +294,15 @@ def deploy(mutate):
         raise SystemExit(f"{DEPLOYED} does not carry the probed template -- a previous run left it edited?")
     DEPLOYED.write_text(mutate(original), encoding="utf-8")
     return original
+
+
+def recolour(text, tag, value):
+    """The deployed file with one entry of its colours section rewritten."""
+    recoloured = re.sub(rf"^(  {tag}: ).*$", lambda match: match.group(1) + value, text, count=1, flags=re.M)
+    if recoloured == text:
+        raise SystemExit(f"{DEPLOYED} spells no colour for {tag} -- it predates the section, "
+                         f"delete it and let the server write it again.")
+    return recoloured
 
 
 def restore(original):
@@ -245,6 +335,15 @@ def drill_rendering():
             ok(f"{expected} reached the client as #{want}")
         else:
             bad(f"{tag} expansion", f"#{want} not among {sorted(seen)}")
+
+    # the switch is the one half of a hint no source-tree check can see; it is left on, the way it ships
+    for switch, shown in (("false", False), ("true", True)):
+        rcon.run(f"wake hints {switch}")
+        reply = rcon.run("wo -context")
+        if (BULB in reply) == shown and "<" not in reply:
+            ok(f"the bulb is {'there' if shown else 'gone'} with hints {switch}, and nothing of its tag either way")
+        else:
+            bad(f"the bulb with hints {switch}", reply)
 
 
 def drill_built_keys():
@@ -386,6 +485,36 @@ def drill_unreadable_file():
         rcon.run("wake reload")
 
 
+def drill_palette_override():
+    print("\nthe colour an admin spells is the colour that renders")
+    default = palette()
+    original = deploy(lambda text: recolour(recolour(text, "accent", '"#123456"'), "secondary", '"#654321"'))
+    try:
+        rcon.run("wake reload")
+        seen = colours(rcon.raw(PROBE))
+        if {"123456", "654321"} <= seen and not {default["accent"].upper(), default["secondary"].upper()} & seen:
+            ok("the <tag> in the message and the $var in the prefix both reach the client recoloured")
+        else:
+            bad("palette override", sorted(seen))
+
+        # not a hex code at all, and the two Adventure's lenient parser would have truncated to a real colour
+        for spelled in ('"not a colour"', '"#12345678"', '"#-1"'):
+            log = Log()
+            DEPLOYED.write_text(recolour(original, "accent", spelled), encoding="utf-8")
+            rcon.run("wake reload")
+            reply = rcon.run(PROBE)
+            if default["accent"].upper() in colours(rcon.raw(PROBE)) and "does not exist" in reply:
+                ok(f"{spelled} costs neither the tag nor the message: it is the built-in colour again")
+            else:
+                bad(f"malformed colour {spelled}", reply)
+            if log.await_line(f"Malformed color '{COLOUR_KEY}accent'", 5):
+                ok("and the console names the entry to go and fix")
+            else:
+                bad(f"malformed colour {spelled}", "no warning in the log")
+    finally:
+        restore(original)
+
+
 def drill_unknown_variable():
     print("\nan unknown $token is left as the admin wrote it")
     original = deploy(lambda text: text.replace(
@@ -425,7 +554,8 @@ def main():
     exact, prefixes = source_keys({key.split(".")[0] for key in lang}, config_keys)
     drill_keys(lang, exact, prefixes)
     drill_palette(lang, comments)
-    drill_placeholders(lang, comments)
+    drill_placeholders(messages(lang), comments)
+    drill_hints(messages(lang))
 
     try:
         rcon = Rcon(args.host, args.port, args.password)
@@ -443,6 +573,7 @@ def main():
     drill_legacy_code()
     drill_broken_file()
     drill_unreadable_file()
+    drill_palette_override()
     drill_unknown_variable()
     drill_unknown_language()
 

@@ -33,7 +33,7 @@ public class BoostpadListCommand {
         boolean globalEnabled = plugin.getStateDao().get(BoostpadDetectorListener.STATE_KEY_ENABLED, BoostpadDetectorListener.DEFAULT_ENABLED);
         String statusKey = globalEnabled ? "commands.drydock.boostpad.status_enabled" : "commands.drydock.boostpad.status_disabled";
         Component blocks = blocks(plugin.getMessageManager(), DrydockCommandHelper.boostpads(plugin));
-        plugin.getMessageManager().send(sender, statusKey, Placeholder.component("blocks", blocks));
+        plugin.getMessageManager().send(sender, statusKey, Placeholder.component("blocks", blocks), CommandHelper.hint(plugin, "commands.drydock.boostpad.status_hint"));
         return Command.SINGLE_SUCCESS;
     }
 

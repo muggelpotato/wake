@@ -85,27 +85,26 @@ public class SettingsCommand {
             return executeReset(plugin, sender, target, delivery);
         }
         if (target instanceof Boat && def.isGlobalSetting()) {
-            plugin.getMessageManager().send(sender, "commands.obu.settings.global_only", Placeholder.parsed("setting", def.commandName()));
+            plugin.getMessageManager().send(sender, "commands.obu.settings.global_only", Placeholder.unparsed("setting", def.commandName()));
             return 0;
         }
         if (!delivery.applySetting(target, setting)) {
             plugin.getMessageManager().send(sender, "commands.obu.context.invalid_target");
             return 0;
         }
-        String valueStr = String.join(" ", OBUCommandHelper.displayArgs(setting));
         String sandbox = null;
         if (target instanceof Player p) {
             sandbox = OBUCommandHelper.active(plugin).sandboxOf(p.getUniqueId());
         }
         if (sandbox != null && !def.isActionSetting()) {
             plugin.getMessageManager().send(sender, "commands.obu.settings.sandbox",
-                    Placeholder.parsed("setting", def.commandName()),
-                    Placeholder.unparsed("value", valueStr),
+                    Placeholder.unparsed("setting", def.commandName()),
+                    Placeholder.component("value", OBUCommandHelper.displayValue(plugin, setting, false)),
                     Placeholder.unparsed("sandbox", OBUContextManager.displayName(sandbox)));
         } else {
             plugin.getMessageManager().send(sender, "commands.obu.settings.success",
-                    Placeholder.parsed("setting", def.commandName()),
-                    Placeholder.unparsed("value", valueStr),
+                    Placeholder.unparsed("setting", def.commandName()),
+                    Placeholder.component("value", OBUCommandHelper.displayValue(plugin, setting, false)),
                     Placeholder.component("target", OBUCommandHelper.targetName(plugin, target, sender)));
         }
         return Command.SINGLE_SUCCESS;
@@ -122,7 +121,7 @@ public class SettingsCommand {
             sync.clearLocalOverrides(boat.getUniqueId());
             sync.broadcastSync(boat);
             plugin.getMessageManager().send(sender, "commands.obu.settings.success",
-                    Placeholder.parsed("setting", OBUDefinition.reset.commandName()),
+                    Placeholder.unparsed("setting", OBUDefinition.reset.commandName()),
                     Placeholder.unparsed("value", ""),
                     Placeholder.component("target", plugin.getMessageManager().getComponent("words.target.boat")));
             return Command.SINGLE_SUCCESS;

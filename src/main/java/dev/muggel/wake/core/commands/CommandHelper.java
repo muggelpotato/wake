@@ -8,10 +8,12 @@ import dev.muggel.wake.Wake;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
 import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
@@ -45,10 +47,9 @@ public final class CommandHelper {
         return executor != null ? executor : source.getSender();
     }
 
-    public static void sendHint(@NonNull Wake plugin, @NonNull CommandSender sender, @NonNull String messageKey) {
-        if (plugin.getStateDao().get(STATE_KEY_SHOW_HINTS, true)) {
-            plugin.getMessageManager().send(sender, messageKey);
-        }
+    public static @NonNull TagResolver hint(@NonNull Wake plugin, @Nullable String hintKey) {
+        return Placeholder.component("hint", hintKey == null || !plugin.getStateDao().get(STATE_KEY_SHOW_HINTS, true)
+                ? Component.empty() : plugin.getMessageManager().getComponent(hintKey));
     }
 
     public static @NonNull CompletableFuture<Suggestions> suggestMatching(@NonNull SuggestionsBuilder builder, @NonNull Iterable<String> options) {

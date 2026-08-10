@@ -6,7 +6,7 @@ import org.intellij.lang.annotations.Subst;
 
 /**
  * Wake's color palette <br>
- * Recolor the plugin by editing these entries <br>
+ * The names are Wake's, the colors the language file's {@code colors} section (colors here are fallback) <br>
  * {@link MessageManager} derives both the {@code <tag>} resolver and the {@code $var} expansions from this list (never write raw hex in messages) <br>
  * A tag here overrides MiniMessage's own
  */

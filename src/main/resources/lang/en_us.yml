@@ -1,25 +1,35 @@
 # Every message is a plain MiniMessage string. All standard tags work here:
 #   <b> <i> <u> <strikethrough> <br> <gradient:...> <shadow:...> <click:run_command:...> <click:open_url:...> <click:copy_to_clipboard:...> <hover:show_text:...> ... (https://docs.advntr.dev/minimessage/format.html)
 #
-# Wake color tags (WakeColors.java):
-#   <primary>     #33B5FF  highlights, success values, counts
-#   <secondary>   #5C66FF  accents, [Button] chips
-#   <accent>      #95A5FF  names, identifiers, echoed user input
-#   <overridden>  #AA55FF  values shadowed by another OBU context
-#   <info>        #4DD0E1  hint chips, notices
-#   <danger>      #FF5252  errors, destructive results
-#   <neutral>     #C9CEE4  body text
-#   <muted>       #8B92BD  arrows, separators, bullets, » prefix
-#   <muted_dark>  #62678C  empty states
+# Wake color tags you can recolor in the `colors` section below:
+#   <primary>     highlights, success values, counts
+#   <secondary>   accents, [Button] chips
+#   <accent>      names, identifiers, echoed user input
+#   <overridden>  values shadowed by another OBU context
+#   <info>        hint chips, notices
+#   <danger>      errors, destructive results
+#   <neutral>     body text
+#   <muted>       arrows, separators, bullets, » prefix
+#   <muted_dark>  empty states
 #
 # Palette variables for tags that expect the hex code of a color tag: $primary $secondary $accent $overridden $info $danger $neutral $muted $muted_dark
 #   <gradient:$secondary:$primary>...</gradient>
 #
 # Dynamic placeholders are filled by the plugin per message and only work in the message they already appear in (moving them to other keys does nothing):
-#   <alias> <aliases> <amount> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <count> <delay> <description> <duration> <entry> <error> <input> <literal> <module> <name> <padding> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
+#   <alias> <aliases> <amount> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <count> <delay> <description> <duration> <entry> <error> <hint> <input> <literal> <module> <name> <padding> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
 #
 # <prefix> inserts the `prefix` value you can modify below
 # ─────────────────────────────────────────────────────────────────────────────
+colors:
+  primary: "#33B5FF"
+  secondary: "#5C66FF"
+  accent: "#95A5FF"
+  overridden: "#AA55FF"
+  info: "#4DD0E1"
+  danger: "#FF5252"
+  neutral: "#C9CEE4"
+  muted: "#8B92BD"
+  muted_dark: "#62678C"
 prefix: "<gradient:$secondary:$primary>Wake</gradient> <muted>»</muted> "
 database:
   degraded: "<prefix><danger>Database unreachable: changes are only saved in memory</danger>"
@@ -86,8 +96,9 @@ commands:
       block_updated: "<prefix><neutral>Updated boostpad block</neutral>"
       block_removed: "<prefix><neutral>Removed boostpad block</neutral>"
       block_not_found: "<prefix><danger>Block is not in the boostpad list</danger>"
-      status_enabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><br>  <muted>●</muted> <neutral>Status: <primary>enabled</primary></neutral><br><blocks>"
-      status_disabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><br>  <muted>●</muted> <neutral>Status: <danger>disabled</danger></neutral><br><blocks>"
+      status_enabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><hint><br>  <muted>●</muted> <neutral>Status: <primary>enabled</primary></neutral><br><blocks>"
+      status_disabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><hint><br>  <muted>●</muted> <neutral>Status: <danger>disabled</danger></neutral><br><blocks>"
+      status_hint: " <info><hover:show_text:'<secondary>Boostpad profiles</secondary><br><muted>●</muted> <neutral>xyz <muted>→</muted> Boost force per axis</neutral><br><muted>●</muted> <neutral>ms <muted>→</muted> Cooldown before the pad boosts again</neutral><br><muted>●</muted> <neutral>Padding <muted>→</muted> Widens the trigger box in blocks (<1 shrinks)</neutral>'>💡</hover></info>"
       item_enabled: "  <muted>●</muted> <accent><block></accent> <muted>→</muted> <neutral><primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><padding></primary> padding</neutral>"
       item_disabled: "  <muted>●</muted> <danger><block></danger> <muted>→</muted> <neutral><primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><padding></primary> padding</neutral>"
       empty: "  <muted>●</muted> <muted_dark>(none configured)</muted_dark>"
@@ -116,13 +127,16 @@ commands:
       clear_btn: "<click:run_command:/wakeobu -clear <setting>><hover:show_text:'<secondary>Clear current setting</secondary>'><secondary>[Clear current]</secondary></hover></click>"
       blocked_btn: "<hover:show_text:'<danger>This is a server default setting</danger><br><neutral>Create a sandbox to remove it, or override it with a temporary context to modify it</neutral>'><danger>[Server Default]</danger></hover>"
     context:
-      header_server: "<gradient:$secondary:$primary>─── Server Contexts ─────────</gradient>"
-      header_sandbox: "<gradient:$secondary:$primary>─── Your Sandboxes ─────────</gradient>"
+      header_server: "<gradient:$secondary:$primary>─── Server Contexts ─────────</gradient><hint>"
+      header_server_hint: " <info><hover:show_text:'<secondary>Server contexts</secondary><br><neutral>Shared presets you can apply to yourself or a boat</neutral>'>💡</hover></info>"
+      header_sandbox: "<gradient:$secondary:$primary>─── Your Sandboxes ─────────</gradient><hint>"
+      header_sandbox_hint: " <info><hover:show_text:'<secondary>Your sandboxes</secondary><br><neutral>Basically private command block chains</neutral><br><neutral>You can share them via <accent>/wakeobu -sandbox export</accent></neutral>'>💡</hover></info>"
       item: "  <muted>●</muted> <accent><context></accent>"
       hover: "<secondary>Click to apply</secondary>"
       missing: "<prefix><danger>Context <accent><context></accent> does not exist</danger>"
-      applied: "<prefix><neutral>Applied context <accent><context></accent> to <target></neutral>"
-      applied_from_sandbox: "<prefix><neutral>Exited sandbox <accent><sandbox></accent> and applied context <accent><context></accent></neutral>"
+      applied: "<prefix><neutral>Applied context <accent><context></accent> to <target></neutral><hint>"
+      applied_from_sandbox: "<prefix><neutral>Exited sandbox <accent><sandbox></accent> and applied context <accent><context></accent></neutral><hint>"
+      applied_hint: " <info><hover:show_text:'<secondary>Context applied</secondary><br><neutral>Temporary overrides were dropped</neutral>'>💡</hover></info>"
       invalid_target: "<prefix><danger>Contexts can only be applied to players or boats</danger>"
       cannot_delete: "<prefix><danger>Cannot delete protected context: <accent><context></accent></danger>"
       deleted: "<prefix><neutral>Deleted server context <accent><context></accent></neutral>"
@@ -142,39 +156,42 @@ commands:
     sandbox:
       exists: "<prefix><danger>Sandbox <accent><sandbox></accent> already exists</danger>"
       reserved: "<prefix><danger>Sandbox <accent><sandbox></accent> uses a reserved name</danger>"
-      created: "<prefix><neutral>Created and entered new sandbox <accent><sandbox></accent></neutral>"
+      created: "<prefix><neutral>Created new sandbox <accent><sandbox></accent></neutral><hint>"
       missing: "<prefix><danger>Sandbox <accent><sandbox></accent> does not exist</danger>"
-      forked: "<prefix><neutral>Forked <accent><source></accent> into new sandbox <accent><sandbox></accent></neutral>"
+      forked: "<prefix><neutral>Forked <accent><source></accent> into new sandbox <accent><sandbox></accent></neutral><hint>"
       none_active: "<prefix><danger>You are not currently in a sandbox</danger>"
       exited: "<prefix><neutral>Exited sandbox</neutral>"
-      switched: "<prefix><neutral>Switched to sandbox <accent><sandbox></accent></neutral>"
+      switched: "<prefix><neutral>Switched to sandbox <accent><sandbox></accent></neutral><hint>"
       import_fail: "<prefix><danger>Failed to import sandbox: <accent><error></accent></danger>"
-      imported: "<prefix><neutral>Imported sandbox <accent><sandbox></accent></neutral>"
+      imported: "<prefix><neutral>Imported sandbox <accent><sandbox></accent></neutral><hint>"
       import_skipped: "<prefix><danger>Skipped <accent><count></accent> invalid settings from the share code</danger>"
-      hint: "<prefix><info><hover:show_text:'<secondary>Sandbox active</secondary><br><neutral>You can now use <accent>/wakeobu</accent> to modify the sandbox context</neutral>'>?</hover></info>"
+      active_hint: " <info><hover:show_text:'<secondary>Sandbox active</secondary><br><neutral>OBU settings you change are saved to this sandbox now</neutral><br><neutral>Leave it with <accent>/wakeobu -sandbox exit</accent></neutral>'>💡</hover></info>"
       invalid_name: "<prefix><danger>Invalid sandbox name: <accent><input></accent></danger>"
       header: "<gradient:$secondary:$primary>─── Sandbox <sandbox> ─────────</gradient>"
       deleted: "<prefix><neutral>Deleted sandbox <accent><sandbox></accent></neutral>"
       kicked: "<prefix><danger>The sandbox <accent><sandbox></accent> you were in was deleted</danger>"
       purged: "<prefix><danger>The sandbox <accent><sandbox></accent> you were in was deleted (unused for too long)</danger>"
-      published: "<prefix><neutral>Published sandbox <accent><sandbox></accent> as a server context</neutral>"
+      published: "<prefix><neutral>Published sandbox <accent><sandbox></accent> as a server context</neutral><hint>"
+      published_hint: " <info><hover:show_text:'<secondary>Sandbox published</secondary><br><neutral>It is now a server context anyone can apply</neutral>'>💡</hover></info>"
+      published_kicked: "<prefix><danger>The sandbox <accent><sandbox></accent> you were in is now a server context</danger>"
       code: "<click:copy_to_clipboard:'<code>'><hover:show_text:'<secondary>Copy share code</secondary>'><secondary>[Copy Share Code]</secondary></hover></click><br>  <muted>●</muted> <neutral>Share it or import it with <accent>/wakeobu -sandbox import</accent></neutral>"
       header_export: "<prefix><neutral>Exported sandbox <accent><sandbox></accent>:</neutral>"
     status:
-      player: "<gradient:$secondary:$primary>─── Player Context ─────────</gradient>"
-      boat: "<br><hover:show_text:'<secondary>Overrides Player Context</secondary><br><neutral>Look at the boat and run <accent>/wakeobu</accent> commands to apply settings to this specific boat or use <accent>/execute as</accent></neutral>'><gradient:$secondary:$primary>─── Boat Context ─────────</gradient></hover>"
+      player: "<gradient:$secondary:$primary>─── Player Context ─────────</gradient><hint>"
+      player_hint: " <info><hover:show_text:'<secondary>No sandbox active</secondary><br><neutral>Changes apply to your live context and are lost when you disconnect</neutral><br><neutral>Keep and share a setup with <accent>/wakeobu -sandbox</accent></neutral>'>💡</hover></info>"
+      boat: "<br><gradient:$secondary:$primary>─── Boat Context ─────────</gradient><hint>"
+      boat_hint: " <info><hover:show_text:'<secondary>Overrides Player Context</secondary><br><neutral>Look at the boat and run <accent>/wakeobu</accent> commands to apply settings to this boat, or use <accent>/execute as</accent></neutral>'>💡</hover></info>"
       subtitle: "  <muted>●</muted> <neutral>Applied context</neutral> <accent><context></accent>"
-      empty: "  <muted>●</muted> <muted_dark>(no settings applied)</muted_dark>"
       line: "    <muted>○</muted> <neutral><name> <muted>→</muted> <primary><value></primary></neutral>"
-      collapsed_layer: "    <muted>○ [<primary><count></primary>]</muted> <neutral>settings</neutral>"
+      collapsed_layer: "    <muted>○</muted> <count> <neutral>settings</neutral>"
       collapsed_count: "<muted>[<primary><count></primary>]</muted>"
       collapsed_header: "<gradient:$secondary:$primary>─── <count> entries ─────────</gradient>"
       collapsed_entry: "  <muted>●</muted> <neutral><entry></neutral>"
       overridden: "    <muted>○</muted> <muted_dark><strikethrough><name> → <value></strikethrough></muted_dark>"
       suffix: " <overridden>(overridden)</overridden>"
       boat_suffix: " <overridden>(overridden by boat)</overridden>"
-      temp: "  <muted>●</muted> <overridden>Temporary overrides:</overridden>"
-      hint: "<prefix><info><hover:show_text:'<secondary>Temporary settings</secondary><br><neutral>Local changes sync to your context but are not saved</neutral><br><br><secondary>Sandboxes</secondary><br><neutral>Use sandboxes to test, and export your configurations</neutral><br><br><accent>/wakeobu -sandbox create <name></accent>'>?</hover></info>"
+      temp: "  <muted>●</muted> <overridden>Temporary overrides:</overridden><hint>"
+      temp_hint: " <info><hover:show_text:'<secondary>Temporary overrides</secondary><br><neutral>They are applied on top of contexts but are never saved</neutral><br><neutral>Use sandboxes (<accent>/wakeobu -sandbox</accent>) to keep them permanently</neutral>'>💡</hover></info>"
     help:
       header: "<gradient:$secondary:$primary>─── OpenBoatUtils Help ─────────</gradient>"
       status: "  <muted>●</muted> <accent>/wakeobu -status</accent><br>    <muted>○</muted> <neutral>View your active context and temporary overrides</neutral>"

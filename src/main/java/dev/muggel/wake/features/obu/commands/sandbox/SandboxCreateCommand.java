@@ -28,8 +28,7 @@ public class SandboxCreateCommand {
         if (subject instanceof Player player) {
             SandboxCommandHelper.enterSandbox(plugin, player, key);
         }
-        plugin.getMessageManager().send(sender, "commands.obu.sandbox.created", Placeholder.unparsed("sandbox", name));
-        SandboxCommandHelper.sendHintIfEnabled(plugin, sender);
+        plugin.getMessageManager().send(sender, "commands.obu.sandbox.created", Placeholder.unparsed("sandbox", name), SandboxCommandHelper.hint(plugin, subject));
         return Command.SINGLE_SUCCESS;
     }
 }

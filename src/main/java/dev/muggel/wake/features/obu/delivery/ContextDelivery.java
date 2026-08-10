@@ -14,6 +14,7 @@ import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -178,18 +179,20 @@ public final class ContextDelivery implements OBUService {
         return evicted;
     }
 
-    public boolean publishSandbox(@NonNull String name) {
+    public @Nullable List<Player> publishSandbox(@NonNull String name) {
         if (!contextManager.publishSandbox(name)) {
-            return false;
+            return null;
         }
+        List<Player> evicted = new ArrayList<>();
         for (UUID uuid : active.clearSandbox(name)) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
                 syncManager.syncPlayer(player);
+                evicted.add(player);
             }
         }
         syncManager.resyncPinnedBoats();
-        return true;
+        return evicted;
     }
 
     public void setPlayerActiveSandbox(@NonNull Player player, @Nullable String sandboxName) {

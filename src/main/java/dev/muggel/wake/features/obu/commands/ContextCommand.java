@@ -6,6 +6,7 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.PermissionPreset;
 import dev.muggel.wake.core.commands.arguments.NameArgumentType;
@@ -18,6 +19,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
@@ -62,13 +64,13 @@ public class ContextCommand {
             }
         }
         if (!serverContexts.isEmpty()) {
-            plugin.getMessageManager().send(sender, "commands.obu.context.header_server");
+            plugin.getMessageManager().send(sender, "commands.obu.context.header_server", CommandHelper.hint(plugin, "commands.obu.context.header_server_hint"));
             for (OBUContext context : serverContexts) {
                 sendContextItem(sender, subject, plugin, context);
             }
         }
         if (!mySandboxes.isEmpty()) {
-            plugin.getMessageManager().send(sender, "commands.obu.context.header_sandbox");
+            plugin.getMessageManager().send(sender, "commands.obu.context.header_sandbox", CommandHelper.hint(plugin, "commands.obu.context.header_sandbox_hint"));
             for (OBUContext context : mySandboxes) {
                 sendContextItem(sender, subject, plugin, context);
             }
@@ -86,19 +88,20 @@ public class ContextCommand {
             return 0;
         }
         String shownName = OBUContextManager.displayName(context.name());
+        TagResolver hint = CommandHelper.hint(plugin, "commands.obu.context.applied_hint");
         if (target instanceof Player p) {
             String previousSandbox = OBUCommandHelper.active(plugin).sandboxOf(p.getUniqueId());
             service.setPlayerActiveSandbox(p, null);
             service.applyContext(p, context);
             OBUCommandHelper.sync(plugin).syncPlayer(p);
             if (previousSandbox != null && p.equals(sender)) {
-                plugin.getMessageManager().send(sender, "commands.obu.context.applied_from_sandbox", Placeholder.unparsed("sandbox", OBUContextManager.displayName(previousSandbox)), Placeholder.unparsed("context", shownName));
+                plugin.getMessageManager().send(sender, "commands.obu.context.applied_from_sandbox", Placeholder.unparsed("sandbox", OBUContextManager.displayName(previousSandbox)), Placeholder.unparsed("context", shownName), hint);
             } else {
-                plugin.getMessageManager().send(sender, "commands.obu.context.applied", Placeholder.unparsed("context", shownName), Placeholder.component("target", OBUCommandHelper.targetName(plugin, p, sender)));
+                plugin.getMessageManager().send(sender, "commands.obu.context.applied", Placeholder.unparsed("context", shownName), Placeholder.component("target", OBUCommandHelper.targetName(plugin, p, sender)), hint);
             }
         } else if (target instanceof Boat boat) {
             service.applyEntityContext(boat, context);
-            plugin.getMessageManager().send(sender, "commands.obu.context.applied", Placeholder.unparsed("context", shownName), Placeholder.component("target", OBUCommandHelper.targetName(plugin, boat, sender)));
+            plugin.getMessageManager().send(sender, "commands.obu.context.applied", Placeholder.unparsed("context", shownName), Placeholder.component("target", OBUCommandHelper.targetName(plugin, boat, sender)), hint);
         } else {
             plugin.getMessageManager().send(sender, "commands.obu.context.invalid_target");
             return 0;
@@ -139,10 +142,10 @@ public class ContextCommand {
         Component hoverText = getContextHoverComponent(context, plugin, shownName)
                 .append(Component.newline()).append(Component.newline())
                 .append(plugin.getMessageManager().getComponent("commands.obu.context.hover"));
-        Component contextComp = plugin.getMessageManager().getComponent("commands.obu.context.item", Placeholder.unparsed("context", shownName))
+        Component name = Component.text(shownName)
                 .clickEvent(ClickEvent.runCommand("/wobu -context " + shownName))
                 .hoverEvent(HoverEvent.showText(hoverText));
-        sender.sendMessage(contextComp);
+        plugin.getMessageManager().send(sender, "commands.obu.context.item", Placeholder.component("context", name));
     }
 
     private static Component getContextHoverComponent(@NonNull OBUContext context, @NonNull Wake plugin, @NonNull String shownName) {
@@ -151,10 +154,7 @@ public class ContextCommand {
             return hoverText.append(Component.newline()).append(plugin.getMessageManager().getComponent("commands.obu.no_settings"));
         }
         for (OBUSetting setting : context.settings()) {
-            hoverText = hoverText.append(Component.newline())
-                    .append(plugin.getMessageManager().getComponent("commands.obu.status.line",
-                            Placeholder.parsed("name", setting.definition().name()),
-                            Placeholder.unparsed("value", String.join(", ", OBUCommandHelper.displayArgs(setting)))));
+            hoverText = hoverText.append(Component.newline()).append(OBUCommandHelper.settingLine(plugin, "commands.obu.status.line", setting, true));
         }
         return hoverText;
     }
