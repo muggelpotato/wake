@@ -290,21 +290,24 @@ def drill_obu_export_shape(rcon: Rcon, log: Log, mariadb):
     after = section(exported("obu"), "server")
     lost = [line for line in before.splitlines() if line.strip() and line not in after]
     truthy("the round trip changed nothing under server:", not lost, f"lost {lost[:3]}")
+    # spelled the way the door leaves it: a block list is stored with minecraft: taken off
     truthy("including both entries of the repeatable one",
-           after.count("WALLTAP_MULTIPLIER") == 1 and after.count("JUMPS 2.0 minecraft:stone") == 1, after[-200:])
+           after.count("WALLTAP_MULTIPLIER") == 1 and after.count("JUMPS 2.0 stone") == 1, after[-200:])
 
 
 def drill_refused_while_degraded(rcon: Rcon, log: Log, mariadb):
     """An export taken during an outage would write out a cache nobody can vouch for."""
     step("the admin surface refuses to run while the database is unreachable")
-    pads = rcon.run("dd boostpad list")
-    contexts = rcon.run("wobu -context")
     with outage(mariadb):
         # a write has to fail before the layer knows it is degraded: the outage is discovered, not announced
         rcon.run("wake hints false")
         if not await_file(JOURNAL, True, 45):
             bad("no outage journal appeared, so the server never noticed the outage")
             return
+        # read the listings only once that write has landed: it takes the hint bulb out of every header,
+        # so a baseline taken before it would differ by the drill's own doing rather than by the reload
+        pads = rcon.run("dd boostpad list")
+        contexts = rcon.run("wobu -context")
         stamp = (EXPORTS / "core_data.yml").stat().st_mtime if (EXPORTS / "core_data.yml").is_file() else 0
         log.reset()
         reply = rcon.run("wake database export core")

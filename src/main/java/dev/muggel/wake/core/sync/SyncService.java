@@ -11,10 +11,10 @@ import java.util.Set;
 /**
  * Cross-server cache invalidation via Valkey/Redis pub-sub. <br>
  * Database writes -> moved rows are published -> other servers read them back <br>
- * Only active when configured with a shared MariaDB database. <br>
+ * Only active when configured with a shared MariaDB instance. <br>
  * 1. {@link SyncMessage} spells an announcement <br>
  * 2. {@link SyncBus} carries it <br>
- * 3. {@link SyncDispatcher} acts on the ones that arrive.
+ * 3. {@link SyncDispatcher} acts on the ones that arrive
  */
 public class SyncService {
     public static final String SCOPE_STATE = "state";
@@ -35,7 +35,7 @@ public class SyncService {
             return null;
         }
         if (plugin.getDatabaseManager().dialect() != Dialect.MARIADB) {
-            plugin.getLogger().info("Cross-server sync inactive (needs a shared mariadb database)");
+            plugin.getLogger().info("Cross-server sync inactive (needs a shared mariadb instance)");
             return null;
         }
         String host = config.getString("redis.host", "localhost");

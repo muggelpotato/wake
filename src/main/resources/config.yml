@@ -15,8 +15,8 @@ database:
   username: "root"
   password: "password"
   pool:
-    maximum_connections: 5
-    minimum_idle: 1
+    maximum_connections: 5 # 2-50
+    minimum_idle: 1 # 0-maximum_connections
 sync: # cross-server cache invalidation via Valkey pub-sub (requires shared mariadb/valkey instance)
   enabled: false
   verbose_logging: false

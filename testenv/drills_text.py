@@ -328,13 +328,9 @@ def drill_rendering():
     else:
         bad("escaped tag", reply)
 
-    seen = colours(rcon.raw(PROBE))
-    for tag, expected in (("secondary", "$var in the prefix's gradient"), ("accent", "<tag> in the message")):
-        want = palette()[tag].upper()
-        if want in seen:
-            ok(f"{expected} reached the client as #{want}")
-        else:
-            bad(f"{tag} expansion", f"#{want} not among {sorted(seen)}")
+    # the $var in the prefix's gradient and the <tag> in the message are read off pinned colours in
+    # drill_palette_override: the deployed palette is the admin's to edit, and one they spell as an exact
+    # legacy colour reaches the client as §f rather than as a hex nothing here would find
 
     # the switch is the one half of a hint no source-tree check can see; it is left on, the way it ships
     for switch, shown in (("false", False), ("true", True)):

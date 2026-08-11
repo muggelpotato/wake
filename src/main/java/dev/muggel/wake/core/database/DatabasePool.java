@@ -8,7 +8,6 @@ import co.aikar.idb.PooledDatabaseOptions;
 import com.zaxxer.hikari.HikariDataSource;
 import dev.muggel.wake.Wake;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.FileConfiguration;
 import org.jspecify.annotations.NonNull;
 
 import java.io.File;
@@ -20,18 +19,24 @@ final class DatabasePool {
     static final String PROBE_QUERY = "SELECT 1";
     private static final int DEFAULT_MAX_CONNECTIONS = 5;
     private static final int DEFAULT_MIN_IDLE = 1;
+    private static final int MIN_POOL_SIZE = 2;
+    private static final int MAX_POOL_SIZE = 50;
     private DatabasePool() {}
 
     static @NonNull Dialect open(@NonNull Wake plugin) {
-        ConfigurationSection config = plugin.getConfig().getConfigurationSection("database");
+        ConfigurationSection config = plugin.getConfig().isSet("database") ? plugin.getConfig().getConfigurationSection("database") : null;
+        String type = config == null ? "sqlite" : config.getString("type", "sqlite");
         Dialect dialect = Dialect.SQLITE;
         if (config == null) {
-            plugin.getLogger().warning("Database configuration missing, defaulting to SQLite");
+            plugin.getLogger().warning("No usable 'database' section in config.yml: defaulting to SQLite");
             openSQLite(plugin);
-        } else if ("mariadb".equalsIgnoreCase(config.getString("type", "sqlite"))) {
+        } else if ("mariadb".equalsIgnoreCase(type)) {
             dialect = Dialect.MARIADB;
             openMariaDB(plugin, config);
         } else {
+            if (!"sqlite".equalsIgnoreCase(type)) {
+                plugin.getLogger().warning("database.type is \"" + type + "\", defaulting to SQLite (valid: sqlite, mariadb)");
+            }
             openSQLite(plugin);
         }
         tightenTimeouts();
@@ -73,13 +78,21 @@ final class DatabasePool {
     }
 
     private static void openPool(@NonNull Wake plugin, @NonNull DatabaseOptions options) {
-        FileConfiguration config = plugin.getConfig();
-        int maxConnections = Math.max(2, config.getInt("database.pool.maximum_connections", DEFAULT_MAX_CONNECTIONS));
+        int maxConnections = bounded(plugin, "database.pool.maximum_connections", DEFAULT_MAX_CONNECTIONS, MIN_POOL_SIZE, MAX_POOL_SIZE);
         DB.setGlobalDatabase(new HikariPooledDatabase(PooledDatabaseOptions.builder()
                 .options(options)
                 .maxConnections(maxConnections)
-                .minIdleConnections(Math.clamp(config.getInt("database.pool.minimum_idle", DEFAULT_MIN_IDLE), 0, maxConnections))
+                .minIdleConnections(bounded(plugin, "database.pool.minimum_idle", DEFAULT_MIN_IDLE, 0, maxConnections))
                 .build()));
+    }
+
+    private static int bounded(@NonNull Wake plugin, @NonNull String path, int fallback, int min, int max) {
+        int configured = plugin.getConfig().getInt(path, fallback);
+        int bounded = Math.clamp(configured, min, max);
+        if (bounded != configured) {
+            plugin.getLogger().warning(path + " is " + configured + ", using " + bounded + " instead (valid range " + min + "-" + max + ")");
+        }
+        return bounded;
     }
 
     /** Hikari's defaults are too long for quick ingame feedback */

@@ -66,7 +66,7 @@ commands:
     export_fail: "<prefix><danger>Failed to export data for module <accent><module></accent>: <accent><error></accent></danger>"
     import_success: "<prefix><neutral>Imported <primary><count></primary> records for module <accent><module></accent></neutral>"
     import_fail: "<prefix><danger>Failed to import data for module <accent><module></accent>: <accent><error></accent></danger>"
-    import_confirm: "<prefix><danger><accent><module></accent> records will be overwritten or merged with imported data</danger><br><confirm_btn>"
+    import_confirm: "<prefix><danger> Matching <accent><module></accent> records will be overwritten with imported data</danger><br><confirm_btn>"
     setdefaults_success: "<prefix><neutral>Seeded <primary><count></primary> default records for module <accent><module></accent></neutral>"
     setdefaults_fail: "<prefix><danger>Failed to seed defaults for module <accent><module></accent>: <accent><error></accent></danger>"
     setdefaults_confirm: "<prefix><danger><accent><module></accent> records will be reset to plugin defaults (custom records are kept)</danger><br><confirm_btn>"
