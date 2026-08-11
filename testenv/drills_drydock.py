@@ -4,10 +4,10 @@
 Covers what a console can judge about `/dd boostpad`: the values `add` stores and hands back, that
 adding a block twice edits the one pad instead of undoing the switch an admin threw, the order the
 listing comes out in, that a row stored under a key no command would have written is still one every
-command can reach, where each early-out switch lands, that both switches survive a reload and a
-module cycle, and that the pad flag and the axes ride the export round trip -- the state sweep
-carries the axes, but a pad's own `enabled` lives in the module's table and has to be checked from
-the other end.
+command can reach, where each early-out switch lands, what the global cooldown stores and prints,
+that both switches survive a reload and a module cycle, and that the pad flag, the axes and the
+cooldown ride the export round trip -- the state sweep carries the settings, but a pad's own
+`enabled` lives in the module's table and has to be checked from the other end.
 
 Two of them watch the export and the import rather than a command. The export is written straight out
 of `BoostpadConfig`, so one reads the record's field names out of the source and holds the export to
@@ -46,7 +46,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import WAKE, Rcon, bad, detect_backend, failures, ok, set_module_enabled, state, step, switch  # noqa: E402
+from drills import (WAKE, Rcon, bad, detect_backend, failures, ok, set_module_enabled, state, step,  # noqa: E402
+                    switch, write_state_raw)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPORT = WAKE / "exports" / "drydock_data.yml"
@@ -77,6 +78,8 @@ PARSE_ERROR = ("Incorrect argument", "Unknown or incomplete", "Expected", "Inval
                "not in the boostpad list", "<--[HERE]")
 AXES = ["x", "y", "z"]
 DEFAULT_AXES = {"x": "false", "y": "true", "z": "false"}
+COOLDOWN_KEY = "drydock.boostpads_global_cooldown_ms"
+COOLDOWN = re.compile(r"Global cooldown:\s*(\S+)")
 
 
 def truthy(label, condition, detail=""):
@@ -187,6 +190,12 @@ def reread_table(rcon: Rcon):
 
 def axis_key(axis):
     return f"drydock.boostpads_early_out_{axis}"
+
+
+def cooldown_line(rcon: Rcon):
+    """What the listing prints for the global cooldown, which is read out of the cache like the pads are."""
+    found = COOLDOWN.search(rcon.run("dd boostpad list"))
+    return found.group(1) if found else None
 
 
 def restore_axes(rcon: Rcon):
@@ -508,6 +517,37 @@ def drill_config_switches(rcon: Rcon, mariadb):
         restore_axes(rcon)
 
 
+def drill_global_cooldown(rcon: Rcon, mariadb):
+    """A number rather than a switch, and the one value whose off state is a number the listing has to word."""
+    step("global-cooldown stores what it took and the listing prints it")
+    try:
+        rcon.run("dd boostpad config global-cooldown 50")
+        time.sleep(SETTLE)
+        truthy("the database holds it", state(COOLDOWN_KEY, mariadb) == "50", repr(state(COOLDOWN_KEY, mariadb)))
+        truthy("and the listing prints it", cooldown_line(rcon) == "50ms", repr(cooldown_line(rcon)))
+
+        step("zero is off rather than a cooldown of nothing")
+        truthy("setting it says disabled", "disabled" in rcon.run("dd boostpad config global-cooldown 0"))
+        time.sleep(SETTLE)
+        truthy("and the listing says off", cooldown_line(rcon) == "off", repr(cooldown_line(rcon)))
+
+        step("a value no argument type would have taken is held to one that could have been typed")
+        refuses(rcon, "the command turns a negative away", "dd boostpad config global-cooldown -5")
+        write_state_raw(COOLDOWN_KEY, "-5", mariadb)
+        rcon.run("wake reload")
+        time.sleep(3)
+        truthy("a row carrying a negative is off", cooldown_line(rcon) == "off", repr(cooldown_line(rcon)))
+        # the same cooldown written in nanoseconds: uncapped it wraps the nanosecond arithmetic to no cooldown at all
+        write_state_raw(COOLDOWN_KEY, "50000000000000", mariadb)
+        rcon.run("wake reload")
+        time.sleep(3)
+        truthy("and one past the ceiling comes back at the cap", cooldown_line(rcon) == f"{CAPPED}ms",
+               repr(cooldown_line(rcon)))
+    finally:
+        rcon.run("dd boostpad config global-cooldown 0")
+        time.sleep(SETTLE)
+
+
 def drill_switches_survive_reload(rcon: Rcon, mariadb):
     """Both switches are read out of a cache a reload rebuilds, so both have to be there afterwards."""
     step("the global switch and a pad's own survive /wake reload")
@@ -552,11 +592,12 @@ def drill_module_cycle(rcon: Rcon, mariadb):
 
 def drill_export_round_trip(rcon: Rcon, mariadb):
     """A pad's own switch lives in the module's table rather than its state prefix, so it needs its own check."""
-    step("a pad's switch and every early-out axis reach the export")
+    step("a pad's switch, every early-out axis and the global cooldown reach the export")
     rcon.run(f"dd boostpad add {PAD} 0 0 .4 250 2")
     rcon.run(f"dd boostpad toggle {PAD}")
     rcon.run("dd boostpad config early-out-x true")
     rcon.run("dd boostpad config early-out-y false")
+    rcon.run("dd boostpad config global-cooldown 75")
     time.sleep(SETTLE)
     try:
         text = export(rcon)
@@ -565,11 +606,13 @@ def drill_export_round_trip(rcon: Rcon, mariadb):
         truthy("and both axes as they were set",
                "boostpads_early_out_x: true" in text and "boostpads_early_out_y: false" in text,
                text[:200])
+        truthy("and the cooldown too", "boostpads_global_cooldown_ms: 75" in text, text[:200])
 
         step("changing all of it back, then importing")
         rcon.run(f"dd boostpad toggle {PAD}")
         rcon.run("dd boostpad config early-out-x false")
         rcon.run("dd boostpad config early-out-y true")
+        rcon.run("dd boostpad config global-cooldown 0")
         time.sleep(SETTLE)
         rcon.run("wake database import drydock confirm")
         time.sleep(3)
@@ -578,8 +621,10 @@ def drill_export_round_trip(rcon: Rcon, mariadb):
         truthy("and the axes came back with it", state(axis_key("x"), mariadb) == "true",
                repr(state(axis_key("x"), mariadb)))
         truthy("both of them", state(axis_key("y"), mariadb) == "false", repr(state(axis_key("y"), mariadb)))
+        truthy("and the cooldown is back where it was", cooldown_line(rcon) == "75ms", repr(cooldown_line(rcon)))
     finally:
         restore_axes(rcon)
+        rcon.run("dd boostpad config global-cooldown 0")
         rcon.run(f"dd boostpad remove {PAD}")
         time.sleep(SETTLE)
 
@@ -604,8 +649,8 @@ def main():
     try:
         for drill in [drill_add_round_trip, drill_add_edits, drill_listing, drill_foreign_key_row,
                       drill_export_carries_the_record, drill_imported_row_repair, drill_malformed_row,
-                      drill_registration_needs_a_pad, drill_config_switches, drill_switches_survive_reload,
-                      drill_module_cycle, drill_export_round_trip]:
+                      drill_registration_needs_a_pad, drill_config_switches, drill_global_cooldown,
+                      drill_switches_survive_reload, drill_module_cycle, drill_export_round_trip]:
             print(f"\n{drill.__name__.removeprefix('drill_').replace('_', ' ')}")
             drill(rcon, mariadb)
     except RuntimeError as error:

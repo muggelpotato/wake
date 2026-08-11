@@ -30,6 +30,7 @@ import org.bukkit.util.Vector;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -48,6 +49,8 @@ public class BoostpadDetectorListener extends PacketListenerAbstract implements 
     public static final boolean DEFAULT_EARLY_OUT_X = false;
     public static final boolean DEFAULT_EARLY_OUT_Y = true;
     public static final boolean DEFAULT_EARLY_OUT_Z = false;
+    public static final String STATE_KEY_GLOBAL_COOLDOWN_MS = "drydock.boostpads_global_cooldown_ms";
+    public static final long DEFAULT_GLOBAL_COOLDOWN_MS = 0L;
     private static final double SURFACE_BAND = 0.15;
     private static final double SURFACE_DROP = 0.5;
     private static final double HULL_HALF = 0.6875;
@@ -61,6 +64,10 @@ public class BoostpadDetectorListener extends PacketListenerAbstract implements 
     public BoostpadDetectorListener(@NonNull Wake plugin, BoostpadRegistry boostpads) {
         this.plugin = plugin;
         this.boostpads = boostpads;
+    }
+
+    public static long globalCooldownMs(@NonNull Wake plugin) {
+        return Math.clamp(plugin.getStateDao().get(STATE_KEY_GLOBAL_COOLDOWN_MS, DEFAULT_GLOBAL_COOLDOWN_MS), 0L, BoostpadConfig.MAX_DELAY_MS);
     }
 
     public void updateRegistration() {
@@ -184,6 +191,8 @@ public class BoostpadDetectorListener extends PacketListenerAbstract implements 
     private void fireBoosts(@NonNull Boat boat, @NonNull Player player, @NonNull List<PadHit> hits, boolean jumping) {
         hits.sort(Comparator.comparingDouble(PadHit::progress));
         Map<String, Long> boatCooldowns = lastBoostTimes.computeIfAbsent(boat.getUniqueId(), key -> new HashMap<>(4));
+        long globalCooldownNanos = globalCooldownMs(plugin) * 1_000_000L;
+        Long lastAnyNanos = globalCooldownNanos > 0 && !boatCooldowns.isEmpty() ? Collections.max(boatCooldowns.values()) : null;
         World world = boat.getWorld();
         boolean grounded = boat.isOnGround();
         boolean cancelX = jumping && plugin.getStateDao().get(STATE_KEY_EARLY_OUT_X, DEFAULT_EARLY_OUT_X);
@@ -207,7 +216,11 @@ public class BoostpadDetectorListener extends PacketListenerAbstract implements 
             if (lastBoostNanos != null && crossedNanos - lastBoostNanos < config.delayMs() * 1_000_000L) {
                 continue;
             }
+            if (lastAnyNanos != null && crossedNanos - lastAnyNanos < globalCooldownNanos) {
+                continue;
+            }
             boatCooldowns.put(config.blockKey(), crossedNanos);
+            lastAnyNanos = crossedNanos;
             if (boostPad) {
                 firedBoostPad = true;
             }

@@ -16,7 +16,7 @@
 #   <gradient:$secondary:$primary>...</gradient>
 #
 # Dynamic placeholders are filled by the plugin per message and only work in the message they already appear in (moving them to other keys does nothing):
-#   <alias> <aliases> <amount> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <count> <delay> <description> <duration> <entry> <error> <hint> <input> <literal> <module> <name> <padding> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
+#   <alias> <aliases> <amount> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <cooldown> <count> <delay> <description> <duration> <entry> <error> <hint> <input> <literal> <module> <name> <padding> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
 #
 # <prefix> inserts the `prefix` value you can modify below
 # ─────────────────────────────────────────────────────────────────────────────
@@ -96,9 +96,13 @@ commands:
       block_updated: "<prefix><neutral>Updated boostpad block</neutral>"
       block_removed: "<prefix><neutral>Removed boostpad block</neutral>"
       block_not_found: "<prefix><danger>Block is not in the boostpad list</danger>"
-      status_enabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><hint><br>  <muted>●</muted> <neutral>Status: <primary>enabled</primary></neutral><br><blocks>"
-      status_disabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><hint><br>  <muted>●</muted> <neutral>Status: <danger>disabled</danger></neutral><br><blocks>"
-      status_hint: " <info><hover:show_text:'<secondary>Boostpad profiles</secondary><br><muted>●</muted> <neutral>xyz <muted>→</muted> Boost force per axis</neutral><br><muted>●</muted> <neutral>ms <muted>→</muted> Cooldown before the pad boosts again</neutral><br><muted>●</muted> <neutral>Padding <muted>→</muted> Widens the trigger box in blocks (<1 shrinks)</neutral>'>💡</hover></info>"
+      status_enabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><hint><br>  <muted>●</muted> <neutral>Status: <primary>enabled</primary></neutral><br><cooldown><br><blocks>"
+      status_disabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><hint><br>  <muted>●</muted> <neutral>Status: <danger>disabled</danger></neutral><br><cooldown><br><blocks>"
+      status_hint: " <info><hover:show_text:'<secondary>Boostpad profiles</secondary><br><muted>●</muted> <neutral>xyz <muted>→</muted> Boost force per axis</neutral><br><muted>●</muted> <neutral>ms <muted>→</muted> Cooldown before the pad boosts again</neutral><br><muted>●</muted> <neutral>Padding <muted>→</muted> Widens the trigger box in blocks (<1 shrinks)</neutral><br><muted>●</muted> <neutral>Global cooldown <muted>→</muted> Shortest gap between any two boosts, whatever the block</neutral>'>💡</hover></info>"
+      global_cooldown: "  <muted>●</muted> <neutral>Global cooldown: <primary><delay></primary>ms</neutral>"
+      global_cooldown_off: "  <muted>●</muted> <neutral>Global cooldown: <danger>off</danger></neutral>"
+      global_cooldown_set: "<prefix><neutral>Global boost cooldown set to <primary><delay></primary>ms</neutral>"
+      global_cooldown_disabled: "<prefix><neutral>Global boost cooldown is now <danger>disabled</danger></neutral>"
       item_enabled: "  <muted>●</muted> <accent><block></accent> <muted>→</muted> <neutral><primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><padding></primary> padding</neutral>"
       item_disabled: "  <muted>●</muted> <danger><block></danger> <muted>→</muted> <neutral><primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><padding></primary> padding</neutral>"
       empty: "  <muted>●</muted> <muted_dark>(none configured)</muted_dark>"

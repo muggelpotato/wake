@@ -3,6 +3,7 @@ drydock:
   boostpads_early_out_x: false
   boostpads_early_out_y: true
   boostpads_early_out_z: false
+  boostpads_global_cooldown_ms: 0
 boostpads:
   minecraft:horn_coral_block:
     enabled: true

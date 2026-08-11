@@ -33,8 +33,15 @@ public class BoostpadListCommand {
         boolean globalEnabled = plugin.getStateDao().get(BoostpadDetectorListener.STATE_KEY_ENABLED, BoostpadDetectorListener.DEFAULT_ENABLED);
         String statusKey = globalEnabled ? "commands.drydock.boostpad.status_enabled" : "commands.drydock.boostpad.status_disabled";
         Component blocks = blocks(plugin.getMessageManager(), DrydockCommandHelper.boostpads(plugin));
-        plugin.getMessageManager().send(sender, statusKey, Placeholder.component("blocks", blocks), CommandHelper.hint(plugin, "commands.drydock.boostpad.status_hint"));
+        plugin.getMessageManager().send(sender, statusKey, Placeholder.component("blocks", blocks), Placeholder.component("cooldown", cooldown(plugin)), CommandHelper.hint(plugin, "commands.drydock.boostpad.status_hint"));
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static @NonNull Component cooldown(@NonNull Wake plugin) {
+        long cooldownMs = BoostpadDetectorListener.globalCooldownMs(plugin);
+        return cooldownMs > 0
+                ? plugin.getMessageManager().getComponent("commands.drydock.boostpad.global_cooldown", Placeholder.unparsed("delay", String.valueOf(cooldownMs)))
+                : plugin.getMessageManager().getComponent("commands.drydock.boostpad.global_cooldown_off");
     }
 
     private static @NonNull Component blocks(@NonNull MessageManager messages, @NonNull BoostpadRegistry boostpads) {
