@@ -17,6 +17,7 @@ import org.bukkit.command.CommandSender;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public class HelpCommand {
@@ -60,6 +61,7 @@ public class HelpCommand {
                 Placeholder.unparsed("command", root.getName())));
         List<CommandNode> literals = root.getChildren().stream()
                 .filter(child -> !child.isArgument() && PermissionManager.canReach(sender, child.getPermission()))
+                .sorted(Comparator.comparing(CommandNode::getName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
         for (CommandNode child : literals.subList(0, Math.min(literals.size(), HOVER_SUBCOMMAND_CAP))) {
             lines.add(mm.getComponent("commands.help.hover_line",

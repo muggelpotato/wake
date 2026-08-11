@@ -63,6 +63,10 @@ BULB = "\U0001F4A1"
 MAX_IMPORT_SETTINGS = 256
 # the width wake_obu_settings.unique_key is declared with, which SettingMerge bounds a union by
 UNIQUE_KEY_WIDTH = 255
+# a value each semantic type accepts, so every setting's own literal is reachable with nothing else wrong
+SAMPLE = {"BOOLEAN": "true", "FLOAT": "1.0", "DOUBLE": "1.0", "INT": "1", "BYTE": "1",
+          "BLOCK_LIST": "ice", "ENTITY_LIST": "minecraft:pig",
+          "SETTING_ENUM": "JUMP_FORCE", "COLLISION_ENUM": "VANILLA"}
 
 failures = []
 rcon = None
@@ -612,6 +616,21 @@ def drill_defaults_table():
     says("and a name no setting carries is refused too", "wo -defaults nonsense", "no default exists")
 
 
+def drill_setting_nodes():
+    """The tree is swept out of the definition enum, so what needs pinning is that the sweep reaches
+    every row: a setting the table knows and the tree does not is a command nobody can type."""
+    print("\nand every setting in the definition table is a command of its own")
+    missing = []
+    for _, name, types, _ in DEFINITIONS:
+        args = " ".join(SAMPLE[semantic] for semantic in types.split(",") if semantic)
+        command = f"wo {'-reset' if name == 'reset' else name} {args}".strip()
+        # a console is never an entity, so the target refusal is as far as a node that exists can get
+        if "must be executed by an entity" not in run(command).lower():
+            missing.append(name)
+    truthy(f"all {len(DEFINITIONS)} of them resolve under their own literal", not missing,
+           f"no node answered for {missing}")
+
+
 def drill_player_only():
     print("\nthe branches that need a player refuse a console and an entity alike")
     run("forceload add 0 0")
@@ -661,6 +680,7 @@ def main():
         drill_context_targets()
         drill_empty_names()
         drill_defaults_table()
+        drill_setting_nodes()
         drill_player_only()
     except RuntimeError as error:
         bad("drill run", str(error))

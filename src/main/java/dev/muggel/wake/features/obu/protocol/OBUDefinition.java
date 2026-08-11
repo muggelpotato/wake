@@ -10,7 +10,6 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.Map;
 import java.util.HashMap;
-import java.util.Collections;
 
 import static dev.muggel.wake.features.obu.protocol.SettingType.BLOCK_LIST;
 import static dev.muggel.wake.features.obu.protocol.SettingType.BOOLEAN;
@@ -153,14 +152,12 @@ public enum OBUDefinition {
 
     private static final Map<Integer, OBUDefinition> BY_ID = new HashMap<>();
     private static final Map<String, OBUDefinition> BY_NAME = new HashMap<>();
-    private static final Set<String> COMMAND_NAMES;
 
     static {
         for (OBUDefinition def : values()) {
             BY_ID.put(def.id(), def);
             BY_NAME.put(def.commandName(), def);
         }
-        COMMAND_NAMES = Collections.unmodifiableSet(BY_NAME.keySet());
     }
 
     public static @Nullable OBUDefinition byId(int id) {
@@ -170,10 +167,6 @@ public enum OBUDefinition {
     public static @Nullable OBUDefinition byName(@Nullable String commandName) {
         if (commandName == null) return null;
         return BY_NAME.get(commandName.toLowerCase(Locale.ROOT));
-    }
-
-    public static @NonNull @Unmodifiable Set<String> commandNames() {
-        return COMMAND_NAMES;
     }
 
     public enum PerBlockSetting {

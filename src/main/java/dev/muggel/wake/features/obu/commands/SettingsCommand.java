@@ -27,11 +27,8 @@ import java.util.Locale;
 public class SettingsCommand {
     public static @NonNull List<CommandNode> getNodes(Wake plugin) {
         List<CommandNode> nodes = new ArrayList<>();
-        for (String settingName : OBUDefinition.commandNames()) {
-            OBUDefinition def = OBUDefinition.byName(settingName);
-            if (def != null) {
-                nodes.add(createSettingNode(def, plugin));
-            }
+        for (OBUDefinition def : OBUDefinition.values()) {
+            nodes.add(createSettingNode(def, plugin));
         }
         return nodes;
     }
