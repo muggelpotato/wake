@@ -58,6 +58,8 @@ public class BoostpadDetectorListener extends PacketListenerAbstract implements 
     private final Wake plugin;
     private final BoostpadRegistry boostpads;
     private final Map<UUID, Map<String, Long>> lastBoostTimes = new HashMap<>();
+    private final Map<UUID, Set<Long>> countedThisTick = new HashMap<>();
+    private final Set<UUID> boostedThisTick = new HashSet<>();
     private final Set<UUID> jumpPresses = ConcurrentHashMap.newKeySet();
     private final Set<UUID> jumpHeld = ConcurrentHashMap.newKeySet();
     private boolean isRegistered = false;
@@ -91,6 +93,8 @@ public class BoostpadDetectorListener extends PacketListenerAbstract implements 
         PacketEvents.getAPI().getEventManager().unregisterListener(this);
         plugin.getVehiclePath().release();
         lastBoostTimes.clear();
+        countedThisTick.clear();
+        boostedThisTick.clear();
         jumpPresses.clear();
         jumpHeld.clear();
         isRegistered = false;
@@ -131,6 +135,8 @@ public class BoostpadDetectorListener extends PacketListenerAbstract implements 
     @EventHandler
     public void onTickEnd(@NonNull ServerTickEndEvent event) {
         jumpPresses.clear();
+        countedThisTick.clear();
+        boostedThisTick.clear();
     }
 
     @EventHandler
@@ -154,7 +160,7 @@ public class BoostpadDetectorListener extends PacketListenerAbstract implements 
         double reach = extent(boostpads.getMaxPadding(), hull);
         World world = boat.getWorld();
         int legCount = legs.count();
-        Set<Long> seen = legCount > 1 ? new HashSet<>() : null;
+        Set<Long> seen = null;
         List<PadHit> hits = null;
         for (int leg = 0; leg < legCount; leg++) {
             Vector legEnd = legs.at(leg + 1);
@@ -174,7 +180,13 @@ public class BoostpadDetectorListener extends PacketListenerAbstract implements 
                         double fraction = CollisionGeometry.intersectionFraction(scanned, legEnd,
                                 x - padding, y + 1 - SURFACE_BAND, z - padding,
                                 x + 1 + padding, y + 1 + SURFACE_BAND, z + 1 + padding);
-                        if (fraction < 0 || (seen != null && !seen.add(blockKey(x, y, z)))) {
+                        if (fraction < 0) {
+                            continue;
+                        }
+                        if (seen == null) {
+                            seen = countedThisTick.computeIfAbsent(boat.getUniqueId(), key -> new HashSet<>());
+                        }
+                        if (!seen.add(blockKey(x, y, z))) {
                             continue;
                         }
                         if (hits == null) {
@@ -190,19 +202,19 @@ public class BoostpadDetectorListener extends PacketListenerAbstract implements 
 
     private void fireBoosts(@NonNull Boat boat, @NonNull Player player, @NonNull List<PadHit> hits, boolean jumping) {
         hits.sort(Comparator.comparingDouble(PadHit::progress));
-        Map<String, Long> boatCooldowns = lastBoostTimes.computeIfAbsent(boat.getUniqueId(), key -> new HashMap<>(4));
+        UUID boatId = boat.getUniqueId();
+        Map<String, Long> boatCooldowns = lastBoostTimes.computeIfAbsent(boatId, key -> new HashMap<>(4));
         long globalCooldownNanos = globalCooldownMs(plugin) * 1_000_000L;
         Long lastAnyNanos = globalCooldownNanos > 0 && !boatCooldowns.isEmpty() ? Collections.max(boatCooldowns.values()) : null;
         World world = boat.getWorld();
-        boolean grounded = boat.isOnGround();
+        boolean airborne = !boat.isOnGround() && !jumping;
         boolean cancelX = jumping && plugin.getStateDao().get(STATE_KEY_EARLY_OUT_X, DEFAULT_EARLY_OUT_X);
         boolean cancelY = jumping && plugin.getStateDao().get(STATE_KEY_EARLY_OUT_Y, DEFAULT_EARLY_OUT_Y);
         boolean cancelZ = jumping && plugin.getStateDao().get(STATE_KEY_EARLY_OUT_Z, DEFAULT_EARLY_OUT_Z);
-        boolean firedBoostPad = false;
         for (PadHit hit : hits) {
             BoostpadConfig config = hit.config();
             boolean boostPad = config.forceY() > 0;
-            if (boostPad && (firedBoostPad || !grounded)) {
+            if (boostPad && (airborne || boostedThisTick.contains(boatId))) {
                 continue;
             }
             double forceX = cancelX ? 0.0 : config.forceX();
@@ -222,7 +234,7 @@ public class BoostpadDetectorListener extends PacketListenerAbstract implements 
             boatCooldowns.put(config.blockKey(), crossedNanos);
             lastAnyNanos = crossedNanos;
             if (boostPad) {
-                firedBoostPad = true;
+                boostedThisTick.add(boatId);
             }
             Block hitBlock = world.getBlockAt(hit.x(), hit.y(), hit.z());
             PlayerHitBoostpadEvent hitEvent = new PlayerHitBoostpadEvent(player, boat, hitBlock, forceX, forceY, forceZ);

@@ -10,10 +10,12 @@ number is right.
 
     python testenv/drills_geometry.py       # needs ./gradlew compileJava first
 
-The two scenarios at the end drive the geometry the way `BoostpadDetectorListener` drives it, with the
-same surface band and hull, because a shape nobody asks for proves nothing. They answer the two claims
+The three scenarios at the end drive the geometry the way `BoostpadDetectorListener` drives it, with the
+same surface band and hull, because a shape nobody asks for proves nothing. Two answer the claims
 TESTPLAN.md used to leave to a human with a stopwatch: a strip of pads crossed in one leg loses none of
-them, and a hard turn fires the pad on the corner rather than the pads under the chord.
+them, and a hard turn fires the pad on the corner rather than the pads under the chord. The third
+answers one nobody could make with a stopwatch at all -- a tick must cross the same pads whether the
+client sent it as one vehicle move or two, or the boost a player gets depends on how their packets fell.
 
 The `scan_*` checks judge the loop the detector is about to run rather than any single number: whatever
 the coordinates, a leg must never cost more than `CollisionGeometry`'s own cap, and it may only give up
@@ -70,6 +72,7 @@ public final class GeometryProbe {
         clock();
         strip();
         turn();
+        split();
     }
 
     private static void fractions() {
@@ -231,7 +234,33 @@ public final class GeometryProbe {
         for (int x = 0; x < 20; x++) {
             pads.add(new int[]{x, 64, 0});
         }
-        say("strip", crossings(Legs.of(List.of(), v(-2, 65, 0.5), v(22, 65, 0.5)), pads));
+        say("strip", crossings(Legs.of(List.of(), v(-2, 65, 0.5), v(22, 65, 0.5)), pads, new HashSet<>()));
+    }
+
+    /**
+     * One tick's movement handed over as one vehicle move and as two. The detector shares its seen-set across
+     * the tick, so both must cross the same pads -- a set per move event counts the seam twice, and a client
+     * whose packets bunched would be boosted harder than one whose packets did not
+     */
+    private static void split() {
+        List<int[]> pads = new ArrayList<>();
+        for (int x = 0; x < 20; x++) {
+            pads.add(new int[]{x, 64, 0});
+        }
+        Legs first = Legs.of(List.of(), v(-2, 65, 0.5), v(10, 65, 0.5));
+        Legs second = Legs.of(List.of(), v(10, 65, 0.5), v(22, 65, 0.5));
+        Set<String> whole = new HashSet<>();
+        crossings(Legs.of(List.of(), v(-2, 65, 0.5), v(22, 65, 0.5)), pads, whole);
+        Set<String> tick = new HashSet<>();
+        crossings(first, pads, tick);
+        crossings(second, pads, tick);
+        Set<String> perCallFirst = new HashSet<>();
+        Set<String> perCallSecond = new HashSet<>();
+        crossings(first, pads, perCallFirst);
+        crossings(second, pads, perCallSecond);
+        say("split_whole", whole.size());
+        say("split_shared", tick.size());
+        say("split_percall", perCallFirst.size() + perCallSecond.size());
     }
 
     /** A right-angle turn with a pad on the corner and a pad under the chord that closes it */
@@ -240,14 +269,13 @@ public final class GeometryProbe {
         Vector start = v(0.5, 65, 0.5);
         Vector corner = v(10.5, 65, 0.5);
         Vector end = v(10.5, 65, 10.5);
-        say("turn_legs", crossings(Legs.of(List.of(corner), start, end), pads));
-        say("turn_chord", crossings(Legs.of(List.of(), start, end), pads));
+        say("turn_legs", crossings(Legs.of(List.of(corner), start, end), pads, new HashSet<>()));
+        say("turn_chord", crossings(Legs.of(List.of(), start, end), pads, new HashSet<>()));
     }
 
     /** The detector's scan reduced to its geometry: how many pads the legs crossed, in order, once each */
-    private static String crossings(Legs legs, List<int[]> pads) {
+    private static String crossings(Legs legs, List<int[]> pads, Set<String> seen) {
         List<String> crossed = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
         double last = -1;
         boolean ordered = true;
         for (int leg = 0; leg < legs.count(); leg++) {
@@ -482,6 +510,16 @@ def drill_path(facts):
     equals(facts, "turn_legs", "1 true 10:64:0")
     # the same two pads under the straight line from the first boundary to the last: the corner is not on it
     equals(facts, "turn_chord", "1 true 5:64:5")
+    whole, shared, percall = facts.get("split_whole"), facts.get("split_shared"), facts.get("split_percall")
+    if whole is not None and shared == whole:
+        ok(f"a tick split into two move events crosses the same {whole} pads as one")
+    else:
+        bad("split_shared", f"{shared} pads split across two moves, {whole} in one")
+    # the seam blocks sit inside both padded sweeps, so a set per move event pays for them twice
+    if percall is not None and whole is not None and int(percall) > int(whole):
+        ok(f"a set per move event would have counted {percall}, so the shared one is load-bearing")
+    else:
+        bad("split_percall", f"{percall} is not above {whole}, so the drill proves nothing")
 
 
 def main():

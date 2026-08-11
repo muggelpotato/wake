@@ -110,10 +110,6 @@ public class StateDao extends WakeDao {
         return newState;
     }
 
-    public boolean has(String key) {
-        return state.containsKey(key);
-    }
-
     public void importValue(String key, Object value) throws SQLException {
         DB.executeUpdate(UPSERT, key, gson.toJson(value));
         state.announce(key, value);
