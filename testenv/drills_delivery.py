@@ -55,6 +55,10 @@ TAG = "wakedelivery"
 EXPORT = WAKE / "exports" / "obu_data.yml"
 # a boat summoned twice under this id is, to everything keyed by UUID, the same boat
 FIXED_UUID = "[I;16,32,48,64]"
+# far enough out that dropping the forceload really unloads the chunk. Inside the spawn radius it does not:
+# the entity stops answering a selector while the chunk stays resident, so nothing is ever removed and an
+# eviction drill run there passes or fails on where the world spawn happens to sit
+FAR_CHUNK = (4000, 4000)
 # where CraftBukkit keeps an entity's persistent data container inside its nbt
 PDC = "BukkitValues"
 PIN = re.compile(r'"?wake:obu_context"?\s*:\s*"([^"]*)"')
@@ -178,11 +182,11 @@ def boat_unloaded(settle=6.0):
     return True
 
 
-def boat(uuid=None):
+def boat(uuid=None, at=(0, 0)):
     """Puts one tagged boat in the world, optionally under a fixed id, and answers whether it is there."""
     rcon.run(f"kill @e[tag={TAG}]")
     nbt = f'{{Tags:["{TAG}"],NoGravity:1b' + (f",UUID:{uuid}}}" if uuid else "}")
-    rcon.run(f"summon minecraft:oak_boat 0 100 0 {nbt}")
+    rcon.run(f"summon minecraft:oak_boat {at[0]} 100 {at[1]} {nbt}")
     return boat_present()
 
 
@@ -259,6 +263,50 @@ def drill_boat_overrides():
     boat_says("the impulse is accepted", "wobu applyimpulse 0 1 0", "set applyimpulse")
     boat_says("and nothing was written to the boat", "wobu -clear applyimpulse", "is not active")
 
+    # the client applies these to whatever it already holds, and Wake ships a context as a fresh
+    # compound -- so stored, they would be a negation riding above the entry they cancel, and the
+    # fold that reorders that entry would decide whether the block came back
+    step("a subtractive setting edits the overrides the boat holds rather than joining them")
+    as_boat("wobu blockslipperiness 0.9 ice,stone")
+    boat_says("removing one block names what it took", "wobu removeblockslipperiness ice", "removed")
+    boat_says("and never lands as a setting of its own", "wobu -clear removeblockslipperiness", "is not active")
+    boat_says("the block beside it is the whole of what is left", "wobu -clear 3:stone", "cleared blockslipperiness")
+    boat_says("so the entry it edited is gone with it", "wobu -clear blockslipperiness", "is not active")
+
+    step("and one with nothing to edit says so rather than storing itself")
+    boat_says("a block the boat never had", "wobu removeblockslipperiness ice", "no blockslipperiness")
+    boat_says("a slipperiness list the boat never had", "wobu clearslipperiness", "no blockslipperiness")
+    boat_says("a collision filter the boat never had", "wobu clearcollisionfilter", "no addcollisionfilter")
+
+    # by definition alone a -clear takes every per-block setting at once, which is the one place the
+    # command was coarser than the rows it reads: two of them differ only by the enum they pin
+    step("-clear narrows to the identity arguments the setting was given, not to the definition")
+    as_boat("wobu setblocksetting JUMPS 2 ice,stone")
+    as_boat("wobu setblocksetting WALLTAP_MULTIPLIER 2 ice")
+    boat_says("naming one block of one per-block setting takes only that block",
+              "wobu -clear setblocksetting JUMPS ice", "cleared")
+    boat_says("the block beside it is still under the same one", "wobu -clear 26:JUMPS:stone", "cleared")
+    boat_says("and the per-block setting beside them was never touched",
+              "wobu -clear setblocksetting WALLTAP_MULTIPLIER", "cleared")
+    boat_says("so nothing of either is left", "wobu -clear setblocksetting", "is not active")
+
+    # -clear mirrors each setting's own node, so its arguments are the setting's own argument types and
+    # every refusal below comes from the same door the set command is turned back at
+    step("and a word that setting could never carry is refused by the argument, not read as nothing to clear")
+    as_boat("wobu blockslipperiness 0.9 ice,stone")
+    boat_says("an enum no per-block setting names", "wobu -clear setblocksetting NOT_A_SETTING", "invalid option")
+    boat_says("a block this server does not have", "wobu -clear blockslipperiness notablock", "invalid block")
+    boat_says("an argument a setting that takes none cannot have", "wobu -clear stepsize 1.5", "incorrect argument")
+    boat_says("a name no setting carries at all", "wobu -clear notasetting", "unknown obu setting")
+    boat_says("and the entry none of them reached is still there",
+              "wobu -clear blockslipperiness ice", "cleared")
+    boat_says("beside the one they never named", "wobu -clear blockslipperiness stone", "cleared")
+
+    step("and a list is typed the way the setting's own command takes one")
+    as_boat("wobu blockslipperiness 0.9 ice,stone,packed_ice")
+    boat_says("blocks separated by spaces rather than commas", "wobu -clear blockslipperiness ice stone", "cleared")
+    boat_says("leaving the one neither named", "wobu -clear 3:packed_ice", "cleared blockslipperiness")
+
     step("a player-wide setting is refused on a boat rather than stored on it")
     boat_says("setinterpolationten names the reason", "wobu setinterpolationten true", "applies to players")
     boat_says("and left no override behind", "wobu -clear setinterpolationten", "is not active")
@@ -312,8 +360,14 @@ def drill_context_replaces_overrides():
 
 
 def drill_chunk_unload_eviction():
-    """A chunk going out is a boat leaving the world: what Wake held for it goes, what the boat carries comes back."""
-    if not boat(FIXED_UUID):
+    """A chunk going out is a boat leaving the world: what Wake held for it goes, what the boat carries comes back.
+
+    Driven far from spawn, where dropping the forceload really unloads the chunk. Nearer in, the spawn radius
+    keeps it resident: the boat stops answering a selector, nothing is ever removed, and the drill would be
+    reporting on where the world spawn sits rather than on eviction."""
+    far = FAR_CHUNK
+    rcon.run(f"forceload add {far[0]} {far[1]}")
+    if not boat(FIXED_UUID, far):
         bad("could not summon the boat this drill needs")
         return
     as_boat(f"wobu -context {KNOWN_CONTEXT}")
@@ -323,15 +377,15 @@ def drill_chunk_unload_eviction():
     first = boat_uuid()
 
     step("let the chunk go")
-    rcon.run("forceload remove 0 0")
+    rcon.run(f"forceload remove {far[0]} {far[1]}")
     if not boat_unloaded():
         bad("the chunk never finished unloading, so nothing below would prove anything")
-        rcon.run("forceload add 0 0")
+        rcon.run(f"forceload add {far[0]} {far[1]}")
         return
     ok("the boat left the world with its chunk")
 
     step("and bring it back")
-    rcon.run("forceload add 0 0")
+    rcon.run(f"forceload add {far[0]} {far[1]}")
     if not wait_until(boat_present):
         bad("the boat did not come back with its chunk")
         return
@@ -340,6 +394,7 @@ def drill_chunk_unload_eviction():
     truthy("carrying the pin it was given", pinned_on_boat() == KNOWN_CONTEXT, repr(pinned_on_boat()))
     boat_says("but not the override Wake was holding for it", "wobu -clear stepsize", "is not active")
     rcon.run(f"kill @e[tag={TAG}]")
+    rcon.run(f"forceload remove {far[0]} {far[1]}")
 
 
 def drill_override_eviction():
@@ -620,25 +675,30 @@ def drill_import_settings_door():
     """A settings block in an export file is the one place a setting arrives without a command argument
     type behind it, so it is where the door has to stand.
 
-    Two of them are not settings at all: `-reset` clears a context and an impulse fires once at whoever
-    is aimed at, and `applySetting` stores neither -- so a file naming one has to be refused rather than
-    written, or the table ends up holding a row the loader will never hand back and nothing can delete.
-    The third shape is the same setting twice: the table keys settings by identity, so the file's last
-    word is the one that survives, and the cache has to say the same thing the table does. The fourth
-    is the same setting twice over one list, which is not a replacement but a fold -- both blocks are
-    kept, in one entry, or the client is sent the same block twice and applies whichever arrived last."""
+    Four of them are not settings at all: `-reset` clears a context, an impulse fires once at whoever
+    is aimed at, and the subtractive ones edit what a context already holds -- no context holds any of
+    them, so a file naming one has to be refused rather than written, or the table ends up holding a
+    row the loader will never hand back and nothing can delete. The next shape is the same setting
+    twice: the table keys settings by identity, so the file's last word is the one that survives, and
+    the cache has to say the same thing the table does. The last is the same setting twice over one
+    list, which is not a replacement but a fold -- both blocks are kept, in one entry, or the client is
+    sent the same block twice and applies whichever arrived last."""
     console = graft_export({"sandbox": "  doorprobe:\n    settings:\n      '-reset': ''\n"
                                        "      applyimpulserelative: '0.0 5.0 0.0'\n"
+                                       "      clearslipperiness: ''\n"
+                                       "      removeblockslipperiness: 'ice'\n"
                                        "      stepsize:\n        - '1.5'\n        - '2.5'\n"
                                        "      blockslipperiness:\n        - '0.9 ice'\n        - '0.9 packed_ice'\n"})
     if console is None:
         bad("the graft never imported, so there is nothing to judge")
         return
     try:
-        truthy("the import named both settings no context can hold",
-               console.count("acts once, so no context holds it") == 2, console.strip()[-600:])
+        truthy("the import named every setting no context can hold",
+               console.count("acts once, so no context holds it") == 4, console.strip()[-600:])
         view = run("wobu -sandbox view doorprobe").lower()
-        truthy("neither reached the context", "reset" not in view and "applyimpulse" not in view,
+        truthy("none of them reached the context",
+               "reset" not in view and "applyimpulse" not in view
+               and "clearslipperiness" not in view and "removeblockslipperiness" not in view,
                view.strip()[:400])
         truthy("while the setting beside them did, as the file's last word",
                "stepsize" in view and "2.5" in view and "1.5" not in view, view.strip()[:400])
@@ -652,7 +712,9 @@ def drill_import_settings_door():
         body = block.group(1) if block else ""
         truthy("one stepsize, not a list, and nothing that acts once",
                body.count("stepsize") == 1 and "2.5" in body and "1.5" not in body
-               and "reset" not in body and "impulse" not in body, body[:400] or text[:400])
+               and "reset" not in body and "impulse" not in body
+               and "clearslipperiness" not in body and "removeblockslipperiness" not in body,
+               body[:400] or text[:400])
         truthy("and one blockslipperiness carrying both blocks, not one entry per line",
                body.count("blockslipperiness") == 1
                and "ice,packed_ice" in body, body[:400] or text[:400])
@@ -1044,7 +1106,8 @@ def drill_settings_switches():
     reader asks for."""
     switches = {"persistence": ("persistent player states", "persistent_player_states"),
                 "boat-lag-fix": ("boat lag fix", "boat_lag_fix"),
-                "collapse-default-context": ("collapsed default context", "collapse_default_context")}
+                "collapse-default-context": ("collapsed default context", "collapse_default_context"),
+                "update-nag": ("update nag", "update_nag")}
     try:
         for literal, (feature, _) in switches.items():
             on = run(f"wobu -settings {literal} true")

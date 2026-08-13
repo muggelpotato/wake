@@ -64,7 +64,7 @@ public class SandboxImportCommand {
                 try {
                     int id = Integer.parseInt(part.substring(0, colonIdx));
                     OBUDefinition def = OBUDefinition.byId(id);
-                    OBUSetting setting = def == null || def.isActionSetting()
+                    OBUSetting setting = def == null || def.isOneShot()
                             ? null
                             : OBUSetting.of(def, def.splitInvocation(part.substring(colonIdx + 1)));
                     if (setting == null) {

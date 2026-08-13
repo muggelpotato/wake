@@ -31,12 +31,7 @@ public final class BoatSyncListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onVehicleEnter(@NonNull VehicleEnterEvent event) {
         if (event.getVehicle() instanceof Boat boat && event.getEntered() instanceof Player player) {
-            Scheduling.onMain(plugin, () -> {
-                syncManager.syncPlayer(player);
-                if (!(player.getVehicle() instanceof Boat)) {
-                    syncManager.broadcastSync(boat);
-                }
-            });
+            syncManager.broadcastSync(boat, player);
         }
     }
 

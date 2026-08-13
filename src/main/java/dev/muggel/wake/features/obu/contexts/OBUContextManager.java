@@ -6,6 +6,8 @@ import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.contexts.OBUContext.ContextType;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import dev.muggel.wake.features.obu.protocol.SettingMerge;
+import dev.muggel.wake.features.obu.protocol.SettingMerge.Removal;
+import dev.muggel.wake.features.obu.protocol.SettingSelector;
 import dev.muggel.wake.features.obu.OBUDao;
 import org.jetbrains.annotations.Unmodifiable;
 import org.jspecify.annotations.NonNull;
@@ -129,28 +131,29 @@ public class OBUContextManager {
         String lower = canonical(name);
         OBUContext context = contexts.get(lower);
         if (context == null || newSettings.isEmpty()) return;
+        saveSettings(lower, context, SettingMerge.fold(context.settings(), newSettings));
+    }
+
+    public @NonNull Removal removeSettings(@NonNull String name, @NonNull SettingSelector selector) {
+        String lower = canonical(name);
+        OBUContext context = contexts.get(lower);
+        if (context == null) return Removal.NOTHING;
+        Removal removal = SettingMerge.subtract(context.settings(), selector);
+        if (!removal.taken().isEmpty()) {
+            saveSettings(lower, context, removal.kept());
+        }
+        return removal;
+    }
+
+    private void saveSettings(@NonNull String lower, @NonNull OBUContext context, @NonNull List<OBUSetting> settings) {
         LinkedHashMap<String, OBUSetting> stale = new LinkedHashMap<>();
         for (OBUSetting s : context.settings()) stale.put(s.uniqueKey(), s);
-        List<OBUSetting> folded = SettingMerge.fold(context.settings(), newSettings);
         List<SqlStatement> settingWrites = new ArrayList<>();
-        for (OBUSetting s : folded) {
+        for (OBUSetting s : settings) {
             if (!s.equals(stale.remove(s.uniqueKey()))) settingWrites.add(dao.settingUpsert(lower, s));
         }
         for (String key : stale.keySet()) settingWrites.add(dao.settingDelete(lower, key));
-        dao.saveContext(new OBUContext(lower, context.type(), context.ownerUuid(), folded), settingWrites);
-    }
-
-    public boolean removeContextSetting(@NonNull String name, String uniqueKey) {
-        String lower = canonical(name);
-        OBUContext context = contexts.get(lower);
-        if (context == null) return false;
-        List<OBUSetting> settings = new ArrayList<>(context.settings());
-        if (!settings.removeIf(s -> s.uniqueKey().equals(uniqueKey))) {
-            return false;
-        }
-        dao.saveContext(new OBUContext(lower, context.type(), context.ownerUuid(), settings),
-                List.of(dao.settingDelete(lower, uniqueKey)));
-        return true;
+        dao.saveContext(new OBUContext(lower, context.type(), context.ownerUuid(), settings), settingWrites);
     }
 
     public static boolean isReserved(@NonNull String lower) {

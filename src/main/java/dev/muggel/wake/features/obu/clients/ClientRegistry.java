@@ -14,23 +14,32 @@ public final class ClientRegistry {
         UNKNOWN
     }
 
-    private final Map<UUID, ClientState> clients = new ConcurrentHashMap<>();
+    private record Client(@NonNull ClientState state, int version) {}
 
-    public boolean claim(@NonNull UUID uuid, @NonNull ClientState verdict) {
-        ClientState held = clients.putIfAbsent(uuid, verdict);
-        return held == null || (held == ClientState.UNKNOWN && clients.replace(uuid, ClientState.UNKNOWN, verdict));
+    private final Map<UUID, Client> clients = new ConcurrentHashMap<>();
+
+    public boolean claim(@NonNull UUID uuid, @NonNull ClientState verdict, int version) {
+        Client claimed = new Client(verdict, version);
+        Client held = clients.putIfAbsent(uuid, claimed);
+        return held == null || (held.state() == ClientState.UNKNOWN && clients.replace(uuid, held, claimed));
     }
 
     public void reopen(@NonNull UUID uuid) {
-        clients.put(uuid, ClientState.UNKNOWN);
+        clients.put(uuid, new Client(ClientState.UNKNOWN, 0));
     }
 
     public boolean isDriven(@NonNull UUID uuid) {
-        return clients.get(uuid) == ClientState.DRIVEN;
+        return state(uuid) == ClientState.DRIVEN;
+    }
+
+    public int versionOf(@NonNull UUID uuid) {
+        Client held = clients.get(uuid);
+        return held == null ? 0 : held.version();
     }
 
     public @Nullable ClientState state(@NonNull UUID uuid) {
-        return clients.get(uuid);
+        Client held = clients.get(uuid);
+        return held == null ? null : held.state();
     }
 
     public void forget(@NonNull UUID uuid) {

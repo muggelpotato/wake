@@ -7,6 +7,8 @@ import dev.muggel.wake.features.obu.clients.ClientRegistry;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
+import dev.muggel.wake.features.obu.protocol.SettingMerge.Removal;
+import dev.muggel.wake.features.obu.protocol.SettingSelector;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
@@ -139,6 +141,30 @@ public final class ContextDelivery implements OBUService {
             return true;
         }
         return false;
+    }
+
+    public @Nullable Removal removeSettings(@NonNull Entity target, @NonNull SettingSelector selector) {
+        if (target instanceof Player player) {
+            UUID uuid = player.getUniqueId();
+            String sandboxName = active.sandboxOf(uuid);
+            Removal temporary = syncManager.removeLocalOverrides(uuid, selector);
+            Removal fromSandbox = sandboxName == null
+                    ? Removal.NOTHING
+                    : contextManager.removeSettings(sandboxName, selector);
+            Removal removal = temporary.taken().isEmpty() ? fromSandbox : temporary;
+            if (!removal.taken().isEmpty()) {
+                syncManager.syncPlayer(player);
+            }
+            return removal;
+        }
+        if (target instanceof Boat boat) {
+            Removal removal = syncManager.removeLocalOverrides(boat.getUniqueId(), selector);
+            if (!removal.taken().isEmpty()) {
+                syncManager.broadcastSync(boat);
+            }
+            return removal;
+        }
+        return null;
     }
 
     private void sendActionSetting(@NonNull Entity target, @NonNull OBUSetting setting) {

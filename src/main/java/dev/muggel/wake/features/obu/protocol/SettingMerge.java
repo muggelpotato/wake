@@ -1,5 +1,6 @@
 package dev.muggel.wake.features.obu.protocol;
 
+import org.jetbrains.annotations.Unmodifiable;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
@@ -12,12 +13,89 @@ public final class SettingMerge {
     private static final int MAX_UNIQUE_KEY = 255;
     private SettingMerge() {}
 
+    public record Removal(@NonNull @Unmodifiable List<OBUSetting> kept, @NonNull @Unmodifiable List<OBUSetting> taken, @NonNull @Unmodifiable List<String> removed) {
+        public static final Removal NOTHING = new Removal(List.of(), List.of(), List.of());
+        public Removal {
+            kept = List.copyOf(kept);
+            taken = List.copyOf(taken);
+            removed = List.copyOf(removed);
+        }
+    }
+
     public static @NonNull List<OBUSetting> fold(@NonNull Collection<OBUSetting> existing, @NonNull Collection<OBUSetting> incoming) {
         List<OBUSetting> folded = new ArrayList<>(existing);
         for (OBUSetting setting : incoming) {
             add(folded, setting);
         }
         return folded;
+    }
+
+    public static @NonNull Removal subtract(@NonNull Collection<OBUSetting> held, @NonNull SettingSelector selector) {
+        List<String> wanted = selector.entries();
+        int targetList = listArg(selector.target());
+        List<OBUSetting> kept = new ArrayList<>();
+        List<OBUSetting> taken = new ArrayList<>();
+        Set<String> removed = new LinkedHashSet<>();
+        for (OBUSetting setting : held) {
+            if (!selector.matches(setting)) {
+                kept.add(setting);
+                continue;
+            }
+            if (targetList < 0) {
+                taken.add(setting);
+                continue;
+            }
+            List<String> remaining = new ArrayList<>(entries(setting, targetList));
+            List<String> gone = new ArrayList<>(remaining);
+            if (wanted.isEmpty()) {
+                remaining.clear();
+            } else {
+                gone.retainAll(wanted);
+                remaining.removeAll(wanted);
+            }
+            if (gone.isEmpty()) {
+                kept.add(setting);
+                continue;
+            }
+            taken.add(setting);
+            removed.addAll(gone);
+            if (!remaining.isEmpty()) {
+                kept.add(withEntries(setting, targetList, remaining));
+            }
+        }
+        return new Removal(kept, taken, List.copyOf(removed));
+    }
+
+    public static boolean takesFrom(@NonNull OBUSetting held, @NonNull SettingSelector selector) {
+        return !subtract(List.of(held), selector).taken().isEmpty();
+    }
+
+    public static @NonNull @Unmodifiable Set<String> shadowedEntries(@NonNull OBUSetting held, @NonNull Collection<OBUSetting> above) {
+        int list = listArg(held.definition());
+        if (list < 0) {
+            return Set.of();
+        }
+        Set<String> mine = new LinkedHashSet<>(entries(held, list));
+        Set<String> gone = new LinkedHashSet<>();
+        for (OBUSetting other : above) {
+            if (differentFamily(held, other, list)) {
+                continue;
+            }
+            for (String entry : entries(other, list)) {
+                if (mine.contains(entry)) gone.add(entry);
+            }
+        }
+        return Set.copyOf(gone);
+    }
+
+    public static @NonNull @Unmodifiable List<String> entriesOf(@NonNull OBUSetting setting) {
+        int list = listArg(setting.definition());
+        return list < 0 ? List.of() : entries(setting, list);
+    }
+
+    public static boolean coversEntries(@NonNull OBUSetting held, @NonNull Set<String> taken) {
+        int list = listArg(held.definition());
+        return list >= 0 && taken.containsAll(entries(held, list));
     }
 
     private static void add(@NonNull List<OBUSetting> folded, @NonNull OBUSetting incoming) {
@@ -30,7 +108,7 @@ public final class SettingMerge {
         boolean absorbed = false;
         for (int i = folded.size() - 1; i >= 0; i--) {
             OBUSetting held = folded.get(i);
-            if (!sameFamily(held, incoming, list)) {
+            if (differentFamily(held, incoming, list)) {
                 continue;
             }
             List<String> kept = new ArrayList<>(entries(held, list));
@@ -105,17 +183,17 @@ public final class SettingMerge {
         return list;
     }
 
-    private static boolean sameFamily(@NonNull OBUSetting held, @NonNull OBUSetting incoming, int list) {
+    private static boolean differentFamily(@NonNull OBUSetting held, @NonNull OBUSetting incoming, int list) {
         if (held.definition() != incoming.definition()) {
-            return false;
+            return true;
         }
         List<SettingType> types = incoming.definition().types();
         for (int i = 0; i < types.size(); i++) {
             if (i != list && types.get(i).isIdentity() && !held.args().get(i).equals(incoming.args().get(i))) {
-                return false;
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     private static boolean sameValue(@NonNull OBUSetting held, @NonNull OBUSetting incoming, int list) {

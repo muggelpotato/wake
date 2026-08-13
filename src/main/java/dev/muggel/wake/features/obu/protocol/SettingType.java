@@ -60,7 +60,11 @@ public enum SettingType {
         return this == BLOCK_LIST || this == ENTITY_LIST;
     }
 
-    boolean isIdentity() {
+    public boolean accepts(@NonNull String entry) {
+        return argument() instanceof KeyListArgumentType list && list.accepts(entry);
+    }
+
+    public boolean isIdentity() {
         return isList() || this == SETTING_ENUM;
     }
 

@@ -8,11 +8,15 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPl
 import dev.muggel.wake.features.obu.clients.ClientRegistry;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
+import dev.muggel.wake.features.obu.protocol.OBUVersions;
 import dev.muggel.wake.features.obu.protocol.PacketWriter;
 import org.bukkit.entity.Player;
 import org.jspecify.annotations.NonNull;
 
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public final class PacketSender {
@@ -31,6 +35,7 @@ public final class PacketSender {
     }
 
     public void sendRawSetting(@NonNull Player player, @NonNull OBUSetting setting) {
+        if (OBUVersions.isPastCeiling(setting, clients.versionOf(player.getUniqueId()))) return;
         sendPluginMessage(player, OBUDefinition.CHANNEL_SETTINGS, PacketWriter.rawSetting(setting));
     }
 
@@ -39,16 +44,20 @@ public final class PacketSender {
     }
 
     public void sendStoreContext(@NonNull Player player, @NonNull String contextId, @NonNull List<OBUSetting> settings) {
-        sendContextPacket(player, PacketWriter.storeContext(contextId, settings));
+        UUID uuid = player.getUniqueId();
+        if (!clients.isDriven(uuid)) return;
+        sendContextPacket(player, PacketWriter.storeContext(contextId, settings, clients.versionOf(uuid)));
     }
 
-    public @NonNull WrapperPlayServerPluginMessage createEntityContextPacket(@NonNull UUID entityUuid, @NonNull List<OBUSetting> settings) {
-        return new WrapperPlayServerPluginMessage(OBUDefinition.CHANNEL_CONTEXT, PacketWriter.entityContext(entityUuid, settings));
-    }
-
-    public void sendPrecompiledPacket(@NonNull Player player, @NonNull WrapperPlayServerPluginMessage packet) {
-        if (!clients.isDriven(player.getUniqueId())) return;
-        PacketEvents.getAPI().getPlayerManager().sendPacket(player, packet);
+    public void sendEntityContext(@NonNull Collection<? extends Player> viewers, @NonNull UUID entityUuid, @NonNull List<OBUSetting> settings) {
+        Map<Integer, WrapperPlayServerPluginMessage> byVersion = new HashMap<>();
+        for (Player viewer : viewers) {
+            UUID uuid = viewer.getUniqueId();
+            if (!clients.isDriven(uuid)) continue;
+            WrapperPlayServerPluginMessage packet = byVersion.computeIfAbsent(clients.versionOf(uuid),
+                    version -> new WrapperPlayServerPluginMessage(OBUDefinition.CHANNEL_CONTEXT, PacketWriter.entityContext(entityUuid, settings, version)));
+            PacketEvents.getAPI().getPlayerManager().sendPacket(viewer, packet);
+        }
     }
 
     private void sendPluginMessage(@NonNull Player player, @NonNull String channel, byte @NonNull [] data) {

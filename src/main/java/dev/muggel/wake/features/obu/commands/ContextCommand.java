@@ -139,7 +139,7 @@ public class ContextCommand {
 
     private static void sendContextItem(@NonNull CommandSender sender, CommandSender subject, Wake plugin, OBUContext context) {
         String shownName = subject instanceof Player ? OBUContextManager.displayName(context.name()) : context.name();
-        Component hoverText = getContextHoverComponent(context, plugin, shownName)
+        Component hoverText = getContextHoverComponent(context, plugin, subject, shownName)
                 .append(Component.newline()).append(Component.newline())
                 .append(plugin.getMessageManager().getComponent("commands.obu.context.hover"));
         Component name = Component.text(shownName)
@@ -148,13 +148,13 @@ public class ContextCommand {
         plugin.getMessageManager().send(sender, "commands.obu.context.item", Placeholder.component("context", name));
     }
 
-    private static Component getContextHoverComponent(@NonNull OBUContext context, @NonNull Wake plugin, @NonNull String shownName) {
+    private static Component getContextHoverComponent(@NonNull OBUContext context, @NonNull Wake plugin, @NonNull CommandSender subject, @NonNull String shownName) {
         Component hoverText = plugin.getMessageManager().getComponent("commands.obu.context.settings", Placeholder.unparsed("context", shownName));
         if (context.settings().isEmpty()) {
-            return hoverText.append(Component.newline()).append(plugin.getMessageManager().getComponent("commands.obu.no_settings"));
+            return hoverText.append(Component.newline()).append(plugin.getMessageManager().getComponent("commands.obu.status.collapsed_no_settings"));
         }
         for (OBUSetting setting : context.settings()) {
-            hoverText = hoverText.append(Component.newline()).append(OBUCommandHelper.settingLine(plugin, "commands.obu.status.line", setting, true));
+            hoverText = hoverText.append(Component.newline()).append(OBUCommandHelper.settingLine(plugin, subject, setting, true));
         }
         return hoverText;
     }

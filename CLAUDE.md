@@ -78,6 +78,11 @@ message, never an exception. A tree that cannot work — a name that collides, a
 both claim, a node nothing can reach — is rejected at boot with a message naming it, never skipped
 quietly and never half-registered.
 
+**A suggester runs off the main thread**, on every keystroke. It may read plugin caches, registries and
+the command source freely, but anything that asks the *server* a question — an aim, an entity, a world —
+is resolved on the main thread and its future completed from there. Off-thread such a call does not
+throw; it answers inconsistently, which reads as a client bug and is why nothing lands in the log.
+
 File layout and helper conventions live in `core/commands/package-info.java` and are non-negotiable:
 one class per command node (`getNode` builds the tree, private methods hold the logic); sub-commands
 that would form a god-class grouped in their own package; shared helpers factored into `CommandHelper`
@@ -146,6 +151,10 @@ module will need it.)
   one bad value must never cost a player every other setting they hold.
 - **Never mutate a shared context to represent one player.** Compose a per-player view and deliver
   it through the reserved per-player channel, leaving stored contexts untouched.
+- **What the wire can carry is per client.** A release is only ever sent ids it shipped with: one it
+  never had is skipped without its arguments, so every row behind it in the same compound is read at
+  the wrong offset and one value too new costs a player everything they hold. A new id therefore
+  names the release that first carried it as well as the value it encodes.
 - Adding a setting should be a minimal, localized change to the protocol definition — if it forces
   edits across many files, the abstraction is leaking.
 

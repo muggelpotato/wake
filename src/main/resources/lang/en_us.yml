@@ -16,7 +16,7 @@
 #   <gradient:$secondary:$primary>...</gradient>
 #
 # Dynamic placeholders are filled by the plugin per message and only work in the message they already appear in (moving them to other keys does nothing):
-#   <alias> <aliases> <amount> <axis> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <cooldown> <count> <delay> <description> <duration> <early_out> <entry> <error> <hint> <input> <literal> <module> <name> <padding> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
+#   <alias> <aliases> <amount> <axis> <badge> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <cooldown> <count> <delay> <description> <duration> <early_out> <entry> <error> <hint> <input> <literal> <module> <name> <padding> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
 #
 # <prefix> inserts the `prefix` value you can modify below
 # ─────────────────────────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ commands:
       block_not_found: "<prefix><danger>Block is not in the boostpad list</danger>"
       status_enabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><hint><br>  <muted>●</muted> <neutral>Status: <primary>enabled</primary></neutral><br><cooldown><br><early_out><br><blocks>"
       status_disabled: "<gradient:$secondary:$primary>─── Boostpads ─────────</gradient><hint><br>  <muted>●</muted> <neutral>Status: <danger>disabled</danger></neutral><br><cooldown><br><early_out><br><blocks>"
-      status_hint: " <info><hover:show_text:'<secondary>Boostpad profiles</secondary><br><muted>●</muted> <neutral>Global cooldown <muted>→</muted> Duration between any two boosts</neutral><br><muted>●</muted> <neutral>Early-out <muted>→</muted> Axes a jump cancels the boost on</neutral><br><muted>●</muted> <neutral>xyz <muted>→</muted> Boost force per axis</neutral><br><muted>●</muted> <neutral>ms <muted>→</muted> Cooldown before the pad boosts again</neutral><br><muted>●</muted> <neutral>Padding <muted>→</muted> Widens the trigger box in blocks (<1 shrinks)</neutral>'>💡</hover></info>"
+      status_hint: " <info><hover:show_text:'<secondary>Boostpad profiles</secondary><br>  <muted>○</muted> <neutral>Global cooldown <muted>→</muted> Duration between any two boosts</neutral><br>  <muted>○</muted> <neutral>Early-out <muted>→</muted> Axes a jump cancels the boost on</neutral><br>  <muted>○</muted> <neutral>xyz <muted>→</muted> Boost force per axis</neutral><br>  <muted>○</muted> <neutral>ms <muted>→</muted> Cooldown before the pad boosts again</neutral><br>  <muted>○</muted> <neutral>Padding <muted>→</muted> Widens the trigger box in blocks (<1 shrinks)</neutral>'>💡</hover></info>"
       global_cooldown: "  <muted>●</muted> <neutral>Global cooldown: <primary><delay></primary>ms</neutral>"
       global_cooldown_off: "  <muted>●</muted> <neutral>Global cooldown: <danger>off</danger></neutral>"
       early_out: "  <muted>●</muted> <neutral>Early-out: <x><y><z></neutral>"
@@ -129,7 +129,7 @@ commands:
     defaults:
       missing: "<prefix><danger>No default exists for: <accent><setting></accent></danger>"
       vanilla: "<prefix><neutral>Vanilla default for <accent><setting></accent> is <primary><value></primary></neutral>"
-      custom: "  <muted>●</muted> <neutral>Currently active: <primary><value></primary></neutral> <button>"
+      custom: "  <muted>●</muted> <neutral>Currently active: <primary><value></primary></neutral><badge> <button>"
       active: "  <muted>●</muted> <neutral>Currently active: <primary><value></primary></neutral> <muted_dark>(not overridden)</muted_dark>"
       clear_btn: "<click:run_command:/wakeobu -clear <setting>><hover:show_text:'<secondary>Clear current setting</secondary>'><secondary>[Clear current]</secondary></hover></click>"
       blocked_btn: "<hover:show_text:'<danger>This is a server default setting</danger><br><neutral>Create a sandbox to remove it, or override it with a temporary context to modify it</neutral>'><danger>[Server Default]</danger></hover>"
@@ -151,15 +151,20 @@ commands:
       settings: "<gradient:$secondary:$primary>─── Settings for <context> ─────────</gradient>"
     clear:
       unknown: "<prefix><danger>Unknown OBU setting: <accent><setting></accent></danger>"
-      temp: "<prefix><neutral>Cleared <accent><setting></accent> from <target> temporary context</neutral>"
-      sandbox: "<prefix><neutral>Cleared <accent><setting></accent> from sandbox <accent><sandbox></accent></neutral>"
+      took: " <muted>→</muted> <primary><value></primary>"
+      temp: "<prefix><neutral>Cleared <accent><setting></accent><value> from <target> temporary context</neutral>"
+      sandbox: "<prefix><neutral>Cleared <accent><setting></accent><value> from sandbox <accent><sandbox></accent></neutral>"
       missing: "<prefix><neutral>Setting <accent><setting></accent> is not active in <target> temporary or sandbox contexts</neutral>"
       base_blocked: "<prefix><danger>Setting <accent><setting></accent> is a server default and can only be removed in a sandbox session</danger>"
     settings:
-      reset: "<prefix><neutral>Reset player context</neutral>"
+      reset: "<prefix><neutral>Reset <target> context</neutral>"
       sandbox: "<prefix><neutral>Set <accent><setting></accent> to <primary><value></primary> for sandbox <accent><sandbox></accent></neutral>"
       success: "<prefix><neutral>Set <accent><setting></accent> to <primary><value></primary> for <target></neutral>"
+      removed: "<prefix><neutral>Removed <primary><value></primary> from <accent><setting></accent> for <target></neutral>"
+      removed_sandbox: "<prefix><neutral>Removed <primary><value></primary> from <accent><setting></accent> in sandbox <accent><sandbox></accent></neutral>"
+      removed_none: "<prefix><neutral>No <accent><setting></accent> entries to remove from <target> temporary or sandbox settings</neutral>"
       global_only: "<prefix><danger>Setting <accent><setting></accent> cannot be set to a boat (applies to players)</danger>"
+      outdated_client: "<prefix><danger>Setting <accent><setting></accent> stored but not applied (unsupported by <target> OBU version)</danger>"
     sandbox:
       exists: "<prefix><danger>Sandbox <accent><sandbox></accent> already exists</danger>"
       reserved: "<prefix><danger>Sandbox <accent><sandbox></accent> uses a reserved name</danger>"
@@ -190,13 +195,22 @@ commands:
       boat_hint: " <info><hover:show_text:'<secondary>Overrides Player Context</secondary><br><neutral>Look at the boat and run <accent>/wakeobu</accent> commands to apply settings to this boat, or use <accent>/execute as</accent></neutral>'>💡</hover></info>"
       subtitle: "  <muted>●</muted> <neutral>Applied context</neutral> <accent><context></accent>"
       line: "    <muted>○</muted> <neutral><name> <muted>→</muted> <primary><value></primary></neutral>"
-      collapsed_layer: "    <muted>○</muted> <count> <neutral>settings</neutral>"
+      collapsed_layer: "    <muted>○</muted> <count><neutral> settings</neutral>"
+      collapsed_layer_overridden: "    <muted>○</muted> <count><muted_dark><strikethrough> settings</strikethrough></muted_dark>"
+      no_settings: "    <muted>○</muted> <muted_dark>(no settings configured)</muted_dark>"
+      collapsed_no_settings: "  <muted>○</muted> <muted_dark>(no settings configured)</muted_dark>"
+      collapsed_line: "  <muted>○</muted> <neutral><name> <muted>→</muted> <primary><value></primary></neutral>"
+      collapsed_line_overridden: "  <muted>○</muted> <muted_dark><strikethrough><name> → <value></strikethrough></muted_dark>"
       collapsed_count: "<muted>[<primary><count></primary>]</muted>"
+      collapsed_count_overridden: "<muted_dark><strikethrough>[<count>]</strikethrough></muted_dark>"
       collapsed_header: "<gradient:$secondary:$primary>─── <count> entries ─────────</gradient>"
-      collapsed_entry: "  <muted>●</muted> <neutral><entry></neutral>"
+      collapsed_entry: "  <muted>○</muted> <neutral><entry></neutral>"
+      collapsed_entry_overridden: "  <muted>○</muted> <muted_dark><strikethrough><entry></strikethrough></muted_dark>"
+      entry_overridden: "<muted_dark><strikethrough><entry></strikethrough></muted_dark>"
       overridden: "    <muted>○</muted> <muted_dark><strikethrough><name> → <value></strikethrough></muted_dark>"
       suffix: " <overridden>(overridden)</overridden>"
       boat_suffix: " <overridden>(overridden by boat)</overridden>"
+      outdated_suffix: " <danger><hover:show_text:'<danger>Unsupported Setting</danger><br><neutral>It is stored, but the server cannot send/apply it until OBU is updated</neutral>'>(update OBU)</hover></danger>"
       temp: "  <muted>●</muted> <overridden>Temporary overrides:</overridden><hint>"
       temp_hint: " <info><hover:show_text:'<secondary>Temporary overrides</secondary><br><neutral>They are applied on top of contexts but are never saved</neutral><br><neutral>Use sandboxes (<accent>/wakeobu -sandbox</accent>) to keep them permanently</neutral>'>💡</hover></info>"
     help:
@@ -215,8 +229,8 @@ axiom:
   display_name: "<accent><b><!i><name></b></accent>"
 networking:
   obu:
-    outdated: "<prefix><danger>Warning: You are using an outdated version of OpenBoatUtils. Some features on this server may not work correctly</danger>"
-    ahead: "<prefix><info>Notice: Your OpenBoatUtils version is newer than the server's supported version. New OBU features won't be available</info>"
+    outdated: "<prefix><danger>You are using an outdated version of OpenBoatUtils. Some features on this server may not work correctly</danger>"
+    ahead: "<prefix><info>Your OpenBoatUtils version is newer than the server's supported version. New OBU features won't be available</info>"
     unsupported: "<prefix><danger>Your OpenBoatUtils version is bugged or no longer supported by this server (features disabled)</danger><br><neutral>Please update to the latest version</neutral>"
 
 words:
@@ -231,6 +245,7 @@ words:
     persistent_states: 'Persistent player states'
     boat_lag_fix: 'Boat lag fix'
     collapse_default_context: 'Collapsed default context'
+    update_nag: 'Update nag'
     auto_kill: 'Auto-kill boat'
     boostpad_early_out_x: 'early-out (X)'
     boostpad_early_out_y: 'early-out (Y)'

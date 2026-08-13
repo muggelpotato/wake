@@ -10,6 +10,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Boat;
+import org.bukkit.inventory.InventoryHolder;
 import org.jspecify.annotations.NonNull;
 
 public class KillEmptyBoatsCommand {
@@ -24,6 +25,7 @@ public class KillEmptyBoatsCommand {
         for (World world : Bukkit.getWorlds()) {
             for (Boat boat : world.getEntitiesByClass(Boat.class)) {
                 if (boat.getPassengers().isEmpty()) {
+                    if (boat instanceof InventoryHolder holder) holder.getInventory().clear();
                     boat.remove();
                     killed++;
                 }

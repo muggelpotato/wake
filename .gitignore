@@ -11,6 +11,7 @@ out/
 .idea_modules/
 
 hs_err_pid*
+*.hprof
 
 run/
 

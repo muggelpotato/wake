@@ -26,17 +26,17 @@ public final class PacketWriter {
         return buf.toBytes();
     }
 
-    public static byte @NonNull [] storeContext(@NonNull String contextId, @NonNull List<OBUSetting> settings) {
+    public static byte @NonNull [] storeContext(@NonNull String contextId, @NonNull List<OBUSetting> settings, int clientVersion) {
         PacketByteBuf buf = frame(ContextPacket.STORE_CONTEXT);
         buf.writeString(contextId);
-        writeSettings(buf, settings);
+        writeSettings(buf, settings, clientVersion);
         return buf.toBytes();
     }
 
-    public static byte @NonNull [] entityContext(@NonNull UUID entityUuid, @NonNull List<OBUSetting> settings) {
+    public static byte @NonNull [] entityContext(@NonNull UUID entityUuid, @NonNull List<OBUSetting> settings, int clientVersion) {
         PacketByteBuf buf = frame(ContextPacket.ENTITY_CONTEXT);
         buf.writeString(entityUuid.toString());
-        writeSettings(buf, settings);
+        writeSettings(buf, settings, clientVersion);
         return buf.toBytes();
     }
 
@@ -58,9 +58,12 @@ public final class PacketWriter {
         return buf;
     }
 
-    private static void writeSettings(@NonNull PacketByteBuf buf, @NonNull List<OBUSetting> settings) {
+    private static void writeSettings(@NonNull PacketByteBuf buf, @NonNull List<OBUSetting> settings, int clientVersion) {
         List<byte[]> written = new ArrayList<>(settings.size());
         for (OBUSetting setting : settings) {
+            if (OBUVersions.isPastCeiling(setting, clientVersion)) {
+                continue;
+            }
             PacketByteBuf one = new PacketByteBuf();
             try {
                 writeSetting(one, setting);

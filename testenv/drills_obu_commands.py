@@ -36,6 +36,7 @@ import argparse
 import base64
 import gzip
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -436,8 +437,8 @@ def drill_folded_rows():
     standing in one: that half is TESTPLAN section 4."""
     print("\nwhat folding leaves in the table is what the cache says it holds")
     drop("foldrows")
-    # 0.9 keeps packed_ice, 0.4 takes ice off it, the two removals join, and stepsize folds with nothing
-    code = share("3:0.9 ice", "3:0.9 packed_ice", "3:0.4 ice", "22:stone", "22:dirt", "1:0.6")
+    # 0.9 keeps packed_ice, 0.4 takes ice off it, the two filters join, and stepsize folds with nothing
+    code = share("3:0.9 ice", "3:0.9 packed_ice", "3:0.4 ice", "31:pig", "31:cow", "1:0.6")
     says("a code whose settings fold imports", f'wo -sandbox import "{code}" foldrows', "imported")
     held = await_count("foldrows", 4)
     truthy("the table holds a row per folded setting, not one per invocation", held == 4, f"holds {held}")
@@ -496,7 +497,7 @@ def drill_folded_rows():
     print("\nand an entry no key could hold even alone is dropped rather than written")
     drop("foldhuge")
     # one statement the database turns back fails the transaction its whole write shares
-    code = share("22:othermod:" + "a" * 260, "1:0.6")
+    code = share("3:0.9 othermod:" + "a" * 260, "1:0.6")
     says("a code carrying one imports", f'wo -sandbox import "{code}" foldhuge', "imported")
     await_count("foldhuge", 1)
     keys = setting_keys("foldhuge")
@@ -615,6 +616,23 @@ def drill_defaults_table():
            f"answered a value for {missing}, refused {offered}")
     says("and a name no setting carries is refused too", "wo -defaults nonsense", "no default exists")
 
+    # the [Clear current] button carries a command as text in the language file, so nothing links it to the
+    # tree it addresses -- a renamed root, literal or argument shape breaks it and only a click would show
+    print("\nand the button that line offers still addresses a command that exists")
+    lang = (ROOT / "src" / "main" / "resources" / "lang" / "en_us.yml").read_text(encoding="utf-8")
+    # the command runs to the tag that follows it, not to the first '>': its own placeholder carries one
+    button = re.search(r"clear_btn:.*?<click:run_command:(.+?)><", lang)
+    if button is None:
+        bad("clear button", "no run_command found under commands.obu.defaults.clear_btn")
+        return
+    # every setting -defaults offers a button for carries a vanilla default, and none of those is a one-shot
+    typed = button.group(1).replace("<setting>", "stepsize").strip()
+    if "<" in typed:
+        bad("clear button", f"the drill does not fill every placeholder in {typed!r}")
+        return
+    reply = run(typed).lower()
+    truthy(f"{typed!r} resolves", "unknown or incomplete" not in reply and "incorrect argument" not in reply, reply)
+
 
 def drill_setting_nodes():
     """The tree is swept out of the definition enum, so what needs pinning is that the sweep reaches
@@ -630,6 +648,45 @@ def drill_setting_nodes():
     truthy(f"all {len(DEFINITIONS)} of them resolve under their own literal", not missing,
            f"no node answered for {missing}")
 
+    # -clear sweeps the same enum, minus the rows no context can hold: a node for one of those would be a
+    # command that can only ever answer "nothing to clear", and a permission an admin could grant for it
+    print("\nand -clear mirrors that sweep for exactly the settings a context can hold")
+    ONE_SHOT = {"reset": "-reset", "applyimpulse": "applyimpulse", "applyimpulserelative": "applyimpulserelative",
+                "removeblockslipperiness": "removeblockslipperiness", "clearslipperiness": "clearslipperiness",
+                "clearcollisionfilter": "clearcollisionfilter"}
+    unmirrored, mirrored_one_shots, unnamed_one_shots = [], [], []
+    run("forceload add 0 0")
+    run(f"kill @e[tag={STAND_TAG}]")
+    run(STAND)
+    time.sleep(SETTLE)  # the first row of the table is a one-shot, so the stand is selected immediately
+    try:
+        for _, name, types, _ in DEFINITIONS:
+            if name in ONE_SHOT:
+                # no literal of its own, so the greedy key argument swallows the whole tail and resolves
+                # nothing. Driven from the stand: a console fails the entity target before any of this
+                if "unknown obu setting" not in run(f"{AS_STAND}wo -clear {ONE_SHOT[name]} 1.0").lower():
+                    mirrored_one_shots.append(name)
+                # the bare name is still a setting though, so it reads as absent rather than as unknown
+                if "is not active" not in run(f"{AS_STAND}wo -clear {ONE_SHOT[name]}").lower():
+                    unnamed_one_shots.append(name)
+                continue
+            identity = [semantic for semantic in types.split(",")
+                        if semantic in ("SETTING_ENUM", "BLOCK_LIST", "ENTITY_LIST")]
+            args = " ".join(SAMPLE[semantic] for semantic in identity)
+            # from the stand, so a literal that is missing reads apart from one that is there: the greedy
+            # key argument would swallow the same words and answer "unknown", never "nothing to clear"
+            if "is not active" not in run(f"{AS_STAND}wo -clear {name} {args}".strip()).lower():
+                unmirrored.append(name)
+    finally:
+        run(f"kill @e[tag={STAND_TAG}]")
+        run("forceload remove 0 0")
+    truthy(f"every setting a context holds has a -clear node taking its identity arguments ({len(DEFINITIONS) - len(ONE_SHOT)})",
+           not unmirrored, f"no -clear node answered for {unmirrored}")
+    truthy(f"and none of the {len(ONE_SHOT)} a context never holds has a node of its own",
+           not mirrored_one_shots, f"a node answered for {mirrored_one_shots}")
+    truthy("while each of them named alone still reads as absent rather than as unknown",
+           not unnamed_one_shots, f"answered as unknown for {unnamed_one_shots}")
+
 
 def drill_player_only():
     print("\nthe branches that need a player refuse a console and an entity alike")
@@ -642,6 +699,10 @@ def drill_player_only():
                                ("-sandbox exit", "wo -sandbox exit")):
             says(f"{label} refuses the console", command, "only be executed by players")
             says(f"{label} refuses an armour stand too", AS_STAND + command, "only be executed by players")
+        # a removal verb takes the targets a set does, so one that owns no layer is turned back rather
+        # than answered as empty -- the opposite of `-clear`, which reads such a target as holding nothing
+        says("a removal verb refuses an entity that owns no layer",
+             AS_STAND + "wo removeblockslipperiness ice", "applied to players or boats")
     finally:
         run(f"kill @e[tag={STAND_TAG}]")
         run("forceload remove 0 0")

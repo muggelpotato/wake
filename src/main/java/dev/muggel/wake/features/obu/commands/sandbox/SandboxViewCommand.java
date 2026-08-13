@@ -36,7 +36,7 @@ public class SandboxViewCommand {
             plugin.getMessageManager().send(sender, "commands.obu.no_settings");
         } else {
             for (OBUSetting setting : context.settings()) {
-                sender.sendMessage(OBUCommandHelper.settingLine(plugin, "commands.obu.status.line", setting, false));
+                sender.sendMessage(OBUCommandHelper.settingLine(plugin, subject, setting, false));
             }
         }
         return Command.SINGLE_SUCCESS;

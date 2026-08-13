@@ -7,6 +7,7 @@ import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.features.obu.clients.BoatLagInterceptor;
+import dev.muggel.wake.features.obu.clients.HandshakeListener;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager.ContextCounts;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import dev.muggel.wake.features.obu.contexts.SandboxPurger;
@@ -26,6 +27,7 @@ public class ConfigCommand {
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "persistence", ContextDelivery.STATE_KEY_PERSISTENT_STATES, "words.feature.persistent_states"))
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "boat-lag-fix", BoatLagInterceptor.STATE_KEY_BOAT_LAG_FIX, "words.feature.boat_lag_fix"))
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "collapse-default-context", StatusCommand.STATE_KEY_COLLAPSE_DEFAULT_CONTEXT, "words.feature.collapse_default_context"))
+                .addSubcommand(CommandHelper.toggleCommand(plugin, "update-nag", HandshakeListener.STATE_KEY_UPDATE_NAG, "words.feature.update_nag"))
                 .addSubcommand(CommandNode.literal("keep-unused-sandboxes")
                         .arguments(CommandNode.argument("duration", StringArgumentType.string())
                                 .executesSender((ctx, sender) -> executeKeepUnused(ctx, plugin))))

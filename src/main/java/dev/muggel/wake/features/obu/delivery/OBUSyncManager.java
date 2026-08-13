@@ -6,6 +6,8 @@ import dev.muggel.wake.features.obu.contexts.OBUContextManager;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.protocol.SettingMerge;
+import dev.muggel.wake.features.obu.protocol.SettingMerge.Removal;
+import dev.muggel.wake.features.obu.protocol.SettingSelector;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Boat;
@@ -59,12 +61,13 @@ public final class OBUSyncManager {
         localOverrides.compute(uuid, (k, held) -> byKey(SettingMerge.fold(held == null ? List.of() : held.values(), List.of(setting))));
     }
 
-    public void removeLocalOverride(@NonNull UUID uuid, @NonNull String uniqueKey) {
+    public @NonNull Removal removeLocalOverrides(@NonNull UUID uuid, @NonNull SettingSelector selector) {
+        Removal[] result = {Removal.NOTHING};
         localOverrides.computeIfPresent(uuid, (k, held) -> {
-            Map<String, OBUSetting> kept = new LinkedHashMap<>(held);
-            kept.remove(uniqueKey);
-            return kept.isEmpty() ? null : Collections.unmodifiableMap(kept);
+            result[0] = SettingMerge.subtract(held.values(), selector);
+            return result[0].kept().isEmpty() ? null : byKey(result[0].kept());
         });
+        return result[0];
     }
 
     public void clearLocalOverrides(@NonNull UUID uuid) {
@@ -99,7 +102,7 @@ public final class OBUSyncManager {
         return SettingMerge.fold(truth, getLocalOverrides(uuid).values());
     }
 
-    private @NonNull List<OBUSetting> boatTruth(@NonNull Boat boat) {
+    private @NonNull List<OBUSetting> boatTruth(@NonNull Boat boat, @Nullable Player driver) {
         List<OBUSetting> truth = List.of();
         String pinned = active.pinnedOn(boat);
         if (pinned != null) {
@@ -109,7 +112,6 @@ public final class OBUSyncManager {
             }
             truth = merge(truth, context);
         }
-        Player driver = driverOf(boat);
         if (driver != null) {
             truth = SettingMerge.fold(truth, playerTruth(driver.getUniqueId()));
         }
@@ -120,8 +122,8 @@ public final class OBUSyncManager {
         return context == null ? truth : SettingMerge.fold(truth, context.settings());
     }
 
-    private @NonNull List<OBUSetting> settingsOn(@NonNull Boat boat) {
-        List<OBUSetting> settings = boatTruth(boat);
+    private @NonNull List<OBUSetting> settingsOn(@NonNull Boat boat, @Nullable Player driver) {
+        List<OBUSetting> settings = boatTruth(boat, driver);
         scales.update(boat.getUniqueId(), settings);
         return settings;
     }
@@ -147,12 +149,12 @@ public final class OBUSyncManager {
         if (!clients.isDriven(viewer.getUniqueId())) {
             return;
         }
-        List<OBUSetting> settings = settingsOn(boat);
+        List<OBUSetting> settings = settingsOn(boat, driverOf(boat));
         if (nothingToSend(boat.getUniqueId(), settings)) {
             return;
         }
         knownBoatContexts.add(boat.getUniqueId());
-        packetSender.sendPrecompiledPacket(viewer, packetSender.createEntityContextPacket(boat.getUniqueId(), settings));
+        packetSender.sendEntityContext(List.of(viewer), boat.getUniqueId(), settings);
     }
 
     public void syncTrackedBoats(@NonNull Player viewer) {
@@ -164,12 +166,22 @@ public final class OBUSyncManager {
     }
 
     public void broadcastSync(@NonNull Boat boat) {
+        broadcastSync(boat, driverOf(boat));
+    }
+
+    /**
+     * The client resolves a ridden boat's settings from its entity context alone — that context
+     * replaces the personal one rather than merging with it, and an absent one falls back to
+     * whatever the boat last held. A context that lands a tick after the mount is therefore a tick
+     * of the wrong physics, so the driver is taken from the caller: {@code VehicleEnterEvent} runs
+     * before the passenger is attached, and waiting for the passenger list costs that tick.
+     */
+    public void broadcastSync(@NonNull Boat boat, @Nullable Player driver) {
         if (!boat.isValid()) {
             return;
         }
-        List<OBUSetting> settings = settingsOn(boat);
+        List<OBUSetting> settings = settingsOn(boat, driver);
         Set<Player> viewers = new HashSet<>(boat.getTrackedBy());
-        Player driver = driverOf(boat);
         if (driver != null) {
             viewers.add(driver);
         }
@@ -178,10 +190,7 @@ public final class OBUSyncManager {
             return;
         }
         knownBoatContexts.add(boat.getUniqueId());
-        var packet = packetSender.createEntityContextPacket(boat.getUniqueId(), settings);
-        for (Player viewer : viewers) {
-            packetSender.sendPrecompiledPacket(viewer, packet);
-        }
+        packetSender.sendEntityContext(viewers, boat.getUniqueId(), settings);
     }
 
     public void resyncPinnedBoats() {
@@ -196,10 +205,7 @@ public final class OBUSyncManager {
 
     public void wipeAllBoatContexts() {
         for (UUID boatId : knownBoatContexts) {
-            var emptyPacket = packetSender.createEntityContextPacket(boatId, Collections.emptyList());
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                packetSender.sendPrecompiledPacket(player, emptyPacket);
-            }
+            packetSender.sendEntityContext(Bukkit.getOnlinePlayers(), boatId, List.of());
         }
     }
 }

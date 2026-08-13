@@ -190,7 +190,7 @@ public final class WakeCommandManager {
 
     private static @NonNull CompletableFuture<Suggestions> suggest(@NonNull Wake plugin, @NonNull CommandNode node, @NonNull SuggestionProvider<CommandSourceStack> suggester, @NonNull CommandContext<CommandSourceStack> ctx, @NonNull SuggestionsBuilder builder) {
         try {
-            return suggester.getSuggestions(ctx, builder);
+            return suggester.getSuggestions(ctx.getLastChild(), builder);
         } catch (Exception e) {
             plugin.getLogger().log(Level.SEVERE, "Error suggesting for command: " + node.getName(), e);
             return Suggestions.empty();

@@ -6,6 +6,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.vehicle.VehicleExitEvent;
+import org.bukkit.inventory.InventoryHolder;
 import org.jspecify.annotations.NonNull;
 
 public class EmptyBoatListener implements Listener {
@@ -21,6 +22,7 @@ public class EmptyBoatListener implements Listener {
         if (!(event.getVehicle() instanceof Boat boat)) return;
         if (!plugin.getStateDao().get(STATE_KEY_KILL_BOAT_ON_EXIT, DEFAULT_KILL_BOAT_ON_EXIT)) return;
         if (boat.getPassengers().stream().allMatch(event.getExited()::equals)) {
+            if (boat instanceof InventoryHolder holder) holder.getInventory().clear();
             boat.remove();
         }
     }

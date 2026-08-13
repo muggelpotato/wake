@@ -11,6 +11,7 @@ import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPl
 import dev.muggel.wake.core.Scheduling;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.features.obu.protocol.OBUDefinition;
+import dev.muggel.wake.features.obu.protocol.OBUVersions;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.OBUPlayerState;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
@@ -32,6 +33,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class HandshakeListener extends PacketListenerAbstract implements Listener {
+    public static final String STATE_KEY_UPDATE_NAG = "obu.update_nag";
+    public static final boolean DEFAULT_UPDATE_NAG = true;
     private record HandshakeData(int versionId, boolean isUnstable) {}
     private final Map<User, HandshakeData> pendingHandshakes = new ConcurrentHashMap<>();
     private final Wake plugin;
@@ -56,14 +59,17 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     public void onPacketReceive(@NonNull PacketReceiveEvent event) {
         String channel;
         byte[] data;
+        boolean configuring;
         if (event.getPacketType() == PacketType.Configuration.Client.PLUGIN_MESSAGE) {
             WrapperConfigClientPluginMessage msg = new WrapperConfigClientPluginMessage(event);
             channel = msg.getChannelName();
             data = msg.getData();
+            configuring = true;
         } else if (event.getPacketType() == PacketType.Play.Client.PLUGIN_MESSAGE) {
             WrapperPlayClientPluginMessage msg = new WrapperPlayClientPluginMessage(event);
             channel = msg.getChannelName();
             data = msg.getData();
+            configuring = false;
         } else {
             return;
         }
@@ -74,7 +80,7 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
         if (handshake == null) {
             return;
         }
-        if (event.getPlayer() instanceof Player player) {
+        if (!configuring && event.getPlayer() instanceof Player player) {
             handleOBUPlayer(player, event.getUser(), handshake);
         } else {
             pendingHandshakes.put(event.getUser(), handshake);
@@ -125,10 +131,10 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
     }
 
     private void handleOBUPlayer(@NonNull Player player, @NonNull User user, @NonNull HandshakeData handshake) {
-        boolean rejected = OBUDefinition.REJECTED_VERSIONS.contains(handshake.versionId());
+        boolean rejected = !OBUVersions.isSupported(handshake.versionId());
         ClientState verdict = rejected ? ClientState.UNSUPPORTED : ClientState.DRIVEN;
         UUID uuid = player.getUniqueId();
-        if (!clients.claim(uuid, verdict)) {
+        if (!clients.claim(uuid, verdict, handshake.versionId())) {
             return;
         }
         logVersion(user, handshake);
@@ -144,9 +150,9 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
         if (player == null || delivery.isStale()) {
             return;
         }
-        if (versionId < OBUDefinition.LATEST_SUPPORTED_VERSION) {
+        if (versionId < OBUVersions.LATEST_SUPPORTED && plugin.getStateDao().get(STATE_KEY_UPDATE_NAG, DEFAULT_UPDATE_NAG)) {
             plugin.getMessageManager().send(player, "networking.obu.outdated");
-        } else if (versionId > OBUDefinition.LATEST_SUPPORTED_VERSION) {
+        } else if (versionId > OBUVersions.LATEST_SUPPORTED) {
             plugin.getMessageManager().send(player, "networking.obu.ahead");
         }
         if (state == null) {

@@ -93,12 +93,24 @@ public final class KeyListArgumentType implements CustomArgumentType<String, Str
 
     @Override
     public <S> @NonNull CompletableFuture<Suggestions> listSuggestions(@NonNull CommandContext<S> context, @NonNull SuggestionsBuilder builder) {
+        SuggestionsBuilder word = atCurrentWord(builder);
+        String before = entriesBefore(word);
+        ArgumentHelper.suggestKeys(word.getRemaining().substring(before.length()).toLowerCase(Locale.ROOT), keys.get(), key -> word.suggest(before + key));
+        return word.buildFuture();
+    }
+
+    public static @NonNull SuggestionsBuilder atCurrentWord(@NonNull SuggestionsBuilder builder) {
         String input = builder.getRemaining();
-        String[] parts = SEPARATORS.split(input, -1);
-        String current = parts[parts.length - 1];
-        SuggestionsBuilder entryBuilder = builder.createOffset(builder.getStart() + input.length() - current.length());
-        ArgumentHelper.suggestKeys(current.toLowerCase(Locale.ROOT), keys.get(), entryBuilder::suggest);
-        return entryBuilder.buildFuture();
+        return builder.createOffset(builder.getStart() + input.lastIndexOf(' ') + 1);
+    }
+
+    public static @NonNull String entriesBefore(@NonNull SuggestionsBuilder word) {
+        String input = word.getRemaining();
+        return input.substring(0, input.lastIndexOf(',') + 1);
+    }
+
+    public boolean accepts(@NonNull String entry) {
+        return canonical(entry) != null;
     }
 
     private @Nullable String canonical(@NonNull String entry) {

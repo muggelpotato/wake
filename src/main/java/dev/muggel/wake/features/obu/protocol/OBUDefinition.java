@@ -7,7 +7,6 @@ import org.jspecify.annotations.Nullable;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.Map;
 import java.util.HashMap;
 
@@ -69,8 +68,6 @@ public enum OBUDefinition {
     public static final String CHANNEL_CONTEXT = "openboatutils:context";
     public static final String CHANNEL_CONFIGURATION = "openboatutils:configuration";
     public static final short PACKET_RESEND_VERSION = 15;
-    public static final int LATEST_SUPPORTED_VERSION = 22;
-    public static final Set<Integer> REJECTED_VERSIONS = Set.of(8, 12, 15, 20, 21);
     private final int id;
     private final List<SettingType> types;
     private final List<String> argNames;
@@ -122,8 +119,16 @@ public enum OBUDefinition {
         return this == applyimpulse || this == applyimpulserelative;
     }
 
+    public @Nullable OBUDefinition subtractsFrom() {
+        return switch (this) {
+            case removeblockslipperiness, clearslipperiness -> blockslipperiness;
+            case clearcollisionfilter -> addcollisionfilter;
+            default -> null;
+        };
+    }
+
     public boolean isOneShot() {
-        return this == reset || isActionSetting();
+        return this == reset || isActionSetting() || subtractsFrom() != null;
     }
 
     public boolean isGlobalSetting() {

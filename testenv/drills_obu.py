@@ -45,6 +45,9 @@ PARSE_ERROR = ("Incorrect argument", "Unknown or incomplete", "Expected", "must 
                "Invalid option", "Invalid block", "Invalid entity", "<--[HERE]")
 
 CLASSES = ROOT / "build" / "classes" / "java" / "main"
+OBU_REPO = ROOT / "OBUSOURCE" / "OpenBoatUtils"
+# the three id spaces a setting puts on the wire, in the order the probe sweeps them
+OBU_ENUMS = ("network/ClientboundSettingsPacket.java", "PerBlockSettingType.java", "CollisionMode.java")
 # the paper-api those classes were compiled against, never the newest cached: checkVersions fills the same
 # cache with every version Wake claims, and the newest of those is built for a JVM this probe cannot run on
 COMPILED_AGAINST = re.compile(r'compileOnly\("io\.papermc\.paper:paper-api:([^"]+)"')
@@ -196,6 +199,21 @@ def drill_storage():
     else:
         bad("namespace stripping", f"the block list is missing entirely: {view}")
 
+    print("\nand a setting no context can hold is refused at the door, not written and dropped on the way back")
+    rcon.run("wo -sandbox delete oneshottest")
+    # 0=-reset 42=applyimpulse 22=removeblockslipperiness 23=clearslipperiness 32=clearcollisionfilter:
+    # the loader skips all five, so a code that wrote one would leave a row nothing hands back and
+    # nothing can delete
+    code = share("1:0.6", "0:", "42:0.0 5.0 0.0", "22:ice", "23:", "32:")
+    expect("a code carrying five of them still imports the one it should",
+           f'wo -sandbox import "{code}" oneshottest', "skipped 5")
+    held = settings_of(run("wo -sandbox view oneshottest"))
+    if held == [("stepsize", "0.6")]:
+        ok("and only the setting a context can hold reached storage")
+    else:
+        bad("one-shot door", f"the sandbox holds {held}")
+    rcon.run("wo -sandbox delete oneshottest")
+
     # the code itself rides in the copy button's click event, so a console reply only shows the wrapper
     exported = run("wo -sandbox export codectest")
     if "exported sandbox" in exported.lower() and "share code" in exported.lower():
@@ -211,17 +229,17 @@ def drill_block_canonicalisation():
     rcon.run("wo -sandbox delete spellingtest")
     # the same block, three ways a share code could spell it. All three are one entry, not three,
     # or the client is sent the same block twice and whichever arrives last wins
-    code = share("3:0.9 ICE", "3:0.95 ice", "3:0.98 minecraft:ice", "22:PACKED_ICE")
+    code = share("3:0.9 ICE", "3:0.95 ice", "3:0.98 minecraft:ice", "31:PIG")
     expect("a share code of one block spelled three ways imports",
            f'wo -sandbox import "{code}" spellingtest', "imported")
     view = expect("the sandbox lists its settings", "wo -sandbox view spellingtest", "blockslipperiness")
-    if view.lower().count("blockslipperiness") != 2:  # blockslipperiness plus removeblockslipperiness
+    if view.lower().count("blockslipperiness") != 1:
         bad("one entry per block", f"the same block landed under more than one key: {view}")
     elif "0.9 " in view or "0.95" in view:
         bad("last spelling wins", f"an earlier spelling survived alongside the last: {view}")
     else:
         ok("three spellings of one block collapsed to a single entry")
-    if "ICE" in view or "PACKED_ICE" in view:
+    if "ICE" in view or "PIG" in view:
         bad("stored casing", f"a block was stored as typed rather than canonically: {view}")
     else:
         ok("the stored spelling is the canonical one")
@@ -274,8 +292,8 @@ def drill_setting_folding():
              ("3:0.9 ice", "3:0.4 ice"),
              [("blockslipperiness", "0.4, ice")]),
             ("a setting that is nothing but a list is always one entry",
-             ("22:ice", "22:packed_ice", "22:stone"),
-             [("removeblockslipperiness", "[3]")]),
+             ("31:pig", "31:cow", "31:sheep"),
+             [("addcollisionfilter", "[3]")]),
             ("setblocksetting folds inside one per-block setting",
              ("26:JUMPS 2 stone", "26:JUMPS 2 ice"),
              [("setblocksetting", "JUMPS, 2.0, [2]")]),
@@ -303,10 +321,10 @@ def drill_unwritable_lists():
                          ("a non-ascii letter", "İce")):
         rcon.run("wo -sandbox delete badlisttest")
         # the sound setting rides in the same code: it must survive the entry that does not
-        code = share(f"22:{entry}", "1:0.6")
+        code = share(f"3:0.9 {entry}", "1:0.6")
         reply = run(f'wo -sandbox import "{code}" badlisttest')
         view = run("wo -sandbox view badlisttest")
-        if "removeblockslipperiness" in view.lower():
+        if "blockslipperiness" in view.lower():
             bad(label, f"{entry!r} reached storage: {view}")
         elif "skip" not in reply.lower():
             bad(label, f"{entry!r} was dropped without telling the importer: {reply}")
@@ -320,7 +338,7 @@ def drill_unwritable_lists():
     rcon.run("wo -sandbox delete foreigntest")
     # another server's block: legal on the wire, absent from this registry, and refusing it would
     # quietly drop settings every time a share code crosses between servers
-    code = share("22:othermod:turbo_ice")
+    code = share("3:0.9 othermod:turbo_ice")
     expect("a foreign namespaced key imports", f'wo -sandbox import "{code}" foreigntest', "imported")
     view = run("wo -sandbox view foreigntest")
     if "turbo_ice" in view:
@@ -356,7 +374,7 @@ package dev.muggel.wake.features.obu.protocol;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.TreeSet;
+import java.util.Set;
 import java.util.UUID;
 
 public final class WireProbe {
@@ -372,6 +390,9 @@ public final class WireProbe {
         buffer();
         packets();
         keys();
+        subtract();
+        narrowing();
+        shadow();
         canonical();
         splits();
         defaults();
@@ -389,9 +410,44 @@ public final class WireProbe {
         }
         say("channels", OBUDefinition.CHANNEL_SETTINGS + " " + OBUDefinition.CHANNEL_CONTEXT
                 + " " + OBUDefinition.CHANNEL_CONFIGURATION);
-        say("versions", OBUDefinition.PACKET_RESEND_VERSION + " " + OBUDefinition.LATEST_SUPPORTED_VERSION
-                + " " + new TreeSet<>(OBUDefinition.REJECTED_VERSIONS));
+        StringBuilder driven = new StringBuilder();
+        for (int version = 17; version <= 23; version++) {
+            if (!OBUVersions.isSupported(version)) continue;
+            if (!driven.isEmpty()) driven.append(',');
+            driven.append(version);
+        }
+        say("versions", OBUDefinition.PACKET_RESEND_VERSION + " " + OBUVersions.MINIMUM_SUPPORTED
+                + " " + OBUVersions.LATEST_SUPPORTED + " " + driven);
+        say("past_ceiling_floor", pastCeiling(OBUVersions.MINIMUM_SUPPORTED));
+        say("past_ceiling_latest", pastCeiling(OBUVersions.LATEST_SUPPORTED));
+        // the two spellings only storage can hand over: one an older build wrote uncanonically, one no
+        // id space holds at all
+        say("past_ceiling_stored", OBUVersions.isPastCeiling(row(OBUDefinition.setblocksetting, "max_speed_resistance", "2.0", "stone"), OBUVersions.MINIMUM_SUPPORTED)
+                + " " + OBUVersions.isPastCeiling(row(OBUDefinition.setblocksetting, "NOT_A_SETTING", "2.0", "stone"), OBUVersions.MINIMUM_SUPPORTED));
         say("personal", OBUDefinition.CONTEXT_PERSONAL);
+    }
+
+    /**
+     * Every id of every space the mod of that version never shipped, so sending one would cost the rows
+     * behind it. Each is measured as a row, the way a packet measures it: the enums ride as arguments of
+     * a definition the floor did ship, so what is judged is the argument and not the setting carrying it.
+     */
+    private static String pastCeiling(int clientVersion) {
+        List<String> past = new ArrayList<>();
+        for (OBUDefinition def : OBUDefinition.values()) {
+            if (OBUVersions.isPastCeiling(row(def), clientVersion)) past.add(def.name());
+        }
+        for (OBUDefinition.PerBlockSetting setting : OBUDefinition.PerBlockSetting.values()) {
+            if (OBUVersions.isPastCeiling(row(OBUDefinition.setblocksetting, setting.name(), "2.0", "stone"), clientVersion)) {
+                past.add(setting.name());
+            }
+        }
+        for (OBUDefinition.CollisionMode mode : OBUDefinition.CollisionMode.values()) {
+            if (OBUVersions.isPastCeiling(row(OBUDefinition.collisionmode, mode.name()), clientVersion)) {
+                past.add(mode.name());
+            }
+        }
+        return past.isEmpty() ? "nothing" : String.join(",", past);
     }
 
     private static void buffer() {
@@ -427,11 +483,23 @@ public final class WireProbe {
         say("pkt_drop", hex(PacketWriter.dropContext(OBUDefinition.CONTEXT_PERSONAL)));
         say("pkt_switch", hex(PacketWriter.switchContext(OBUDefinition.CONTEXT_PERSONAL)));
         say("pkt_version", hex(PacketWriter.versionRequest()));
-        say("pkt_store_empty", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, List.of())));
-        say("pkt_entity_empty", hex(PacketWriter.entityContext(BOAT, List.of())));
-        say("pkt_store_scalars", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, scalars())));
-        say("pkt_store_skips", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, withUnwritableRows())));
+        int latest = OBUVersions.LATEST_SUPPORTED;
+        say("pkt_store_empty", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, List.of(), latest)));
+        say("pkt_entity_empty", hex(PacketWriter.entityContext(BOAT, List.of(), latest)));
+        say("pkt_store_scalars", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, scalars(), latest)));
+        say("pkt_store_skips", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, withUnwritableRows(), latest)));
+        say("pkt_store_outdated", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, pastCeilingRows(), OBUVersions.MINIMUM_SUPPORTED)));
+        say("pkt_store_current", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, pastCeilingRows(), latest)));
         say("pkt_raw_impulse", hex(PacketWriter.rawSetting(of(OBUDefinition.applyimpulse, "1", "2", "3"))));
+    }
+
+    /** A row the floor version never shipped, between two it did: the two must survive it */
+    private static List<OBUSetting> pastCeilingRows() {
+        List<OBUSetting> settings = new ArrayList<>();
+        settings.add(of(OBUDefinition.stepsize, "0.6"));
+        settings.add(of(OBUDefinition.sethoneycompat, "true"));
+        settings.add(of(OBUDefinition.coyotetime, "3"));
+        return settings;
     }
 
     /** One of every scalar shape the wire carries, in the order they are handed over */
@@ -453,6 +521,9 @@ public final class WireProbe {
         settings.add(of(OBUDefinition.stepsize, "0.6"));
         settings.add(new OBUSetting(OBUDefinition.stepsize, List.of("not-a-number")));
         settings.add(new OBUSetting(OBUDefinition.blockslipperiness, List.of("0.9")));
+        // a name no id space holds: the ceiling is measured before the row is written, so it has to
+        // step over this one too rather than throw and take the whole compound with it
+        settings.add(new OBUSetting(OBUDefinition.setblocksetting, List.of("NOT_A_SETTING", "2.0", "stone")));
         settings.add(of(OBUDefinition.coyotetime, "3"));
         return settings;
     }
@@ -473,6 +544,93 @@ public final class WireProbe {
         say("key_short_args", key(OBUDefinition.blockslipperiness, "0.9"));
         say("key_no_args", key(OBUDefinition.clearslipperiness));
         say("key_uncanonical", key(OBUDefinition.blockslipperiness, "0.9", "ICE"));
+    }
+
+    /** What a subtractive setting leaves behind, named by unique key: that key is the row the store writes or deletes */
+    private static void subtract() {
+        List<OBUSetting> held = List.of(row(OBUDefinition.blockslipperiness, "0.9", "ice,stone"),
+                row(OBUDefinition.stepsize, "1.5"));
+        say("sub_one_entry", removal(held, row(OBUDefinition.removeblockslipperiness, "ice")));
+        say("sub_every_entry", removal(held, row(OBUDefinition.removeblockslipperiness, "ice,stone")));
+        say("sub_absent", removal(held, row(OBUDefinition.removeblockslipperiness, "packed_ice")));
+        say("sub_clear", removal(held, row(OBUDefinition.clearslipperiness)));
+        say("sub_other_family", removal(held, row(OBUDefinition.clearcollisionfilter)));
+        say("sub_across_values", removal(
+                List.of(row(OBUDefinition.blockslipperiness, "0.9", "ice"),
+                        row(OBUDefinition.blockslipperiness, "0.4", "stone")),
+                row(OBUDefinition.removeblockslipperiness, "ice,stone")));
+    }
+
+    /**
+     * The same algebra reached by name rather than by a mod verb: what a removal pins decides which rows it
+     * reaches, and a per-block setting is the one place a definition alone takes settings nobody asked for.
+     */
+    private static void narrowing() {
+        // the words arrive already parsed by the setting's own argument types, so this only splits them
+        say("narrow_none", narrow(OBUDefinition.setblocksetting));
+        say("narrow_enum", narrow(OBUDefinition.setblocksetting, "JUMPS"));
+        say("narrow_enum_blocks", narrow(OBUDefinition.setblocksetting, "JUMPS", "ice,stone"));
+        say("narrow_skips_value_args", narrow(OBUDefinition.blockslipperiness, "ice"));
+
+        List<OBUSetting> perBlock = List.of(row(OBUDefinition.setblocksetting, "JUMPS", "2.0", "ice,stone"),
+                row(OBUDefinition.setblocksetting, "WALLTAP_MULTIPLIER", "2.0", "ice"),
+                row(OBUDefinition.stepsize, "1.5"));
+        say("narrow_takes_all", removal(perBlock, SettingSelector.of(OBUDefinition.setblocksetting, List.of())));
+        say("narrow_takes_enum", removal(perBlock, SettingSelector.of(OBUDefinition.setblocksetting, List.of("JUMPS"))));
+        say("narrow_takes_block", removal(perBlock, SettingSelector.of(OBUDefinition.setblocksetting, List.of("JUMPS", "ice"))));
+        say("narrow_takes_scalar", removal(perBlock, SettingSelector.of(OBUDefinition.stepsize, List.of())));
+
+        // a key names one row and never narrows across them: it is what a listing prints, typed back
+        say("key_exact_row", removal(perBlock, SettingSelector.ofKey("26:JUMPS:ice,stone")));
+        say("key_exact_part", removal(perBlock, SettingSelector.ofKey("26:JUMPS:ice")));
+        say("key_exact_scalar", removal(perBlock, SettingSelector.ofKey("1")));
+        say("key_exact_foreign", removal(List.of(row(OBUDefinition.blockslipperiness, "0.9", "othermod:turbo_ice")),
+                SettingSelector.ofKey("3:othermod:turbo_ice")));
+        say("key_unknown_id", SettingSelector.ofKey("99:x") == null ? "refused" : "taken");
+        say("key_not_a_key", SettingSelector.ofKey("notasetting") == null ? "refused" : "taken");
+    }
+
+    /** Which of a stored setting's entries a layer above takes over -- what a status line strikes */
+    private static void shadow() {
+        OBUSetting blocks = row(OBUDefinition.blockslipperiness, "0.9", "ice,stone");
+        say("shadow_partial", shadowed(blocks, row(OBUDefinition.blockslipperiness, "0.4", "ice")));
+        say("shadow_none", shadowed(blocks, row(OBUDefinition.blockslipperiness, "0.4", "packed_ice")));
+        say("shadow_whole", shadowed(blocks, row(OBUDefinition.blockslipperiness, "0.4", "stone,ice")));
+        say("shadow_scalar", shadowed(row(OBUDefinition.stepsize, "1.5"), row(OBUDefinition.stepsize, "2.0")));
+        say("shadow_one_block", shadowed(row(OBUDefinition.blockslipperiness, "0.9", "ice"),
+                row(OBUDefinition.blockslipperiness, "0.4", "ice,stone")));
+        OBUSetting perBlock = row(OBUDefinition.setblocksetting, "JUMPS", "2.0", "ice,stone");
+        say("shadow_same_per_block", shadowed(perBlock, row(OBUDefinition.setblocksetting, "JUMPS", "3.0", "ice")));
+        say("shadow_other_per_block", shadowed(perBlock, row(OBUDefinition.setblocksetting, "COYOTE_TIME", "3.0", "ice")));
+    }
+
+    private static String shadowed(OBUSetting held, OBUSetting above) {
+        Set<String> taken = SettingMerge.shadowedEntries(held, List.of(above));
+        List<String> gone = new ArrayList<>(taken);
+        gone.sort(null);
+        // a setting nothing of which is left reads as overridden, however differently the two are keyed
+        String left = SettingMerge.coversEntries(held, taken) ? " -> nothing left" : "";
+        return (gone.isEmpty() ? "nothing" : String.join(",", gone)) + left;
+    }
+
+    private static String removal(List<OBUSetting> held, OBUSetting op) {
+        return removal(held, SettingSelector.of(op));
+    }
+
+    private static String removal(List<OBUSetting> held, SettingSelector selector) {
+        SettingMerge.Removal removal = SettingMerge.subtract(held, selector);
+        List<String> keys = new ArrayList<>();
+        for (OBUSetting setting : removal.kept()) keys.add(setting.uniqueKey());
+        // what went is named by entry, but a setting with no list leaves none -- only `taken` says it happened
+        String went = removal.removed().isEmpty() && !removal.taken().isEmpty()
+                ? "whole" : String.join(",", removal.removed());
+        return went + " -> " + String.join("|", keys);
+    }
+
+    /** How a removal reads the arguments it was given, which is what decides the rows it reaches */
+    private static String narrow(OBUDefinition target, String... words) {
+        SettingSelector selector = SettingSelector.of(target, List.of(words));
+        return selector.identity() + "+" + selector.entries();
     }
 
     private static void canonical() {
@@ -539,7 +697,12 @@ public final class WireProbe {
     }
 
     private static String key(OBUDefinition def, String... args) {
-        return new OBUSetting(def, List.of(args)).uniqueKey();
+        return row(def, args).uniqueKey();
+    }
+
+    /** A stored row exactly as spelled, so a list can be named without the block registry a canonical one needs */
+    private static OBUSetting row(OBUDefinition def, String... args) {
+        return new OBUSetting(def, List.of(args));
     }
 
     private static String arg(OBUDefinition def, String... args) {
@@ -714,6 +877,35 @@ def fact(facts, name, expected):
         bad(name, f"{got!r}, expected {expected!r}")
 
 
+def obu_enum(ref, path):
+    """The constants an OBU build declares, in ordinal order, read out of the mod's own repository."""
+    ran = subprocess.run(["git", "-C", str(OBU_REPO), "show", f"{ref}:src/main/java/dev/o7moon/openboatutils/{path}"],
+                         capture_output=True, text=True)
+    if ran.returncode:
+        raise SystemExit(
+            f"cannot read {path} at {ref} -- this drill reads the mod's own history, tags included. Clone it with\n"
+            "    git clone https://github.com/OpenBoatUtils/OpenBoatUtils.git OBUSOURCE/OpenBoatUtils"
+        )
+    body = ran.stdout.split("public enum", 1)[-1]
+    # the constant list ends at the first `;`, or at the closing brace when the enum has no members
+    ends = [at for at in (body.find(";"), body.find("\n}")) if at >= 0]
+    return re.findall(r"^\s+([A-Z][A-Z_0-9]*)\s*[,;(]", body[:min(ends) + 1], re.M)
+
+
+def past_at_tag(tag):
+    """Every id Wake knows that the mod's `tag` release never shipped, derived from the mod rather than
+    transcribed. A version's ids are read at its release tag and never at the last commit announcing that
+    version: OBU appended SET_FIX_DOUBLE_WATER_ELEVATION under an already-released 19, and a real 5.0.0
+    client stops dead on it -- so the tag is the only spelling of "what a client answering 19 can hold"."""
+    shipped = [obu_enum(tag, path) for path in OBU_ENUMS]
+    current = [obu_enum("HEAD", path) for path in OBU_ENUMS]
+    known = {ident: name for ident, name, _, _ in DEFINITIONS}
+    past = [known[i] for i in range(len(shipped[0]), len(current[0])) if i in known]
+    for i in (1, 2):
+        past += current[i][len(shipped[i]):]
+    return ",".join(past) or "nothing"
+
+
 def drill_definitions(facts):
     print("\nevery definition still carries the id and arguments the mod reads")
     for ident, name, types, default in DEFINITIONS:
@@ -725,9 +917,19 @@ def drill_definitions(facts):
     else:
         ok("no setting exists that this table has not checked")
     fact(facts, "channels", "openboatutils:settings openboatutils:context openboatutils:configuration")
-    # 15 is RESEND_VERSION's ordinal, 22 is OpenBoatUtils.VERSION, and the rejects are every row
-    # docs/developers/versions.md marks Bugged or Reject
-    fact(facts, "versions", "15 22 [8, 12, 15, 20, 21]")
+    # 15 is RESEND_VERSION's ordinal, 19 is the 0.5.0 that first shipped stored contexts, 22 is
+    # OpenBoatUtils.VERSION; 20 and 21 are the two releases docs/developers/versions.md marks Bugged
+    fact(facts, "versions", "15 19 22 19,22,23")
+    # row 19 is the 0.5.0 release, so the floor's expectation comes out of the mod's own tag -- the table
+    # is hand-written, and this is the only check that reads the mod instead of trusting it
+    fact(facts, "past_ceiling_floor", past_at_tag("0.5.0"))
+    # the newest row has to cover every id Wake knows, or a supported client is cut from a value it can
+    # take. Derived from a tag this would move with the id and pass; the literal is what fails
+    fact(facts, "past_ceiling_latest", "nothing")
+    # the ceiling is read before the row is written, so a spelling only storage can produce must be
+    # measured through the same door the packet uses and must never throw: one thrown here abandons
+    # the compound and costs the player every other setting in it
+    fact(facts, "past_ceiling_stored", "true false")
     fact(facts, "personal", PERSONAL)
 
 
@@ -765,8 +967,12 @@ def drill_packets(facts):
     fact(facts, "pkt_store_empty", i16(3) + mcstring(PERSONAL) + i32(0))
     fact(facts, "pkt_entity_empty", i16(4) + mcstring("00112233-4455-6677-8899-aabbccddeeff") + i32(0))
     fact(facts, "pkt_store_scalars", i16(3) + mcstring(PERSONAL) + i32(7) + scalars)
-    # the two rows in the middle cannot be written; the count and the payload must both step over them
+    # the three rows in the middle cannot be written; the count and the payload must both step over them
     fact(facts, "pkt_store_skips", i16(3) + mcstring(PERSONAL) + i32(2) + stepsize + coyote)
+    # an id the client's own version never shipped is stepped over the same way: it would otherwise
+    # abandon the compound and take every row behind it with it
+    fact(facts, "pkt_store_outdated", i16(3) + mcstring(PERSONAL) + i32(2) + stepsize + coyote)
+    fact(facts, "pkt_store_current", i16(3) + mcstring(PERSONAL) + i32(3) + stepsize + i16(47) + "01" + coyote)
     fact(facts, "pkt_raw_impulse", i16(42) + f64(1) + f64(2) + f64(3))
 
 
@@ -796,6 +1002,63 @@ def drill_keys(facts):
         bad("key_uncanonical", "uniqueKey canonicalises, so storage no longer has to")
     else:
         ok("one block under two spellings is two keys, so storage must canonicalise first")
+
+
+def drill_subtract(facts):
+    print("\nand a subtractive setting edits the entry it names rather than riding above it")
+    # what is left is read back by key, because the key is what decides whether the store writes a
+    # row or deletes one: a list that shrinks lands under a new key and the old one has to go
+    fact(facts, "sub_one_entry", "ice -> 3:stone|1")
+    fact(facts, "sub_every_entry", "ice,stone -> 1")
+    fact(facts, "sub_clear", "ice,stone -> 1")
+    fact(facts, "sub_across_values", "ice,stone -> ")
+
+    print("\nand one with nothing to take leaves every key exactly as it was")
+    fact(facts, "sub_absent", " -> 3:ice,stone|1")
+    fact(facts, "sub_other_family", " -> 3:ice,stone|1")
+
+    # what a bad word costs is the argument type's answer, not this one's: `-clear` mirrors the setting's
+    # own node, so the same door turns both back (`drill_boat_overrides`)
+    print("\nand the same algebra reached by argument pins what it was given and leaves the rest open")
+    fact(facts, "narrow_none", "[]+[]")
+    fact(facts, "narrow_enum", "[JUMPS]+[]")
+    fact(facts, "narrow_enum_blocks", "[JUMPS]+[ice, stone]")
+    # the value arguments carry no identity, so a removal never has one and never counts one either
+    fact(facts, "narrow_skips_value_args", "[]+[ice]")
+
+    print("\nso one per-block setting can go without taking the others with it")
+    # this is the whole point: by definition alone, all three rows of setblocksetting go at once
+    fact(facts, "narrow_takes_all", "ice,stone -> 1")
+    fact(facts, "narrow_takes_enum", "ice,stone -> 26:WALLTAP_MULTIPLIER:ice|1")
+    fact(facts, "narrow_takes_block", "ice -> 26:JUMPS:stone|26:WALLTAP_MULTIPLIER:ice|1")
+    # a setting with no list leaves no entries behind, so only what was taken says it happened at all
+    fact(facts, "narrow_takes_scalar", "whole -> 26:JUMPS:ice,stone|26:WALLTAP_MULTIPLIER:ice")
+
+    print("\nwhile the unique key a listing prints still names one row and never narrows across them")
+    fact(facts, "key_exact_row", "ice,stone -> 26:WALLTAP_MULTIPLIER:ice|1")
+    # a row is keyed on its whole sorted list, so one block of one is not a row at all
+    fact(facts, "key_exact_part", " -> 26:JUMPS:ice,stone|26:WALLTAP_MULTIPLIER:ice|1")
+    fact(facts, "key_exact_scalar", "whole -> 26:JUMPS:ice,stone|26:WALLTAP_MULTIPLIER:ice")
+    # a foreign block carries a colon of its own, which is why the key is never split around one
+    fact(facts, "key_exact_foreign", "othermod:turbo_ice -> ")
+    fact(facts, "key_unknown_id", "refused")
+    fact(facts, "key_not_a_key", "refused")
+
+    print("\nand a layer above takes blocks off the entry below it, whatever that entry is keyed as")
+    # a status line can only strike what it can name, and a part-overlapping list keys differently --
+    # judged on whole-setting identity alone, the blocks that lose would read as still applying
+    fact(facts, "shadow_partial", "ice")
+    fact(facts, "shadow_none", "nothing")
+    fact(facts, "shadow_scalar", "nothing")
+
+    print("\nand one the layers above take entirely is left with nothing, however the two are keyed")
+    # the status line strikes these whole and names what took them, rather than only striking the blocks:
+    # a `0.9 ice` under a `0.4 ice,stone` keys differently but survives the fold as nothing at all
+    fact(facts, "shadow_whole", "ice,stone -> nothing left")
+    fact(facts, "shadow_one_block", "ice -> nothing left")
+    # a per-block setting is shadowed only by the same per-block setting, never by another over one block
+    fact(facts, "shadow_same_per_block", "ice")
+    fact(facts, "shadow_other_per_block", "nothing")
 
 
 def drill_canonical(facts):
@@ -848,6 +1111,7 @@ def main():
     drill_buffer(facts)
     drill_packets(facts)
     drill_keys(facts)
+    drill_subtract(facts)
     drill_canonical(facts)
 
     if not args.encoding:

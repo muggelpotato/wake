@@ -23,6 +23,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 public class DefaultsCommand {
@@ -79,7 +80,10 @@ public class DefaultsCommand {
         Component button = isServerDefault
                 ? plugin.getMessageManager().getComponent("commands.obu.defaults.blocked_btn")
                 : plugin.getMessageManager().getComponent("commands.obu.defaults.clear_btn", Placeholder.parsed("setting", def.commandName()));
-        plugin.getMessageManager().send(sender, "commands.obu.defaults.custom", Placeholder.component("value", OBUCommandHelper.displayValue(plugin, effectiveSetting, false)), Placeholder.component("button", button));
+        plugin.getMessageManager().send(sender, "commands.obu.defaults.custom",
+                Placeholder.component("value", OBUCommandHelper.displayValue(plugin, effectiveSetting, false, Set.of())),
+                Placeholder.component("badge", OBUCommandHelper.outdatedBadge(plugin, player, effectiveSetting)),
+                Placeholder.component("button", button));
         return Command.SINGLE_SUCCESS;
     }
 

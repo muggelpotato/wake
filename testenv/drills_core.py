@@ -51,6 +51,17 @@ def holds(rcon: Rcon, tag, path):
     return "passed" in rcon.run(f"execute if data entity @e[tag={tag},limit=1] {path}").lower()
 
 
+def spilled(rcon: Rcon):
+    """Whether a removed chest boat left its cargo lying where it went."""
+    return "passed" in rcon.run("execute if entity @e[type=minecraft:item,x=0,y=100,z=0,distance=..16]").lower()
+
+
+def sweep(rcon: Rcon):
+    """Clears both the drill's own entities and any cargo an earlier one spilled."""
+    rcon.run("kill @e[tag=wakedrill]")
+    rcon.run("kill @e[type=minecraft:item,x=0,y=100,z=0,distance=..16]")
+
+
 def board(rcon: Rcon, rider, boat, at="0 101 0"):
     """Summons a rider and puts it in the tagged boat, the way a player boards one."""
     rcon.run(f'summon minecraft:pig {at} {{Tags:["wakedrill","{rider}"],NoAI:1b,NoGravity:1b}}')
@@ -65,7 +76,7 @@ def drill_kill_empty_boats(rcon: Rcon, mariadb):
     """A boat nobody is sitting in is an empty boat, whatever it is carrying."""
     step("every boat without a passenger is removed")
     rcon.run("forceload add 0 0")
-    rcon.run("kill @e[tag=wakedrill]")
+    sweep(rcon)
     # start from a world with no abandoned boat in it, so the count below is exactly this drill's
     rcon.run("wake killemptyboats")
     time.sleep(SETTLE)
@@ -95,11 +106,12 @@ def drill_kill_empty_boats(rcon: Rcon, mariadb):
         truthy("the abandoned boat is gone", not alive(rcon, "wakedrill_empty"))
         truthy("and so is the empty chest boat", not alive(rcon, "wakedrill_chest"))
         truthy("cargo does not save a chest boat either", not alive(rcon, "wakedrill_cargo"))
+        truthy("and it went with the boat rather than onto the floor", not spilled(rcon))
         truthy("the boat a mob is sitting in stayed", alive(rcon, "wakedrill_ridden"))
         truthy("the count is exactly the three it took", count and count.group(1) == "3",
                f"reported {count.group(1) if count else None}")
     finally:
-        rcon.run("kill @e[tag=wakedrill]")
+        sweep(rcon)
         rcon.run("forceload remove 0 0")
 
 
@@ -114,7 +126,7 @@ def drill_kill_boat_on_exit(rcon: Rcon, mariadb):
     """
     before = state("core.killboatonexit", mariadb)
     rcon.run("forceload add 0 0")
-    rcon.run("kill @e[tag=wakedrill]")
+    sweep(rcon)
     try:
         step("with the switch off the boat outlives the rider who left it")
         rcon.run("wake killboatonexit false")
@@ -154,6 +166,7 @@ def drill_kill_boat_on_exit(rcon: Rcon, mariadb):
         else:
             leave(rcon, "wakedrill_rider_loaded")
             truthy("the loaded chest boat is removed too", not alive(rcon, "wakedrill_loaded"))
+            truthy("and its cargo did not spill either", not spilled(rcon))
 
         step("an exit nobody chose is still an exit")
         probe(rcon, BOAT, "wakedrill_widowed")
@@ -171,7 +184,7 @@ def drill_kill_boat_on_exit(rcon: Rcon, mariadb):
         trace = [line for line in log.read().splitlines() if "wake" in line.lower() and ("xception" in line or "ERROR" in line)]
         truthy("and the exit it fired reached the console as nothing at all", not trace, str(trace[:2]))
     finally:
-        rcon.run("kill @e[tag=wakedrill]")
+        sweep(rcon)
         rcon.run("forceload remove 0 0")
         if before in ("true", "false"):
             rcon.run(f"wake killboatonexit {before}")

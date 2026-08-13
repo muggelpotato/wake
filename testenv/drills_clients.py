@@ -15,9 +15,10 @@ behind it. Nothing in the probe decides whether a payload is well-formed.
 
     python testenv/drills_clients.py        # needs ./gradlew compileJava first
 
-What is left to TESTPLAN.md: everything downstream of the verdict. That the log line appears once,
-that the outdated/ahead/unsupported message reaches a real client, that a rejected build is left in
-game, and that a module toggle re-asks a connected client -- all of which need a client that answers.
+Everything downstream of the verdict is `drills_join.py`, which sends the same payloads at a running
+server rather than at a class: the log line, the outdated/ahead/unsupported message reaching a client,
+and a rejected build being left in game. What is left to TESTPLAN.md from here is a module toggle
+re-asking a connected client, and any judgement that needs one computing physics.
 
 Exits non-zero if a check fails.
 """
@@ -115,22 +116,22 @@ public final class ClientsProbe {
     private static void latch() {
         ClientRegistry registry = new ClientRegistry();
         UUID uuid = UUID.fromString("00112233-4455-6677-8899-aabbccddeeff");
-        print("absent", registry.state(uuid) + " " + registry.isDriven(uuid));
-        print("first", registry.claim(uuid, ClientRegistry.ClientState.DRIVEN) + " " + registry.state(uuid));
-        print("second", registry.claim(uuid, ClientRegistry.ClientState.UNSUPPORTED) + " " + registry.state(uuid));
-        print("repeat", registry.claim(uuid, ClientRegistry.ClientState.DRIVEN) + " " + registry.state(uuid));
+        print("absent", registry.state(uuid) + " " + registry.isDriven(uuid) + " " + registry.versionOf(uuid));
+        print("first", registry.claim(uuid, ClientRegistry.ClientState.DRIVEN, 22) + " " + registry.state(uuid) + " " + registry.versionOf(uuid));
+        print("second", registry.claim(uuid, ClientRegistry.ClientState.UNSUPPORTED, 8) + " " + registry.state(uuid) + " " + registry.versionOf(uuid));
+        print("repeat", registry.claim(uuid, ClientRegistry.ClientState.DRIVEN, 19) + " " + registry.state(uuid) + " " + registry.versionOf(uuid));
         print("driven", String.valueOf(registry.isDriven(uuid)));
 
         registry.forget(uuid);
-        print("forgotten", registry.state(uuid) + " " + registry.isDriven(uuid));
+        print("forgotten", registry.state(uuid) + " " + registry.isDriven(uuid) + " " + registry.versionOf(uuid));
 
-        registry.claim(uuid, ClientRegistry.ClientState.UNSUPPORTED);
-        print("rejected_latches", registry.claim(uuid, ClientRegistry.ClientState.DRIVEN) + " " + registry.state(uuid));
+        registry.claim(uuid, ClientRegistry.ClientState.UNSUPPORTED, 8);
+        print("rejected_latches", registry.claim(uuid, ClientRegistry.ClientState.DRIVEN, 22) + " " + registry.state(uuid));
         print("rejected_not_driven", String.valueOf(registry.isDriven(uuid)));
 
         registry.reopen(uuid);
-        print("reopened", registry.state(uuid) + " " + registry.isDriven(uuid));
-        print("after_reopen", registry.claim(uuid, ClientRegistry.ClientState.DRIVEN) + " " + registry.state(uuid));
+        print("reopened", registry.state(uuid) + " " + registry.isDriven(uuid) + " " + registry.versionOf(uuid));
+        print("after_reopen", registry.claim(uuid, ClientRegistry.ClientState.DRIVEN, 19) + " " + registry.state(uuid) + " " + registry.versionOf(uuid));
     }
 
     /** Two handshakes arriving on two netty threads at once: one verdict may land, and it is the one that is kept */
@@ -154,7 +155,7 @@ public final class ClientsProbe {
                     } catch (Exception e) {
                         throw new IllegalStateException(e);
                     }
-                    if (registry.claim(uuid, ClientRegistry.ClientState.DRIVEN)) won.incrementAndGet();
+                    if (registry.claim(uuid, ClientRegistry.ClientState.DRIVEN, 22)) won.incrementAndGet();
                 });
                 threads[i].start();
             }
@@ -327,7 +328,7 @@ def drill_handshake(facts, version, unstable):
     equals(facts, "trailing", f"{version} {str(unstable).lower()}", "a longer packet still reads its version")
 
     print("\nand the one every build before 0.5.0 sent, with no unstable flag behind the id")
-    equals(facts, "legacy", "16 false", "0.4.8 (id 16) is driven, not ignored")
+    equals(facts, "legacy", "16 false", "0.4.8 (id 16) reads back, though nothing below 0.5.0 is driven")
     equals(facts, "legacy_oldest", "0 false", "0.1.2 (id 0), the oldest that sends a version at all")
 
     print("\nthe parse reports the version and judges nothing else")
@@ -358,18 +359,18 @@ def drill_handshake(facts, version, unstable):
 
 def drill_latch(facts):
     print("\nthe verdict is a latch")
-    equals(facts, "absent", "null false", "a client nobody asked reads as null, not as UNKNOWN")
-    equals(facts, "first", "true DRIVEN")
-    equals(facts, "second", "false DRIVEN", "a second handshake cannot downgrade an accepted client")
-    equals(facts, "repeat", "false DRIVEN", "nor can a repeat of the same one")
+    equals(facts, "absent", "null false 0", "a client nobody asked reads as null, not as UNKNOWN")
+    equals(facts, "first", "true DRIVEN 22")
+    equals(facts, "second", "false DRIVEN 22", "a second handshake cannot downgrade an accepted client")
+    equals(facts, "repeat", "false DRIVEN 22", "nor can a repeat of the same one rewrite its version")
     equals(facts, "driven", "true")
-    equals(facts, "forgotten", "null false", "and quit puts it back to never-asked")
+    equals(facts, "forgotten", "null false 0", "and quit puts it back to never-asked")
     equals(facts, "rejected_latches", "false UNSUPPORTED", "a rejected client cannot be talked up either")
     equals(facts, "rejected_not_driven", "false")
 
     print("\nand only a reopen re-arms it")
-    equals(facts, "reopened", "UNKNOWN false", "asked and unanswered is its own state, and drives nothing")
-    equals(facts, "after_reopen", "true DRIVEN")
+    equals(facts, "reopened", "UNKNOWN false 0", "asked and unanswered is its own state, and drives nothing")
+    equals(facts, "after_reopen", "true DRIVEN 19", "and the version it answers with is the one packets are cut to")
 
     print("\nunder two handshakes at once, on two threads")
     for name, note in (("race_fresh", "on a client nobody had claimed"),

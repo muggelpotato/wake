@@ -53,10 +53,14 @@ public final class CommandHelper {
     }
 
     public static @NonNull CompletableFuture<Suggestions> suggestMatching(@NonNull SuggestionsBuilder builder, @NonNull Iterable<String> options) {
-        String remaining = builder.getRemaining().toLowerCase(Locale.ROOT);
+        return suggestMatching(builder, "", options);
+    }
+
+    public static @NonNull CompletableFuture<Suggestions> suggestMatching(@NonNull SuggestionsBuilder builder, @NonNull String committed, @NonNull Iterable<String> options) {
+        String remaining = builder.getRemaining().substring(committed.length()).toLowerCase(Locale.ROOT);
         for (String option : options) {
             if (suggestionMatches(remaining, option.toLowerCase(Locale.ROOT))) {
-                builder.suggest(option);
+                builder.suggest(committed + option);
             }
         }
         return builder.buildFuture();
