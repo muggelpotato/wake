@@ -19,7 +19,6 @@ import java.util.List;
 
 public class HelpCommand {
     private static final String LITERAL = "-help";
-    private static final String KEY_PREFIX = "commands.obu.help.";
 
     public static @NonNull CommandNode getNode(Wake plugin) {
         return CommandNode.literal(LITERAL)
@@ -32,7 +31,7 @@ public class HelpCommand {
         CommandSender sender = ctx.getSource().getSender();
         MessageManager mm = plugin.getMessageManager();
         CommandNode root = WakeCommandManager.rootOf(OBUModule.ID);
-        mm.send(sender, KEY_PREFIX + "header");
+        mm.send(sender, "commands.obu.help.title");
         boolean settingsListed = false;
         for (CommandNode child : root == null ? List.<CommandNode>of() : root.getChildren()) {
             if (child.isArgument() || child.getName().equals(LITERAL)
@@ -42,16 +41,16 @@ public class HelpCommand {
             OBUDefinition def = OBUDefinition.byName(child.getName());
             if (def != null && def != OBUDefinition.reset) {
                 if (!settingsListed) {
-                    mm.send(sender, KEY_PREFIX + "settings");
+                    mm.send(sender, "commands.obu.help.settings");
                     settingsListed = true;
                 }
                 continue;
             }
             String helpKey = child.getHelpKey();
-            mm.send(sender, helpKey != null ? helpKey : KEY_PREFIX + "fallback",
+            mm.send(sender, helpKey != null ? helpKey : "commands.obu.help.fallback",
                     Placeholder.unparsed("command", child.getName()));
         }
-        mm.send(sender, KEY_PREFIX + "wiki");
+        mm.send(sender, "commands.obu.help.wiki");
         return Command.SINGLE_SUCCESS;
     }
 }

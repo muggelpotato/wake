@@ -31,7 +31,7 @@ public class SandboxViewCommand {
         if (context == null) {
             return 0;
         }
-        plugin.getMessageManager().send(sender, "commands.obu.sandbox.header", Placeholder.unparsed("sandbox", OBUContextManager.displayName(context.name())));
+        plugin.getMessageManager().send(sender, "commands.obu.sandbox.title", Placeholder.unparsed("sandbox", OBUContextManager.displayName(context.name())));
         if (context.settings().isEmpty()) {
             plugin.getMessageManager().send(sender, "commands.obu.no_settings");
         } else {

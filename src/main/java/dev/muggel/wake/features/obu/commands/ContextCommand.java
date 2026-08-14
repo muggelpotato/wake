@@ -64,13 +64,13 @@ public class ContextCommand {
             }
         }
         if (!serverContexts.isEmpty()) {
-            plugin.getMessageManager().send(sender, "commands.obu.context.header_server", CommandHelper.hint(plugin, "commands.obu.context.header_server_hint"));
+            plugin.getMessageManager().send(sender, "commands.obu.context.server.title", CommandHelper.hint(plugin, "commands.obu.context.server.hint"));
             for (OBUContext context : serverContexts) {
                 sendContextItem(sender, subject, plugin, context);
             }
         }
         if (!mySandboxes.isEmpty()) {
-            plugin.getMessageManager().send(sender, "commands.obu.context.header_sandbox", CommandHelper.hint(plugin, "commands.obu.context.header_sandbox_hint"));
+            plugin.getMessageManager().send(sender, "commands.obu.context.sandbox.title", CommandHelper.hint(plugin, "commands.obu.context.sandbox.hint"));
             for (OBUContext context : mySandboxes) {
                 sendContextItem(sender, subject, plugin, context);
             }
@@ -141,17 +141,17 @@ public class ContextCommand {
         String shownName = subject instanceof Player ? OBUContextManager.displayName(context.name()) : context.name();
         Component hoverText = getContextHoverComponent(context, plugin, subject, shownName)
                 .append(Component.newline()).append(Component.newline())
-                .append(plugin.getMessageManager().getComponent("commands.obu.context.hover"));
+                .append(plugin.getMessageManager().getComponent("commands.obu.context.item.hover"));
         Component name = Component.text(shownName)
                 .clickEvent(ClickEvent.runCommand("/wobu -context " + shownName))
                 .hoverEvent(HoverEvent.showText(hoverText));
-        plugin.getMessageManager().send(sender, "commands.obu.context.item", Placeholder.component("context", name));
+        plugin.getMessageManager().send(sender, "commands.obu.context.item.text", Placeholder.component("context", name));
     }
 
     private static Component getContextHoverComponent(@NonNull OBUContext context, @NonNull Wake plugin, @NonNull CommandSender subject, @NonNull String shownName) {
         Component hoverText = plugin.getMessageManager().getComponent("commands.obu.context.settings", Placeholder.unparsed("context", shownName));
         if (context.settings().isEmpty()) {
-            return hoverText.append(Component.newline()).append(plugin.getMessageManager().getComponent("commands.obu.status.collapsed_no_settings"));
+            return hoverText.append(Component.newline()).append(plugin.getMessageManager().getComponent("commands.obu.status.collapsed.no_settings"));
         }
         for (OBUSetting setting : context.settings()) {
             hoverText = hoverText.append(Component.newline()).append(OBUCommandHelper.settingLine(plugin, subject, setting, true));

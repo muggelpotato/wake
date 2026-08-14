@@ -195,7 +195,7 @@ def drill_toggles(rcon: Rcon, mariadb):
     """A switch has to name what it changed and reach the database, not only the cache."""
     step("a switch confirms what it set and lands in the database")
     for command, key, feature in [("wake hints", "core.show_hints", "Hints"),
-                                  ("wake killboatonexit", "core.killboatonexit", "Auto-kill boat")]:
+                                  ("wake killboatonexit", "core.killboatonexit", "Kill boat on exit")]:
         before = state(key, mariadb)
         reply = rcon.run(f"{command} true")
         time.sleep(SETTLE)

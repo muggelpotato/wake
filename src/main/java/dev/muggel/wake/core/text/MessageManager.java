@@ -6,11 +6,11 @@ import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.ParsingException;
 import net.kyori.adventure.text.minimessage.tag.Tag;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.minimessage.tag.standard.StandardTags;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.intellij.lang.annotations.Subst;
 import org.jspecify.annotations.NonNull;
 
 import java.io.File;
@@ -20,6 +20,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,16 +29,20 @@ import java.util.regex.Pattern;
 
 /**
  * Resolves message keys from the configured language file into components and sends them. <br>
- * Understands MiniMessage, Wake's semantic color tags ({@code <primary>}, {@code <danger>}, ...) and the {@code <prefix>} placeholder. <br>
+ * Understands MiniMessage, Wake's semantic color tags ({@code <primary>}, {@code <danger>}, ...) and the {@code templates} section. <br>
  * {@code $primary}, {@code $secondary} etc. expand to the same colors hex values, for tags that take a color argument. <br>
  * The palette is the file's {@code colors} section. A color it leaves out or spells wrong falls back to {@link WakeColors}. <br>
- * A name two of those claim is answered by the nearest: a caller's placeholder, then {@code <prefix>}, then the palette, then MiniMessage itself. <br>
+ * A name two of those claim is answered by the nearest: a caller's placeholder, then a template, then the palette, then MiniMessage itself. <br>
  * See the package documentation for the text rules.
  */
 public class MessageManager {
     private static final String DEFAULT_LANGUAGE = "en_us";
     private static final String COLOR_KEY = "colors.";
+    private static final String TEMPLATE_KEY = "templates.";
+    private static final String TEMPLATE_TEXT = "<text>";
     private static final Pattern PALETTE_VARIABLE = Pattern.compile("\\$([a-z_]+)");
+    private static final Pattern TEMPLATE_NAME = Pattern.compile("[a-z][a-z0-9_]*");
+    private static final Pattern OPENING_TAG = Pattern.compile("<([a-z][a-z0-9_]*)[:>]");
     private final Wake plugin;
     private final Set<String> warnedMissingKeys = ConcurrentHashMap.newKeySet();
     private volatile Language language;
@@ -71,7 +76,58 @@ public class MessageManager {
         MiniMessage miniMessage = miniMessage(palette);
         Map<String, String> templates = templates(entries, palette);
         warnedMissingKeys.clear();
-        this.language = new Language(templates, Placeholder.component("prefix", render(miniMessage, "prefix", templates.getOrDefault("prefix", ""))), miniMessage);
+        this.language = new Language(templates, shared(templates), miniMessage);
+    }
+
+    private @NonNull TagResolver shared(@NonNull Map<String, String> templates) {
+        TagResolver.Builder builder = TagResolver.builder();
+        templates.forEach((key, raw) -> {
+            if (!key.startsWith(TEMPLATE_KEY)) {
+                return;
+            }
+            @Subst("row") String name = key.substring(TEMPLATE_KEY.length());
+            if (!TEMPLATE_NAME.matcher(name).matches()) {
+                plugin.getLogger().warning("Skipping template '" + name + "': a template has to match " + TEMPLATE_NAME.pattern());
+                return;
+            }
+            if (taken(name)) {
+                plugin.getLogger().warning("Skipping template '" + name + "': that name is already a color or MiniMessage tag");
+                return;
+            }
+            if (leansOnItself(templates, name, name, new HashSet<>())) {
+                plugin.getLogger().warning("Skipping template '" + name + "': it leads back to itself and would loop indefinitely");
+                return;
+            }
+            builder.tag(name, (args, ctx) -> Tag.preProcessParsed(
+                    raw.replace(TEMPLATE_TEXT, args.hasNext() ? args.pop().value() : "")));
+        });
+        return builder.build();
+    }
+
+    private static boolean taken(@NonNull String name) {
+        for (WakeColors color : WakeColors.values()) {
+            if (color.tag().equals(name)) {
+                return true;
+            }
+        }
+        return StandardTags.defaults().has(name);
+    }
+
+    private static boolean leansOnItself(@NonNull Map<String, String> templates, @NonNull String start, @NonNull String name, @NonNull Set<String> seen) {
+        if (!seen.add(name) || taken(name)) {
+            return false;
+        }
+        String raw = templates.get(TEMPLATE_KEY + name);
+        if (raw == null) {
+            return false;
+        }
+        for (Matcher match = OPENING_TAG.matcher(raw); match.find(); ) {
+            String used = match.group(1);
+            if (used.equals(start) || leansOnItself(templates, start, used, seen)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static int collect(@NonNull YamlConfiguration source, @NonNull Map<String, String> into) {
@@ -132,7 +188,7 @@ public class MessageManager {
             }
             return Component.text("<" + key + ">");
         }
-        return render(loaded.miniMessage(), key, template, TagResolver.resolver(loaded.prefix(), TagResolver.resolver(resolvers)));
+        return render(loaded.miniMessage(), key, template, TagResolver.resolver(loaded.shared(), TagResolver.resolver(resolvers)));
     }
 
     public void send(@NonNull CommandSender sender, @NonNull String key, TagResolver... resolvers) {
@@ -164,7 +220,7 @@ public class MessageManager {
         }
     }
 
-    private record Language(Map<String, String> templates, TagResolver prefix, MiniMessage miniMessage) {
+    private record Language(Map<String, String> templates, TagResolver shared, MiniMessage miniMessage) {
         Language {
             templates = Map.copyOf(templates);
         }

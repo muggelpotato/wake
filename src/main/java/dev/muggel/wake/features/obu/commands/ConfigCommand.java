@@ -51,23 +51,29 @@ public class ConfigCommand {
                 row(plugin, HandshakeListener.STATE_KEY_UPDATE_NAG, HandshakeListener.DEFAULT_UPDATE_NAG, "words.feature.update_nag"),
                 row(plugin, ContextDelivery.STATE_KEY_INTERPOLATION_TEN, ContextDelivery.DEFAULT_INTERPOLATION_TEN, "words.feature.setinterpolationten"),
                 purgeRow(plugin));
-        plugin.getMessageManager().send(sender, "commands.obu.config.overview",
+        plugin.getMessageManager().send(sender, "commands.obu.config.overview.layout",
                 Placeholder.component("rows", Component.join(JoinConfiguration.newlines(), rows)),
-                CommandHelper.hint(plugin, "commands.obu.config.overview_hint"));
+                CommandHelper.hint(plugin, "commands.obu.config.overview.hint"));
         return Command.SINGLE_SUCCESS;
     }
 
     private static @NonNull Component row(@NonNull Wake plugin, @NonNull String stateKey, boolean fallback, @NonNull String featureKey) {
         MessageManager messages = plugin.getMessageManager();
-        String key = plugin.getStateDao().get(stateKey, fallback) ? "commands.obu.config.row_on" : "commands.obu.config.row_off";
+        String key = plugin.getStateDao().get(stateKey, fallback)
+                ? "commands.obu.config.overview.rows.switch_enabled"
+                : "commands.obu.config.overview.rows.switch_disabled";
         return messages.getComponent(key, Placeholder.component("name", messages.getComponent(featureKey)));
+    }
+
+    private static @NonNull Component countRow(@NonNull Wake plugin, @NonNull String key, int count) {
+        return plugin.getMessageManager().getComponent(key, Placeholder.unparsed("count", String.valueOf(count)));
     }
 
     private static @NonNull Component purgeRow(@NonNull Wake plugin) {
         String keep = SandboxPurger.configuredKeep(plugin);
         return SandboxPurger.parseKeepMillis(keep) > 0
-                ? plugin.getMessageManager().getComponent("commands.obu.config.purge_row", Placeholder.unparsed("duration", keep))
-                : plugin.getMessageManager().getComponent("commands.obu.config.purge_row_off");
+                ? plugin.getMessageManager().getComponent("commands.obu.config.overview.rows.purge", Placeholder.unparsed("duration", keep))
+                : plugin.getMessageManager().getComponent("commands.obu.config.overview.rows.purge_unset");
     }
 
     private static int executeContextCount(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
@@ -77,10 +83,12 @@ public class ConfigCommand {
             plugin.getMessageManager().send(sender, "commands.obu.config.context_unavailable");
             return 0;
         }
-        plugin.getMessageManager().send(sender, "commands.obu.config.context_count",
-                Placeholder.unparsed("server", String.valueOf(counts.serverContexts())),
-                Placeholder.unparsed("sandboxes", String.valueOf(counts.sandboxes())),
-                Placeholder.unparsed("total", String.valueOf(counts.total())));
+        List<Component> rows = List.of(
+                countRow(plugin, "commands.obu.config.contexts.server", counts.serverContexts()),
+                countRow(plugin, "commands.obu.config.contexts.sandboxes", counts.sandboxes()),
+                countRow(plugin, "commands.obu.config.contexts.total", counts.total()));
+        plugin.getMessageManager().send(sender, "commands.obu.config.contexts.layout",
+                Placeholder.component("rows", Component.join(JoinConfiguration.newlines(), rows)));
         return Command.SINGLE_SUCCESS;
     }
 

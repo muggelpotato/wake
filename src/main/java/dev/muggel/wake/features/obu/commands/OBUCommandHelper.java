@@ -184,7 +184,7 @@ public final class OBUCommandHelper {
 
     public static @NonNull Component settingLine(@NonNull Wake plugin, @NonNull CommandSender subject, @NonNull OBUSetting setting, boolean inHover, boolean shadowed, @NonNull Set<String> struck) {
         String key = inHover
-                ? (shadowed ? "commands.obu.status.collapsed_line_overridden" : "commands.obu.status.collapsed_line")
+                ? (shadowed ? "commands.obu.status.collapsed.line_overridden" : "commands.obu.status.collapsed.line")
                 : (shadowed ? "commands.obu.status.overridden" : "commands.obu.status.line");
         Component line = plugin.getMessageManager().getComponent(key, Placeholder.unparsed("name", setting.definition().name()), Placeholder.component("value", displayValue(plugin, setting, inHover, struck)));
         return line.append(outdatedBadge(plugin, subject, setting));
@@ -192,7 +192,7 @@ public final class OBUCommandHelper {
 
     public static @NonNull Component outdatedBadge(@NonNull Wake plugin, @NonNull CommandSender subject, @NonNull OBUSetting setting) {
         return pastClient(plugin, subject, setting)
-                ? plugin.getMessageManager().getComponent("commands.obu.status.outdated_suffix")
+                ? plugin.getMessageManager().getComponent("commands.obu.status.suffix.outdated")
                 : Component.empty();
     }
 
@@ -241,16 +241,16 @@ public final class OBUCommandHelper {
     }
 
     private static @NonNull Component collapsed(@NonNull Wake plugin, @NonNull List<String> entries, @NonNull Set<String> struck) {
-        Component hover = plugin.getMessageManager().getComponent("commands.obu.status.collapsed_header", Placeholder.unparsed("count", String.valueOf(entries.size())));
+        Component hover = plugin.getMessageManager().getComponent("commands.obu.status.collapsed.title", Placeholder.unparsed("count", String.valueOf(entries.size())));
         for (String entry : entries) {
-            hover = hover.append(Component.newline()).append(plugin.getMessageManager().getComponent(struck.contains(entry) ? "commands.obu.status.collapsed_entry_overridden" : "commands.obu.status.collapsed_entry",
+            hover = hover.append(Component.newline()).append(plugin.getMessageManager().getComponent(struck.contains(entry) ? "commands.obu.status.collapsed.entry_overridden" : "commands.obu.status.collapsed.entry",
                     Placeholder.unparsed("entry", entry)));
         }
         return countChip(plugin, entries.size(), struck.containsAll(entries)).hoverEvent(HoverEvent.showText(hover));
     }
 
     public static @NonNull Component countChip(@NonNull Wake plugin, int count, boolean struck) {
-        return plugin.getMessageManager().getComponent(struck ? "commands.obu.status.collapsed_count_overridden" : "commands.obu.status.collapsed_count",
+        return plugin.getMessageManager().getComponent(struck ? "commands.obu.status.collapsed.count_overridden" : "commands.obu.status.collapsed.count",
                 Placeholder.unparsed("count", String.valueOf(count)));
     }
 

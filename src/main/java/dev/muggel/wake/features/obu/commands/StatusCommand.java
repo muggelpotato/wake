@@ -47,10 +47,10 @@ public class StatusCommand {
                 ? Map.of()
                 : OBUCommandHelper.sync(plugin).getLocalOverrides(boat.getUniqueId());
         String sandbox = OBUCommandHelper.active(plugin).sandboxOf(player.getUniqueId());
-        plugin.getMessageManager().send(sender, "commands.obu.status.player", CommandHelper.hint(plugin, sandbox == null ? "commands.obu.status.player_hint" : null));
+        plugin.getMessageManager().send(sender, "commands.obu.status.player.title", CommandHelper.hint(plugin, sandbox == null ? "commands.obu.status.player.hint" : null));
         List<OBUSetting> playerHeld = printPlayerSection(plugin, sender, player, sandbox, ridden == null ? List.of() : List.copyOf(boatOverrides.values()));
         if (boat != null) {
-            plugin.getMessageManager().send(sender, "commands.obu.status.boat", CommandHelper.hint(plugin, "commands.obu.status.boat_hint"));
+            plugin.getMessageManager().send(sender, "commands.obu.status.boat.title", CommandHelper.hint(plugin, "commands.obu.status.boat.hint"));
             printBoatSection(plugin, sender, player, boat, boatOverrides, ridden == null ? List.of() : playerHeld);
         }
         return Command.SINGLE_SUCCESS;
@@ -73,7 +73,7 @@ public class StatusCommand {
             held.addAll(inherited);
         }
         if (!overrides.isEmpty()) {
-            plugin.getMessageManager().send(sender, "commands.obu.status.temp", CommandHelper.hint(plugin, "commands.obu.status.temp_hint"));
+            plugin.getMessageManager().send(sender, "commands.obu.status.temp.title", CommandHelper.hint(plugin, "commands.obu.status.temp.hint"));
             printSettings(plugin, sender, player, List.copyOf(overrides.values()), List.of(), boatAbove);
         }
         return held;
@@ -98,7 +98,7 @@ public class StatusCommand {
             printLayers(plugin, sender, subject, base, inheritedDefaults(contextManager, base), above, List.of());
         }
         if (!overrides.isEmpty()) {
-            plugin.getMessageManager().send(sender, "commands.obu.status.temp", CommandHelper.hint(plugin, "commands.obu.status.temp_hint"));
+            plugin.getMessageManager().send(sender, "commands.obu.status.temp.title", CommandHelper.hint(plugin, "commands.obu.status.temp.hint"));
             printSettings(plugin, sender, subject, List.copyOf(overrides.values()), List.of(), List.of());
         }
     }
@@ -131,9 +131,9 @@ public class StatusCommand {
         }
         Component chip = OBUCommandHelper.countChip(plugin, settings.size(), allShadowed).hoverEvent(HoverEvent.showText(hover));
         Component line = plugin.getMessageManager().getComponent(
-                allShadowed ? "commands.obu.status.collapsed_layer_overridden" : "commands.obu.status.collapsed_layer",
+                allShadowed ? "commands.obu.status.collapsed.layer_overridden" : "commands.obu.status.collapsed.layer",
                 Placeholder.component("count", chip));
-        audience.sendMessage(allShadowed ? line.append(plugin.getMessageManager().getComponent("commands.obu.status.suffix")) : line);
+        audience.sendMessage(allShadowed ? line.append(plugin.getMessageManager().getComponent("commands.obu.status.suffix.context")) : line);
     }
 
     private static void printSettings(Wake plugin, CommandSender audience, @NonNull Player subject, @NonNull List<OBUSetting> settings, @NonNull List<OBUSetting> above, @NonNull List<OBUSetting> boatAbove) {
@@ -159,7 +159,7 @@ public class StatusCommand {
         if (!boatHolds && !holds(above, key) && !SettingMerge.coversEntries(setting, struck)) {
             return new Shadow(struck, null);
         }
-        return new Shadow(struck, boatHolds || !byBoat.isEmpty() ? "commands.obu.status.boat_suffix" : "commands.obu.status.suffix");
+        return new Shadow(struck, boatHolds || !byBoat.isEmpty() ? "commands.obu.status.suffix.boat" : "commands.obu.status.suffix.context");
     }
 
     private static boolean holds(@NonNull List<OBUSetting> layer, @NonNull String uniqueKey) {

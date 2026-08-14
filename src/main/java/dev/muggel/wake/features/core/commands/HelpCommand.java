@@ -33,7 +33,7 @@ public class HelpCommand {
     private static int execute(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
         MessageManager mm = plugin.getMessageManager();
-        mm.send(sender, "commands.help.header");
+        mm.send(sender, "commands.help.title");
         for (CommandNode root : WakeCommandManager.rootsVisibleTo(plugin, sender)) {
             mm.send(sender, "commands.help.entry",
                     Placeholder.parsed("command", root.getName()),
@@ -46,30 +46,30 @@ public class HelpCommand {
 
     private static @NonNull Component aliasText(@NonNull MessageManager mm, @NonNull CommandNode root) {
         List<Component> aliases = root.getAliases().stream()
-                .map(alias -> mm.getComponent("commands.help.alias", Placeholder.unparsed("alias", alias)))
+                .map(alias -> mm.getComponent("commands.help.aliases.one", Placeholder.unparsed("alias", alias)))
                 .toList();
         if (aliases.isEmpty()) {
             return Component.empty();
         }
-        return mm.getComponent("commands.help.aliases",
+        return mm.getComponent("commands.help.aliases.list",
                 Placeholder.component("aliases", Component.join(ALIAS_SEPARATOR, aliases)));
     }
 
     private static @NonNull Component subcommandHover(@NonNull MessageManager mm, @NonNull CommandSender sender, @NonNull CommandNode root) {
         List<Component> lines = new ArrayList<>();
-        lines.add(mm.getComponent("commands.help.hover_header",
+        lines.add(mm.getComponent("commands.help.hover.title",
                 Placeholder.unparsed("command", root.getName())));
         List<CommandNode> literals = root.getChildren().stream()
                 .filter(child -> !child.isArgument() && PermissionManager.canReach(sender, child.getPermission()))
                 .sorted(Comparator.comparing(CommandNode::getName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
         for (CommandNode child : literals.subList(0, Math.min(literals.size(), HOVER_SUBCOMMAND_CAP))) {
-            lines.add(mm.getComponent("commands.help.hover_line",
+            lines.add(mm.getComponent("commands.help.hover.line",
                     Placeholder.unparsed("command", root.getName()),
                     Placeholder.unparsed("sub", child.getName())));
         }
         if (literals.size() > HOVER_SUBCOMMAND_CAP) {
-            lines.add(mm.getComponent("commands.help.hover_more",
+            lines.add(mm.getComponent("commands.help.hover.more",
                     Placeholder.unparsed("count", String.valueOf(literals.size() - HOVER_SUBCOMMAND_CAP))));
         }
         return Component.join(JoinConfiguration.newlines(), lines);

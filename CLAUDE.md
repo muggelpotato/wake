@@ -99,7 +99,24 @@ A key is a permanent name. A deployed language file is never overwritten and the
 backfills the keys it does not define, so adding a key is free and deleting one nothing reads is
 safe — but renaming or repurposing a name silently renders the old text on every existing install.
 Every key the code asks for exists in the bundled file, and every key the bundled file carries is
-reachable from code: both directions are checked by `drills_text.py`, not by eye.
+reachable from code: both directions are checked by `drills_text.py`, not by eye. A key the code
+already knows is written out in full at the call site — never assembled from a constant and a tail —
+because both those checks read literals, and a key that is only ever half-written is credited to its
+prefix and asked about by nobody. Build a key only where the tail is genuinely computed.
+
+Shared decoration — the bullet, the prefix, a header's rule — lives in the file's `templates` section
+and is reached as a tag, so restyling every message that leans on one is a single edit. A template
+carries decoration and never wording, or a feature's own sentence becomes something no other message
+can reuse; a message spelling a template's decoration out by hand is the drift templates exist to end,
+and is rejected. A template name must be free in three vocabularies at once — the palette, MiniMessage
+and the placeholders the plugin fills — because it answers before the first two and after the third:
+one taking a colour's name replaces that colour everywhere, one taking a placeholder's name applies
+only in the messages that leave the value unfilled.
+
+A key that both holds text and owns parts cannot exist: YAML gives a name one node. The parent's own
+string is therefore a child, named for what it is — `title` for a header line, `layout` for a panel's
+arrangement, `text` otherwise. A `layout` holds arrangement and the panel's own title, never a
+sentence spread across its parts, or reordering it splits one in half.
 
 ## Data & persistence
 

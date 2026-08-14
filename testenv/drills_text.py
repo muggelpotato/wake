@@ -13,11 +13,11 @@ it, in both directions.
 The second half is the loading half, which only a reload can show: a deployed file overriding the
 bundled one key by key, a key deleted out of it falling back rather than reaching the player as
 `<some.key>`, a value that is not a string, one an admin blanked, a tag it cannot resolve, a file
-that is not YAML at all, one the server cannot open, a colour an admin recoloured and one they spelled
-wrong, and a language that is not there. Plus the four things every message depends on -- the palette
-reaching the client in both its `<tag>` and its `$var` form, the hints switch taking the bulb away,
-the keys the code builds by concatenation resolving to something, and a value the player chose
-arriving as text rather than as markup.
+that is not YAML at all, one the server cannot open, a template the resolver has to drop, a colour an
+admin recoloured and one they spelled wrong, and a language that is not there. Plus the four things
+every message depends on -- the palette reaching the client in both its `<tag>` and its `$var` form,
+the hints switch taking the bulb away, the keys the code builds by concatenation resolving to
+something, and a value the player chose arriving as text rather than as markup.
 
     python testenv/drills_text.py
 
@@ -68,12 +68,16 @@ HINT_CALL = re.compile(r"\bhint\(")
 HINT = re.compile(r"\bhint\b")
 # a key the source hands around under a name instead of writing it into the call
 LOCAL_KEY = re.compile(r"\bString (\w+) = ([^;]+);")
+# a constant holding the front of a key, and the place a literal tail is joined onto one
+CONSTANT_KEY = re.compile(r'\bString (\w+) = "([a-z][a-z0-9_.]*)"')
+JOINED_KEY = re.compile(r'\b(\w+) \+ "([a-z][a-z0-9_]*)"')
 
-# the message every live check reads back: a refusal a console can always provoke, carrying the
-# prefix's $variables, an <accent> tag and a value the sender chose
+# the message every live check reads back: a refusal a console can always provoke. It leads with a
+# template that leads with another, so the chain, the prefix's $variables, an <accent> tag and a
+# value the sender chose are all read back from one line
 PROBE = "wo -context -delete zzz-no-such-context"
 PROBE_KEY = "commands.obu.context.missing"
-PROBE_TEMPLATE = '"<prefix><danger>Context <accent><context></accent> does not exist</danger>"'
+PROBE_TEMPLATE = '"<alert>Context <accent><context></accent> does not exist"'
 
 failures = []
 rcon = None
@@ -140,27 +144,38 @@ def header_tags(comments):
 
 
 def source_keys(lang_roots, config_keys):
-    """Message keys named in the source: the exact ones, and the prefixes a key is built onto."""
-    exact, prefixes = {}, {}
+    """Message keys named in the source: the exact ones, the prefixes a key is built onto, and the
+    ones only half written -- a constant holding the front, a literal tail joined onto it. Both checks
+    below read literals, so a key spelled `PREFIX + "title"` is credited to its prefix and asked about
+    by nobody: it is a finding, not a spelling to put back together."""
+    exact, prefixes, halves = {}, {}, {}
     for file in sorted(SRC.rglob("*.java")):
-        for literal in KEY_LITERAL.findall(file.read_text(encoding="utf-8")):
+        text = file.read_text(encoding="utf-8")
+        for literal in KEY_LITERAL.findall(text):
             if literal.split(".")[0] not in lang_roots or literal in config_keys:
                 continue
             (prefixes if literal.endswith(".") else exact).setdefault(literal, file)
-    return exact, prefixes
+        named = {name: value for name, value in CONSTANT_KEY.findall(text) if value.endswith(".")}
+        for name, tail in JOINED_KEY.findall(text):
+            if name in named and (named[name] + tail).split(".")[0] in lang_roots:
+                halves.setdefault(named[name] + tail, file)
+    return exact, prefixes, halves
 
 
-def drill_keys(lang, exact, prefixes):
+def drill_keys(lang, exact, prefixes, halves):
     print("\nthe code and the language file name the same keys")
     missing = {key: path for key, path in exact.items() if key not in lang}
     for key, path in sorted(missing.items()):
         bad("key with no entry", f"{key} <- {path.relative_to(ROOT)}")
-    if not missing:
-        ok(f"all {len(exact)} keys the code asks for have an entry")
+    for key, path in sorted(halves.items()):
+        bad("key assembled from a constant and a tail", f"{key} <- {path.relative_to(ROOT)}")
+    if not missing and not halves:
+        ok(f"all {len(exact)} keys the code asks for have an entry, and each is written out in full")
 
     step(f"credited by a prefix the code builds onto: {', '.join(sorted(prefixes)) or 'none'}")
-    # `prefix` is the one key MessageManager reads by name rather than through a call site
-    unreached = [key for key in lang if key != "prefix" and key not in exact
+    # a template is credited by `templates.`, the prefix MessageManager reads them under; what asks
+    # whether the messages still lean on each of them is drill_templates
+    unreached = [key for key in lang if key not in exact
                  and not any(key.startswith(name) for name in prefixes)]
     for key in unreached:
         bad("entry nothing reads", key)
@@ -207,10 +222,52 @@ def drill_palette(lang, comments):
         bad("header $variables", f"{sorted(variables)} vs {sorted(palette())}")
 
 
+def templates(lang):
+    """The shared fragments every message may lean on, as {name: raw}."""
+    return {key.split(".", 1)[1]: value for key, value in lang.items() if key.startswith("templates.")}
+
+
+def drill_templates(lang, comments):
+    print("\nthe templates every message leans on")
+    shared = templates(lang)
+    messages = {key: value for key, value in lang.items() if not key.startswith("templates.")}
+    used = {tag for value in messages.values() for tag in PLAIN_TAG.findall(value)}
+    used |= {name for value in messages.values() for name in re.findall(r"<([a-z][a-z0-9_]*):'", value)}
+
+    # a template nothing leans on is decoration an admin would edit and never see move
+    for name in sorted(set(shared) - used):
+        bad("template nothing uses", name)
+    if set(shared) <= used:
+        ok(f"each of the {len(shared)} templates is used by at least one message")
+
+    # a placeholder answers before a template, so one taking a name the plugin fills would apply only
+    # in the messages that leave it unfilled: one name meaning two things, decided by the call site
+    listed = next((comments[at + 1] for at, line in enumerate(comments[:-1])
+                   if "Dynamic placeholders" in line), "")
+    filled = set(re.findall(r"<([a-z_]+)>", listed))
+    stolen = sorted(set(shared) & (filled | STANDARD_TAGS | set(palette())))
+    for name in stolen:
+        bad("template on a name that is already answered", name)
+    if not stolen:
+        ok("and none of them takes a name a placeholder, a colour or MiniMessage already answers to")
+
+    # a message spelling out what a template holds is the drift the templates exist to end -- including
+    # mid-value, which is where a panel that arranges its own rows hides one
+    spelled = sorted({key for key, value in messages.items()
+                      for name, raw in shared.items()
+                      if "<text>" not in raw and len(raw) > 8 and raw in value})
+    for key in spelled:
+        bad("message spells out a template instead of using it", key)
+    if not spelled:
+        ok("and no message writes a template's decoration out by hand, at the front or inside")
+
+
 def drill_placeholders(lang, comments):
     print("\nthe header names exactly the placeholders the file uses")
-    used = {tag for value in lang.values() for tag in PLAIN_TAG.findall(value)}
-    used -= STANDARD_TAGS | set(palette()) | {"prefix"}
+    shared = templates(lang)
+    used = {tag for key, value in lang.items() if not key.startswith("templates.")
+            for tag in PLAIN_TAG.findall(value)}
+    used -= STANDARD_TAGS | set(palette()) | set(shared)
     listed = next((comments[at + 1] for at, line in enumerate(comments[:-1])
                    if "Dynamic placeholders" in line), "")
     declared = set(re.findall(r"<([a-z_]+)>", listed))
@@ -223,11 +280,11 @@ def drill_placeholders(lang, comments):
 
     # a placeholder answers before both, and only in the messages that supply it: a name it shares
     # with a colour is that colour everywhere else and the placeholder here
-    taken = sorted(declared & (STANDARD_TAGS | set(palette()) | {"prefix"}))
+    taken = sorted(declared & (STANDARD_TAGS | set(palette()) | set(templates(lang))))
     for name in taken:
         bad("placeholder on a name that is taken", name)
     if not taken:
-        ok("and no placeholder name is one a colour tag or MiniMessage already answers to")
+        ok("and no placeholder name is one a colour tag, a template or MiniMessage already answers to")
 
 
 def arguments(text, at):
@@ -416,7 +473,7 @@ def drill_deployed_file():
 def drill_unresolvable_tag():
     print("\na tag MiniMessage cannot resolve costs that tag, not the message")
     original = deploy(lambda text: text.replace(
-        PROBE_TEMPLATE, '"<prefix><danger>Context <click:run_command><context> does not exist</danger>"'))
+        PROBE_TEMPLATE, '"<alert>Context <click:run_command><context> does not exist"'))
     try:
         rcon.run("wake reload")
         reply = rcon.run(PROBE)
@@ -433,11 +490,12 @@ def drill_legacy_code():
     print("\na legacy § code is the one thing that costs the whole message")
     log = Log()
     original = deploy(lambda text: text.replace(
-        PROBE_TEMPLATE, '"<prefix><danger>Context §cdoes not exist</danger>"'))
+        PROBE_TEMPLATE, '"<alert>Context §cdoes not exist"'))
     try:
         rcon.run("wake reload")
         reply = rcon.run(PROBE)
-        if "<prefix>" in reply:
+        # the fallback is the template verbatim, so the template tag it leads with is still a tag here
+        if "<alert>" in reply:
             ok("it arrives as plain text, tags and all")
         else:
             bad("legacy code", reply)
@@ -481,6 +539,31 @@ def drill_unreadable_file():
         rcon.run("wake reload")
 
 
+def drill_broken_templates():
+    print("\na template the resolver cannot take is dropped by name, and costs no message")
+    log = Log()
+    # a cycle written with an argument, a name no tag could carry, and one the palette already holds
+    # -- the last one written to lead back to `alert`, which is a cycle only if it were ever a template
+    extra = "  loop: \"<loop:'x'>\"\n  bad-name: \"x\"\n  danger: \"<alert>\"\n"
+    original = deploy(lambda text: text.replace('  prefix: "', extra + '  prefix: "'))
+    try:
+        rcon.run("wake reload")
+        for name, why in (("loop", "a cycle"), ("bad-name", "a name no tag could carry"),
+                          ("danger", "a name the palette already answers to")):
+            if log.await_line(f"Skipping template '{name}'", 5):
+                ok(f"{why} is named on the console")
+            else:
+                bad(f"template {name}", "no warning in the log")
+        # the probe leads with <alert>, so its colour off the wire says both that the palette answered
+        # <danger> rather than the entry under it, and that <alert> was not dropped for leading there
+        if palette()["danger"].upper() in colours(rcon.raw(PROBE)):
+            ok("and the message leading with <alert> still renders in the palette's colour")
+        else:
+            bad("template on a taken name", sorted(colours(rcon.raw(PROBE))))
+    finally:
+        restore(original)
+
+
 def drill_palette_override():
     print("\nthe colour an admin spells is the colour that renders")
     default = palette()
@@ -514,7 +597,7 @@ def drill_palette_override():
 def drill_unknown_variable():
     print("\nan unknown $token is left as the admin wrote it")
     original = deploy(lambda text: text.replace(
-        PROBE_TEMPLATE, '"<prefix><danger>Context $notacolour does not exist</danger>"'))
+        PROBE_TEMPLATE, '"<alert>Context $notacolour does not exist"'))
     try:
         reload_and_expect("it survives to the client verbatim", "$notacolour")
     finally:
@@ -547,9 +630,10 @@ def main():
 
     lang, comments = read_yaml(LANG)
     config_keys, _ = read_yaml(BUNDLED_CONFIG)
-    exact, prefixes = source_keys({key.split(".")[0] for key in lang}, config_keys)
-    drill_keys(lang, exact, prefixes)
+    exact, prefixes, halves = source_keys({key.split(".")[0] for key in lang}, config_keys)
+    drill_keys(lang, exact, prefixes, halves)
     drill_palette(lang, comments)
+    drill_templates(messages(lang), comments)
     drill_placeholders(messages(lang), comments)
     drill_hints(messages(lang))
 
@@ -569,6 +653,7 @@ def main():
     drill_legacy_code()
     drill_broken_file()
     drill_unreadable_file()
+    drill_broken_templates()
     drill_palette_override()
     drill_unknown_variable()
     drill_unknown_language()
