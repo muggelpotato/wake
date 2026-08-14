@@ -19,18 +19,14 @@ reviews:
   auto_review:
     enabled: false
   path_filters:
-    - "!**/build/**"
-    - "!**/.gradle/**"
-    - "!**/.idea/**"
-    - "!**/run/**"
-    - "!**/temp/**"
-    - "!gradle/wrapper/**"
-    - "!**/*.jar"
-    - "!**/*.class"
-    - "!.claude/**"
-    - "!gradlew"
-    - "!gradlew.bat"
-    - "!testenv/**"
+    - "src/main/java/dev/muggel/wake/features/obu/**"
+    - "src/main/java/dev/muggel/wake/core/commands/**"
+    - "src/main/java/dev/muggel/wake/core/database/**"
+    - "src/main/java/dev/muggel/wake/core/module/**"
+    - "src/main/java/dev/muggel/wake/core/text/**"
+    - "src/main/java/dev/muggel/wake/core/Scheduling.java"
+    - "CLAUDE.md"
+    - ".ast-grep/**"
   pre_merge_checks:
     docstrings:
       mode: "off"
