@@ -1,0 +1,21 @@
+id: no-sql-concatenation
+language: Java
+severity: error
+message: SQL built by concatenation — bind the value as a `?` parameter instead.
+note: |
+  CLAUDE.md (Data & persistence): SQL must be parameterized. A value spliced into the query text is
+  an injection hole the moment it comes from a player (context and sandbox names do), and it defeats
+  statement caching on both supported databases. Pass `?` in the query and the value as a parameter:
+  `asyncUpdate(msg, "UPDATE t SET c = ? WHERE k = ?", value, key)`, or build a `SqlStatement` the
+  same way. Only `core/database` may assemble query text, and only to name columns and expand a
+  fixed number of placeholders — never a value.
+ignores:
+  # The layer that owns query assembly: WakeDao.selectByKeys expands `?` placeholders for an IN list.
+  - "**/wake/core/database/*.java"
+rule:
+  any:
+    - pattern: DB.$METHOD($A + $B, $$$REST)
+    - pattern: DB.$METHOD($A + $B)
+    - pattern: $STM.executeUpdateQuery($A + $B, $$$REST)
+    - pattern: $STM.executeUpdateQuery($A + $B)
+    - pattern: new SqlStatement($A + $B, $$$REST)

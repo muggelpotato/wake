@@ -1,7 +1,7 @@
 id: no-direct-register-events
 language: Java
 severity: warning
-message: Direct registerEvents — use AbstractModule.registerListener so it auto-unregisters.
+message: Direct registerEvents — use WakeModule.registerListener so it auto-unregisters.
 note: |
   CLAUDE.md (Architecture 3): `registerListener`/`registerPacketListener` unregister
   automatically on module disable. Registering directly leaks the listener when the module is
@@ -9,8 +9,15 @@ note: |
   performance — it must own an `unregister()` that `onModuleDisable` calls.
 ignores:
   # The registration helper is the one place that must call Bukkit directly.
-  - "**/AbstractModule.java"
+  - "**/wake/core/module/WakeModule.java"
   # Conditional self-registration for a hot event; owns its own unregister().
   - "**/BoostpadDetectorListener.java"
+  # Records player moves only while a feature claims it; release() unregisters, called from the consumer's unregister().
+  - "**/VehiclePath.java"
+  # Database-layer plumbing that outlives every module: the outage notice is not a module's to send.
+  # Unregisters itself in shutdown().
+  - "**/DatabaseManager.java"
+  # The plugin's own bootstrap: core listeners live as long as Wake does and Bukkit drops them on disable.
+  - "**/Wake.java"
 rule:
   pattern: $P.getPluginManager().registerEvents($$$)

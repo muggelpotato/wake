@@ -1,0 +1,17 @@
+id: no-handwritten-permission
+language: Java
+severity: error
+message: Hand-written Wake permission string — permissions are derived from the command tree.
+note: |
+  CLAUDE.md (Commands): every permission is derived as `wake.<module>.commands.<literal>...`
+  from the node path, so a literal written here drifts the moment a command is renamed or
+  moved. Ask `PermissionManager.canReach(sender, node.getPermission())` instead, and never
+  declare one in plugin.yml. The only file allowed to spell one out is PermissionPreset,
+  which owns the bundle nodes.
+ignores:
+  - "src/main/java/dev/muggel/wake/core/commands/PermissionPreset.java"
+rule:
+  all:
+    - kind: string_literal
+    # three segments deep, so a plain filename like "wake.db" is not a permission
+    - regex: '^"wake\.[a-z0-9_]+\.'

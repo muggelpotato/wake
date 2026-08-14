@@ -1,0 +1,20 @@
+id: no-module-argument-type
+language: Java
+severity: error
+message: Custom argument type outside core/commands/arguments — hand a core type your values instead of writing another one.
+note: |
+  CLAUDE.md (Architecture 1, 6) and core/commands/package-info: argument types are core
+  infrastructure, not module-owned. Every one of them repeats the same mechanism — read the token,
+  resolve it, refuse with a localized message, suggest what is left — so a second copy in a module
+  drifts from the first the moment either is fixed, and its bugs are invisible to the package that
+  owns the behaviour. A module that has its own values supplies them and nothing else:
+  `KeyArgumentType.of(() -> myKeys(plugin), "commands.my.message_key")` for a set of namespaced
+  keys, `NameArgumentType.greedy(PATTERN, key)` for a name it can spell as a pattern. If a core
+  type genuinely cannot express the value, the type belongs in core/commands/arguments, not here.
+ignores:
+  # The package that owns the mechanism.
+  - "**/wake/core/commands/arguments/*.java"
+rule:
+  all:
+    - kind: import_declaration
+    - regex: 'io\.papermc\.paper\.command\.brigadier\.argument\.CustomArgumentType'

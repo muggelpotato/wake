@@ -1,0 +1,17 @@
+id: no-parsed-player-value
+language: Java
+severity: error
+message: Command argument inserted with Placeholder.parsed — use Placeholder.unparsed so it cannot inject markup.
+note: |
+  CLAUDE.md (Player-facing text): treat any player-supplied value as untrusted. `Placeholder.parsed`
+  feeds its value back through MiniMessage, so an argument carrying `<click:run_command:'/op me'>`
+  becomes real markup in whoever reads the message; `Placeholder.unparsed` inserts the same text as
+  text. `parsed` is only for values Wake itself produces — a command literal, a setting name, a share
+  code — and only where the value lands inside a tag argument, which a component cannot fill. What
+  comes straight out of a `CommandContext` is by definition none of those. A name read off a player or
+  an entity is the same hazard one step further out, but `getName()` is not a shape a rule can tell
+  apart from `CommandNode.getName()`, so that one stays a review call.
+rule:
+  any:
+    - pattern: Placeholder.parsed($NAME, StringArgumentType.getString($$$))
+    - pattern: Placeholder.parsed($NAME, $CTX.getArgument($$$))

@@ -1,7 +1,8 @@
 # Wake — Boatracing Framework (Paper)
 
 An all-in-one boat-racing engine: ships as one jar, but every feature is an isolated module an
-admin can toggle on or off. Java 21 · Gradle KTS · Paper · PacketEvents · Aikar IDB (SQLite/MariaDB).
+admin can toggle on or off. Java 21 · Gradle KTS · Paper · PacketEvents · Aikar IDB (SQLite/MariaDB)
+· Lettuce (optional Valkey/Redis cache invalidation across servers).
 
 Build: `./gradlew compileJava` (run often) · `build` · `runServer`
 
@@ -17,8 +18,15 @@ off and a developer can remove without unpicking the rest. Prefer the change tha
 over the one that adds one. When a rule and a shortcut conflict, take the rule — this codebase is
 optimised for the next person reading it, not the current diff.
 
-Modules today: `base` (plugin chrome + shared commands), `obu` (OpenBoatUtils integration),
+Modules today: `core` (plugin chrome + shared commands), `obu` (OpenBoatUtils integration),
 `drydock` (track utilities), `axiom` (optional AxiomPaper integration). Future: races, gui.
+
+`core` — the module in `features/core/`, not the `core/` framework package — is the one exception to
+"every feature is toggleable": it owns the `/wake` tree, so a `config.yml` that could switch it off
+could take `/wake reload` down with it and leave a restart as the only way back. It is a module in
+every other respect (an id, a state prefix, bundled defaults, an export round trip, a line in the
+reload summary) and it is still fully torn down on shutdown. That is the *only* always-on module —
+a new one is a feature module, and features are toggleable.
 
 ## Architecture — non-negotiable
 
@@ -31,13 +39,19 @@ Modules today: `base` (plugin chrome + shared commands), `obu` (OpenBoatUtils in
    the provider never learns the consumer exists.
 2. **Clean lifecycle.** A module must fully reverse itself: anything registered on enable is undone
    on disable, so it can be toggled off and back on without leaks or duplicates. Use the framework's
-   registration helpers so teardown is automatic rather than hand-rolled.
+   registration helpers so teardown is automatic rather than hand-rolled. Commands are the one thing
+   that does not reverse: the tree is declared once at boot and stays declared, and a disabled
+   module's commands are hidden at query time rather than unregistered.
 3. **Optional integrations.** Every third-party plugin or mod is optional. Gate on a runtime
    capability check and reach it by reflection — never a hard import or hard dependency. Wake must
    start and run correctly with none of them present.
 4. **No NMS.** Paper API only; manipulate packets exclusively through PacketEvents. Prefer robust,
    version-portable approaches over clever ones — cross-version support (1.21→1.26+) outranks
-   elegance.
+   elegance. The build compiles against the *newest* Paper, so nothing stops a call the floor does not
+   have: it links here and throws on the older server the jar still claims. An API newer than the
+   floor is therefore reached the way a third-party one is — a runtime capability check and reflection
+   — or a packet whose wrapper spans the range, or not at all. What holds that line is a compile
+   against every claimed version, not review.
 5. **Event-driven, never poll.** Compute state reactively when it changes, not on a repeating
    timer. Hot events must early-out cheaply; a listener that only matters when its feature is in
    use should register only then. Low-frequency maintenance tasks are fine.
@@ -45,13 +59,29 @@ Modules today: `base` (plugin chrome + shared commands), `obu` (OpenBoatUtils in
    Reuse before adding; delete rather than deprecate. Add defensive handling only where it buys real
    stability. If a class does two jobs, split it; if a guard covers a case that can't happen, remove
    it.
+7. **Package layout.** Three fixed words mean the same thing everywhere and nothing else does:
+   `api/` (what other modules may reference — nothing outside it is cross-module public), `commands/`
+   (the command framework's contract), `integration/` (a quarantined seam to something that may not
+   be there, another module or a third-party plugin). Every other package is named for what it is
+   *about*, never for what kind of thing it holds — `util`, `model`, `service`, `listeners`, `impl`
+   and `helpers` are not package names. A subject package needs two or more files; one file is never
+   a package, it sits at the module root. The three fixed words are exempt — a boundary is worth
+   signposting even at one file. A module class is lifecycle wiring only: if it holds logic, the
+   logic moves out.
 
 ## Commands
 
 Register commands through the project's command framework, never Bukkit `CommandExecutor`.
 Permissions are derived from command structure automatically — don't declare them in `plugin.yml`
 or hand-write permission strings. Command handlers report failure to the user as a localized
-message, never an exception.
+message, never an exception. A tree that cannot work — a name that collides, a permission two nodes
+both claim, a node nothing can reach — is rejected at boot with a message naming it, never skipped
+quietly and never half-registered.
+
+**A suggester runs off the main thread**, on every keystroke. It may read plugin caches, registries and
+the command source freely, but anything that asks the *server* a question — an aim, an entity, a world —
+is resolved on the main thread and its future completed from there. Off-thread such a call does not
+throw; it answers inconsistently, which reads as a client bug and is why nothing lands in the log.
 
 File layout and helper conventions live in `core/commands/package-info.java` and are non-negotiable:
 one class per command node (`getNode` builds the tree, private methods hold the logic); sub-commands
@@ -65,6 +95,29 @@ hardcode strings or build chat components ad hoc. Use the project's semantic col
 hex, so the palette stays one edit. Treat any player-supplied value as untrusted: insert it in a way
 that can't inject markup. Speak database terms to admins ("saved to database", not "config.yml").
 
+A key is a permanent name. A deployed language file is never overwritten and the bundled one only
+backfills the keys it does not define, so adding a key is free and deleting one nothing reads is
+safe — but renaming or repurposing a name silently renders the old text on every existing install.
+Every key the code asks for exists in the bundled file, and every key the bundled file carries is
+reachable from code: both directions are checked by `drills_text.py`, not by eye. A key the code
+already knows is written out in full at the call site — never assembled from a constant and a tail —
+because both those checks read literals, and a key that is only ever half-written is credited to its
+prefix and asked about by nobody. Build a key only where the tail is genuinely computed.
+
+Shared decoration — the bullet, the prefix, a header's rule — lives in the file's `templates` section
+and is reached as a tag, so restyling every message that leans on one is a single edit. A template
+carries decoration and never wording, or a feature's own sentence becomes something no other message
+can reuse; a message spelling a template's decoration out by hand is the drift templates exist to end,
+and is rejected. A template name must be free in three vocabularies at once — the palette, MiniMessage
+and the placeholders the plugin fills — because it answers before the first two and after the third:
+one taking a colour's name replaces that colour everywhere, one taking a placeholder's name applies
+only in the messages that leave the value unfilled.
+
+A key that both holds text and owns parts cannot exist: YAML gives a name one node. The parent's own
+string is therefore a child, named for what it is — `title` for a header line, `layout` for a panel's
+arrangement, `text` otherwise. A `layout` holds arrangement and the panel's own title, never a
+sentence spread across its parts, or reordering it splits one in half.
+
 ## Data & persistence
 
 - **`config.yml` is boot/admin-only** (which modules are on, DB connection). Never store
@@ -74,7 +127,18 @@ that can't inject markup. Speak database terms to admins ("saved to database", n
   are served from cache. Never issue raw database calls from feature/module code — that belongs in a
   data-access object.
 - **SQL must be parameterized and portable** across the supported databases (SQLite and MariaDB) —
-  never concatenate values into a query, never rely on one dialect's types or functions.
+  never concatenate values into a query, never rely on one dialect's types or functions. A value
+  bound for a declared-width column is bounded in code: SQLite stores an oversized one and MariaDB
+  refuses it, so the two disagree and the refusal arrives as a journaled write that can never land.
+- **Assume the database can vanish and that another server shares it.** A write that fails
+  transiently is journaled and replayed, never dropped; a read that fails leaves the cache alone,
+  because an empty result is not an empty table. A cached table is a mirror: a change made here is
+  announced, a change made elsewhere is read back. Never write as if this server were the only one.
+- **Everything settable in-game is in the export.** A value an admin can change with a command must
+  survive export → import, or the export is a trap: it looks like a backup and silently loses
+  settings. Never hand-enumerate keys in `onExportData` — that list drifts the moment a setting is
+  added. Sweep the module's state prefix (`exportState`/`importState`) so new settings are carried
+  for free, and adding one stays a change to exactly one file.
 - Ship factory defaults as bundled resources, applied only when the store is empty.
 
 ## Threading & memory — hard rules
@@ -82,7 +146,9 @@ that can't inject markup. Speak database terms to admins ("saved to database", n
 - **Never touch the Bukkit API from an async task.** Do off-thread work asynchronously, then hop
   back to the main thread to apply anything that touches the server.
 - **Never cache `Player` or `Entity`** — key by `UUID` and evict on the lifecycle events that end
-  their relevance (quit, vehicle/entity removal). Every insertion needs a matching removal.
+  their relevance (quit, vehicle/entity removal). Every insertion needs a matching removal. A `UUID`
+  is not a way back either: pass the entity the caller already holds rather than looking one up by
+  id, which walks every world, needs the main thread and answers nothing for an unloaded chunk.
 - Any state reachable from network (PacketEvents) threads must be concurrency-safe.
 
 ## OBU (OpenBoatUtils integration)
@@ -94,8 +160,23 @@ module will need it.)
 
 - Settings live in named, persisted **contexts**; a **sandbox** is a personal, ownership-scoped,
   disposable context. Enforce ownership on every sandbox operation.
+- **A value that did not come from a command argument type is canonicalised at the door** — an
+  import, a share code, another module's numbers. The stored spelling, the setting's identity key
+  and the bytes on the wire must all agree, or one block reached two ways becomes two settings and
+  the client silently applies whichever arrived last. Anything the wire cannot carry is refused
+  there, never written; a row that gets through anyway is skipped when the packet is built, because
+  one bad value must never cost a player every other setting they hold.
 - **Never mutate a shared context to represent one player.** Compose a per-player view and deliver
   it through the reserved per-player channel, leaving stored contexts untouched.
+- **Not everything the mod accepts is a context value.** Some settings it applies to itself, so a
+  context can switch one on and never hand it back on a switch away. Those are server state: pushed
+  to a client when it is first driven, pushed again when an admin changes one, and handed back at the
+  mod's own default when the module goes down. They are never stored in a context and never written
+  into a compound, and no command offers them beside the settings a context does hold.
+- **What the wire can carry is per client.** A release is only ever sent ids it shipped with: one it
+  never had is skipped without its arguments, so every row behind it in the same compound is read at
+  the wrong offset and one value too new costs a player everything they hold. A new id therefore
+  names the release that first carried it as well as the value it encodes.
 - Adding a setting should be a minimal, localized change to the protocol definition — if it forces
   edits across many files, the abstraction is leaking.
 

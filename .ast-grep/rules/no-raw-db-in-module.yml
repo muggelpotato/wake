@@ -8,10 +8,9 @@ note: |
   `onImportData`, which is deliberately synchronous to avoid cache races — if that's what this
   is, it belongs in the DAO as an explicit import method (see OBUDao.importContextData).
 ignores:
-  # The data layer is where raw DB calls belong: data-access objects and the connection manager.
+  # The data layer is where raw DB calls belong: data-access objects, and everything core/database is made of.
   - "**/*Dao.java"
-  - "**/DatabaseManager.java"
-  - "**/OutageJournal.java"
+  - "**/wake/core/database/*.java"
 rule:
   any:
     - pattern: DB.$METHOD($$$)

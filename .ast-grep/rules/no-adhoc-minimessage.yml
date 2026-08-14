@@ -9,11 +9,7 @@ note: |
 ignores:
   # The message manager is the one place allowed to deserialize MiniMessage.
   - "**/MessageManager.java"
+# Any receiver, `MiniMessage.miniMessage()` included. MessageManager parses; it exposes no route for
+# anyone else to, so there is no exception to carve out.
 rule:
-  any:
-    - pattern: MiniMessage.miniMessage().deserialize($$$)
-    - all:
-        - pattern: $MM.deserialize($$$)
-        # getMessageManager().deserialize(...) is the sanctioned route — palette tags resolve there.
-        - not:
-            pattern: $P.getMessageManager().deserialize($$$)
+  pattern: $MM.deserialize($$$)

@@ -1,0 +1,19 @@
+id: no-entity-lookup-by-uuid
+language: Java
+severity: error
+message: Entity resolved from a UUID — take the entity the caller already holds instead.
+note: |
+  CLAUDE.md (Threading & memory / Event-driven): a UUID is what Wake stores; it is not a way back to
+  an entity. `Bukkit.getEntity` and `World.getEntity` walk every loaded world's entity index, are
+  main-thread-only, and answer null for anything unloaded — so code that resolves a boat this way
+  quietly falls through to whatever branch handles "not a boat" the moment a chunk is out. Every
+  caller in `obu/delivery` already had the `Boat` or the `Player` in hand and looked it back up by id;
+  pass the object down instead. `Bukkit.getPlayer(uuid)` is not this case — a UUID is the only handle
+  an offline-capable lookup can take, and it answers null for a player who is simply not here.
+rule:
+  any:
+    - pattern: Bukkit.getEntity($$$)
+    - pattern: $WORLD.getEntity($UUID)
+constraints:
+  UUID:
+    regex: '(?i)uuid|id$'

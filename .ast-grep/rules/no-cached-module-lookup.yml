@@ -1,0 +1,25 @@
+id: no-cached-module-lookup
+language: Java
+severity: error
+message: A module or service lookup kept in a field — resolve it where you use it instead.
+note: |
+  CLAUDE.md (Architecture 1): any module may be disabled at runtime, so a consumer resolves the
+  other side and tolerates its absence rather than holding it. A field survives the disable that
+  invalidated it: the reference keeps a torn-down module's listeners, DAOs and caches alive, and
+  everything routed through it lands nowhere while the live instance sits beside it — a class of
+  bug that only shows after a `/wake reload`, never at boot. `getModule(...)` and
+  `getServiceRegistry().get(...)` are both a two-line resolve-and-no-op at the point of use:
+  `OBUService service = plugin.getServiceRegistry().get(OBUService.class); if (service == null) return;`
+  A module's own components are not this: they are built in `onModuleEnable` and dropped in
+  `onModuleDisable`, so they are held by the module that owns them.
+rule:
+  any:
+    - pattern: $THIS.$FIELD = $P.getModule($$$)
+    - pattern: $THIS.$FIELD = $P.getServiceRegistry().get($$$)
+    - all:
+        - kind: field_declaration
+        - has:
+            stopBy: end
+            any:
+              - pattern: $P.getModule($$$)
+              - pattern: $P.getServiceRegistry().get($$$)

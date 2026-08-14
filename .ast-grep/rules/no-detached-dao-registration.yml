@@ -1,0 +1,17 @@
+id: no-detached-dao-registration
+language: Java
+severity: error
+message: registerDao must wrap the constructor — a DAO registers its mirrors as it is built.
+note: |
+  CLAUDE.md (Architecture 2): a module must fully reverse itself. A WakeDao registers its
+  CachedStore mirrors with the DatabaseManager from its own constructor, and module teardown only
+  releases the DAOs the module registered. Constructing one and registering it a few lines later
+  leaves a window — `initTables()` throwing against an unreachable or newer database is the usual
+  one — where the mirror sits in the registry with no owner: nothing ever releases it, it keeps
+  taking invalidations, and the next successful enable adds a second mirror for the same table.
+  Write `this.dao = registerDao(new SomeDao(getPlugin()));` and call `initTables()` after.
+rule:
+  all:
+    - pattern: registerDao($ARG)
+    - not:
+        pattern: registerDao(new $DAO($$$))

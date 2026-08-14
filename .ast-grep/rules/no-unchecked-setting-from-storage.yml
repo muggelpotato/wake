@@ -1,0 +1,15 @@
+id: no-unchecked-setting-from-storage
+language: Java
+severity: error
+message: A setting built inside a DAO skips the door — use OBUSetting.of, which canonicalises and refuses what the wire cannot carry.
+note: |
+  CLAUDE.md (OBU): a value that did not come from a command argument type is canonicalised at the door.
+  A row read back out of a table is exactly that: its args were written by an older build, a hand-run
+  INSERT or a server sharing the database, so the stored spelling, the setting's identity key and the
+  bytes on the wire can already disagree. `new OBUSetting(def, args)` takes whatever is in the column;
+  `OBUSetting.of(def, args)` canonicalises it and answers `null` for a value the client cannot be sent,
+  which is one setting skipped instead of one context holding a key nothing can delete.
+files:
+  - "**/*Dao.java"
+rule:
+  pattern: new OBUSetting($$$)

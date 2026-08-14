@@ -1,0 +1,22 @@
+id: no-cross-module-core
+language: Java
+severity: error
+message: Cross-module reach into the core module's internals — communicate via events or the service registry.
+note: |
+  CLAUDE.md (Architecture 1): a module never reaches into another module's internals. The core
+  module (`features/core/`, distinct from the `core/` framework package) publishes no api/ surface
+  today, so other modules must reach it only by firing/observing events or resolving a registered
+  service — never by importing its classes. If it later publishes a surface, put it in
+  `features/core/api/` (already exempted here). Only the composition root (Wake.java) may name the
+  concrete CoreModule to register it.
+ignores:
+  # Intra-module imports are unrestricted — a module owns its own internals.
+  - "**/features/core/**"
+  # The composition root wires modules by concrete class.
+  - "**/Wake.java"
+rule:
+  all:
+    - kind: import_declaration
+    - regex: 'dev\.muggel\.wake\.features\.core\.'
+    - not:
+        regex: 'dev\.muggel\.wake\.features\.core\.api\.'
