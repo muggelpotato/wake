@@ -16,7 +16,7 @@
 #   <gradient:$secondary:$primary>...</gradient>
 #
 # Dynamic placeholders are filled by the plugin per message and only work in the message they already appear in (moving them to other keys does nothing):
-#   <alias> <aliases> <amount> <axis> <badge> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <cooldown> <count> <delay> <description> <duration> <early_out> <entry> <error> <hint> <input> <literal> <module> <name> <padding> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
+#   <alias> <aliases> <amount> <axis> <badge> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <cooldown> <count> <delay> <description> <duration> <early_out> <entry> <error> <hint> <input> <literal> <module> <name> <padding> <rows> <sandbox> <sandboxes> <server> <setting> <source> <sub> <subcommands> <target> <total> <value> <variant> <x> <y> <z>
 #
 # <prefix> inserts the `prefix` value you can modify below
 # ─────────────────────────────────────────────────────────────────────────────
@@ -121,6 +121,12 @@ commands:
     reconnect_client: "<prefix><danger>Server hasn't recognized OpenBoatUtils on <target> client (reconnect if its installed)</danger>"
     no_settings: "  <muted>●</muted> <muted_dark>(no settings configured)</muted_dark>"
     config:
+      overview: "<gradient:$secondary:$primary>─── OBU Settings ─────────</gradient><hint><br><rows>"
+      overview_hint: " <info><hover:show_text:'<secondary>Server-side OBU settings</secondary><br>  <muted>○</muted> <neutral>Persistent player states <muted>→</muted> Players keep contexts on relog</neutral><br>  <muted>○</muted> <neutral>Boat lag fix <muted>→</muted> Drop boat position packets sent to the driver</neutral><br>  <muted>○</muted> <neutral>Collapsed default context <muted>→</muted> Turns the status display into one line</neutral><br>  <muted>○</muted> <neutral>Update nag <muted>→</muted> Warn a client running an older OBU release</neutral><br>  <muted>○</muted> <neutral>Ten-step interpolation <muted>→</muted> Smoother boat movement</neutral>'>💡</hover></info>"
+      row_on: "  <muted>●</muted> <neutral><name>: <primary>on</primary></neutral>"
+      row_off: "  <muted>●</muted> <neutral><name>: <danger>off</danger></neutral>"
+      purge_row: "  <muted>●</muted> <neutral>Unused sandboxes kept for: <primary><duration></primary></neutral>"
+      purge_row_off: "  <muted>●</muted> <neutral>Unused sandboxes kept for: <danger>never purged</danger></neutral>"
       invalid_duration: "<prefix><danger>Invalid duration: <accent><input></accent></danger> <neutral>→ use s, min, h, d, w, mo or y (e.g. 10h) or 0 to disable</neutral>"
       purge_set: "<prefix><neutral>Unused sandboxes are now kept for <primary><duration></primary></neutral>"
       purge_disabled: "<prefix><neutral>Automatic sandbox purging is now <danger>disabled</danger></neutral>"

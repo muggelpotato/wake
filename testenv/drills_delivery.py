@@ -62,6 +62,8 @@ FAR_CHUNK = (4000, 4000)
 # where CraftBukkit keeps an entity's persistent data container inside its nbt
 PDC = "BukkitValues"
 PIN = re.compile(r'"?wake:obu_context"?\s*:\s*"([^"]*)"')
+# one row of a rendered panel: the bullet, its name, and the value behind the colon
+PANEL_ROW = re.compile(r"●\s*([^:●\n]+?)\s*:\s*([^●\n]+)")
 # a context every install has, seeded from the jar, and one nothing will ever seed
 KNOWN_CONTEXT = "harbour"
 UNKNOWN_CONTEXT = "nosuchcontextanywhere"
@@ -1036,9 +1038,14 @@ def drill_keep_window():
     reply = run('wobu -settings keep-unused-sandboxes " 30D "')
     truthy("padding and case are gone from the echo", "30d" in reply and "30D" not in reply, reply.strip()[:200])
 
+    truthy("and the overview shows the window it stored", settings_panel().get("unused sandboxes kept for") == "30d",
+           str(settings_panel())[:300])
+
     step("every way of saying never is off, not a window of zero")
     for spelling in ("0", "0d", "off", "never", "disabled", "NEVER"):
         says(f"{spelling} disables the sweep", f"wobu -settings keep-unused-sandboxes {spelling}", "purging is now")
+    truthy("and the overview says so rather than showing a window of zero",
+           settings_panel().get("unused sandboxes kept for") == "never purged", str(settings_panel())[:300])
 
     step("and everything else is refused rather than read as one of the two")
     for spelling in ("30", "d", "abc", "-1d", "30m", '"30 d"', '""',
@@ -1094,14 +1101,23 @@ def drill_purge():
         rcon.run(f"kill @e[tag={TAG}]")
 
 
-def drill_settings_switches():
-    """Every switch `-settings` carries, the answer it owes, and the row it has to land in.
+def settings_panel():
+    """The bare `-settings` overview, as {row name: value}. Read off the bullets rather than off the
+    lines: whether a <br> reaches a console as a newline is the renderer's business, not this drill's."""
+    return {name.strip().lower(): value.strip().lower()
+            for name, value in PANEL_ROW.findall(run("wobu -settings"))}
 
-    None of them shows from a console -- persistence only on a relog, the lag fix and the interpolation
-    flag only on a client computing its own physics, the collapsed layer only inside `-status`, which
-    needs a player -- so a key the command writes but nothing reads would still reply `enabled`. The
-    export is what binds the two: it sweeps the module's prefix, so the value set here has to come back
-    out under the name the reader asks for."""
+
+def drill_settings_switches():
+    """Every switch `-settings` carries, the answer it owes, and the two rows it has to land in.
+
+    None of them shows in play from a console -- persistence only on a relog, the lag fix and the
+    interpolation flag only on a client computing its own physics, the collapsed layer only inside
+    `-status`, which needs a player -- so a key the command writes but nothing reads would still reply
+    `enabled`. The bare command is the read-back: it renders the same list that declares the
+    sub-commands, so a switch that is settable and not readable cannot exist without this drill seeing
+    a row short. The export is the other binding: it sweeps the module's prefix, so the value set here
+    has to come back out under the name its reader defaults."""
     switches = {"persistent-player-states": ("persistent player states", "persistent_player_states", "true"),
                 "boat-lag-fix": ("boat lag fix", "boat_lag_fix", "true"),
                 "collapse-default-context": ("collapsed default context", "collapse_default_context", "true"),
@@ -1111,8 +1127,18 @@ def drill_settings_switches():
         for literal, (feature, _, _) in switches.items():
             on = run(f"wobu -settings {literal} true")
             truthy(f"{literal} on names the feature", feature in on.lower() and "enabled" in on.lower(), on.strip()[:200])
+            panel = settings_panel()
+            truthy("and the overview reads it back on", panel.get(feature) == "on", str(panel)[:300])
             off = run(f"wobu -settings {literal} false")
             truthy(f"and {literal} off says disabled", "disabled" in off.lower(), off.strip()[:200])
+            panel = settings_panel()
+            truthy("and the overview reads it back off", panel.get(feature) == "off", str(panel)[:300])
+
+        step("and the overview is exactly the switches, with the keep window beside them")
+        expected = {feature for feature, _, _ in switches.values()} | {"unused sandboxes kept for"}
+        panel = settings_panel()
+        truthy(f"all {len(expected)} rows are there and no others", set(panel) == expected,
+               f"missing {sorted(expected - set(panel))}, unexpected {sorted(set(panel) - expected)}")
 
         step("and each one landed under the key its reader defaults")
         log = Log()

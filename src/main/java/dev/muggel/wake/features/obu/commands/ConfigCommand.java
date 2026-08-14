@@ -6,6 +6,7 @@ import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandHelper;
 import dev.muggel.wake.core.commands.CommandNode;
+import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.features.obu.clients.BoatLagInterceptor;
 import dev.muggel.wake.features.obu.clients.HandshakeListener;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager.ContextCounts;
@@ -13,10 +14,13 @@ import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import dev.muggel.wake.features.obu.contexts.SandboxPurger;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.JoinConfiguration;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.CommandSender;
 import org.jspecify.annotations.NonNull;
 
+import java.util.List;
 import java.util.Locale;
 
 public class ConfigCommand {
@@ -25,6 +29,7 @@ public class ConfigCommand {
                 .withHelpKey("commands.obu.help.config")
                 .withoutPresets()
                 .withGate(CommandNode.Gate.OPEN)
+                .executesSender((ctx, sender) -> executeOverview(ctx, plugin))
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "persistent-player-states", ContextDelivery.STATE_KEY_PERSISTENT_STATES, "words.feature.persistent_states"))
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "boat-lag-fix", BoatLagInterceptor.STATE_KEY_BOAT_LAG_FIX, "words.feature.boat_lag_fix"))
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "collapse-default-context", StatusCommand.STATE_KEY_COLLAPSE_DEFAULT_CONTEXT, "words.feature.collapse_default_context"))
@@ -35,6 +40,34 @@ public class ConfigCommand {
                                 .executesSender((ctx, sender) -> executeKeepUnused(ctx, plugin))))
                 .addSubcommand(CommandNode.literal("query-context-count")
                         .executesSender((ctx, sender) -> executeContextCount(ctx, plugin)));
+    }
+
+    private static int executeOverview(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
+        CommandSender sender = ctx.getSource().getSender();
+        List<Component> rows = List.of(
+                row(plugin, ContextDelivery.STATE_KEY_PERSISTENT_STATES, ContextDelivery.DEFAULT_PERSISTENT_STATES, "words.feature.persistent_states"),
+                row(plugin, BoatLagInterceptor.STATE_KEY_BOAT_LAG_FIX, BoatLagInterceptor.DEFAULT_BOAT_LAG_FIX, "words.feature.boat_lag_fix"),
+                row(plugin, StatusCommand.STATE_KEY_COLLAPSE_DEFAULT_CONTEXT, StatusCommand.DEFAULT_COLLAPSE_DEFAULT_CONTEXT, "words.feature.collapse_default_context"),
+                row(plugin, HandshakeListener.STATE_KEY_UPDATE_NAG, HandshakeListener.DEFAULT_UPDATE_NAG, "words.feature.update_nag"),
+                row(plugin, ContextDelivery.STATE_KEY_INTERPOLATION_TEN, ContextDelivery.DEFAULT_INTERPOLATION_TEN, "words.feature.setinterpolationten"),
+                purgeRow(plugin));
+        plugin.getMessageManager().send(sender, "commands.obu.config.overview",
+                Placeholder.component("rows", Component.join(JoinConfiguration.newlines(), rows)),
+                CommandHelper.hint(plugin, "commands.obu.config.overview_hint"));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static @NonNull Component row(@NonNull Wake plugin, @NonNull String stateKey, boolean fallback, @NonNull String featureKey) {
+        MessageManager messages = plugin.getMessageManager();
+        String key = plugin.getStateDao().get(stateKey, fallback) ? "commands.obu.config.row_on" : "commands.obu.config.row_off";
+        return messages.getComponent(key, Placeholder.component("name", messages.getComponent(featureKey)));
+    }
+
+    private static @NonNull Component purgeRow(@NonNull Wake plugin) {
+        String keep = SandboxPurger.configuredKeep(plugin);
+        return SandboxPurger.parseKeepMillis(keep) > 0
+                ? plugin.getMessageManager().getComponent("commands.obu.config.purge_row", Placeholder.unparsed("duration", keep))
+                : plugin.getMessageManager().getComponent("commands.obu.config.purge_row_off");
     }
 
     private static int executeContextCount(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {

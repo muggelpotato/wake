@@ -31,6 +31,7 @@ import dev.muggel.wake.features.obu.OBUPlayerState;
 
 public final class ContextDelivery implements OBUService {
     public static final String STATE_KEY_PERSISTENT_STATES = "obu.persistent_player_states";
+    public static final boolean DEFAULT_PERSISTENT_STATES = true;
     public static final String STATE_KEY_INTERPOLATION_TEN = "obu.setinterpolationten";
     public static final boolean DEFAULT_INTERPOLATION_TEN = false;
     private final Wake plugin;
@@ -294,7 +295,7 @@ public final class ContextDelivery implements OBUService {
         }
         String sandbox = active.sandboxOf(uuid);
         String context = active.contextOf(uuid);
-        boolean keep = plugin.getStateDao().get(STATE_KEY_PERSISTENT_STATES, true)
+        boolean keep = plugin.getStateDao().get(STATE_KEY_PERSISTENT_STATES, DEFAULT_PERSISTENT_STATES)
                 && (sandbox != null || !OBUContextManager.DEFAULT_CONTEXT.equals(context));
         dao.savePlayerState(uuid, keep ? sandbox : null, keep ? context : null);
     }

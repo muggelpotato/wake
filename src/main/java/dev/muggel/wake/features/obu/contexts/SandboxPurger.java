@@ -29,7 +29,7 @@ public final class SandboxPurger {
     }
 
     public @Nullable BukkitTask restart() {
-        String configured = configuredKeep();
+        String configured = configuredKeep(plugin);
         if (configured.equals(scheduled)) {
             return null;
         }
@@ -49,12 +49,12 @@ public final class SandboxPurger {
         return this.task;
     }
 
-    private @NonNull String configuredKeep() {
+    public static @NonNull String configuredKeep(@NonNull Wake plugin) {
         return plugin.getStateDao().get(STATE_KEY_KEEP_UNUSED, DEFAULT_KEEP);
     }
 
     private void sweep() {
-        long thresholdMillis = parseKeepMillis(configuredKeep());
+        long thresholdMillis = parseKeepMillis(configuredKeep(plugin));
         if (thresholdMillis <= 0) return;
         long cutoff = System.currentTimeMillis() - thresholdMillis;
         plugin.getDatabaseManager().readAsync(() -> dao.getOldSandboxes(cutoff), this::purge);
