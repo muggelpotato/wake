@@ -488,6 +488,7 @@ public final class WireProbe {
         say("pkt_entity_empty", hex(PacketWriter.entityContext(BOAT, List.of(), latest)));
         say("pkt_store_scalars", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, scalars(), latest)));
         say("pkt_store_skips", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, withUnwritableRows(), latest)));
+        say("pkt_store_clientwide", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, clientWideRows(), latest)));
         say("pkt_store_outdated", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, pastCeilingRows(), OBUVersions.MINIMUM_SUPPORTED)));
         say("pkt_store_current", hex(PacketWriter.storeContext(OBUDefinition.CONTEXT_PERSONAL, pastCeilingRows(), latest)));
         say("pkt_raw_impulse", hex(PacketWriter.rawSetting(of(OBUDefinition.applyimpulse, "1", "2", "3"))));
@@ -498,6 +499,21 @@ public final class WireProbe {
         List<OBUSetting> settings = new ArrayList<>();
         settings.add(of(OBUDefinition.stepsize, "0.6"));
         settings.add(of(OBUDefinition.sethoneycompat, "true"));
+        settings.add(of(OBUDefinition.coyotetime, "3"));
+        return settings;
+    }
+
+    /**
+     * The rows ClientboundSettingsPacket marks non-context: the mod applies them to itself and never to
+     * the context in hand, so one carried in here would outlive that context and reach every viewer of a
+     * boat. The two around them must survive being stepped over.
+     */
+    private static List<OBUSetting> clientWideRows() {
+        List<OBUSetting> settings = new ArrayList<>();
+        settings.add(of(OBUDefinition.stepsize, "0.6"));
+        settings.add(of(OBUDefinition.setinterpolationten, "true"));
+        settings.add(of(OBUDefinition.setresetonworldload, "true"));
+        settings.add(of(OBUDefinition.applyimpulse, "1", "2", "3"));
         settings.add(of(OBUDefinition.coyotetime, "3"));
         return settings;
     }
@@ -969,6 +985,9 @@ def drill_packets(facts):
     fact(facts, "pkt_store_scalars", i16(3) + mcstring(PERSONAL) + i32(7) + scalars)
     # the three rows in the middle cannot be written; the count and the payload must both step over them
     fact(facts, "pkt_store_skips", i16(3) + mcstring(PERSONAL) + i32(2) + stepsize + coyote)
+    # a row the mod applies to itself is stepped over the same way: a context can neither scope it nor
+    # hand it back, so one riding in a compound would outlive the context that carried it
+    fact(facts, "pkt_store_clientwide", i16(3) + mcstring(PERSONAL) + i32(2) + stepsize + coyote)
     # an id the client's own version never shipped is stepped over the same way: it would otherwise
     # abandon the compound and take every row behind it with it
     fact(facts, "pkt_store_outdated", i16(3) + mcstring(PERSONAL) + i32(2) + stepsize + coyote)
@@ -1135,7 +1154,7 @@ def main():
         expect("a name no setting carries", "wo -defaults nonsense", "no ")
 
         print("\nadmin utility")
-        expect("query-context-quantity", "wo -settings query-context-quantity", "total")
+        expect("query-context-count", "wo -settings query-context-count", "total")
 
     print()
     if failures:

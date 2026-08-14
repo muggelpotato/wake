@@ -26,7 +26,7 @@ public class ClearCommand {
     public static @NonNull CommandNode getNode(Wake plugin) {
         CommandNode clear = CommandNode.literal("-clear").withHelpKey("commands.obu.help.clear");
         for (OBUDefinition def : OBUDefinition.values()) {
-            if (def.isOneShot()) {
+            if (def.isContextless()) {
                 continue;
             }
             clear.addSubcommand(settingNode(def, plugin));

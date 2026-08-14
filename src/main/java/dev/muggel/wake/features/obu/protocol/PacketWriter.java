@@ -61,7 +61,8 @@ public final class PacketWriter {
     private static void writeSettings(@NonNull PacketByteBuf buf, @NonNull List<OBUSetting> settings, int clientVersion) {
         List<byte[]> written = new ArrayList<>(settings.size());
         for (OBUSetting setting : settings) {
-            if (OBUVersions.isPastCeiling(setting, clientVersion)) {
+            OBUDefinition definition = setting.definition();
+            if (definition.isGlobalSetting() || definition.isActionSetting() || OBUVersions.isPastCeiling(setting, clientVersion)) {
                 continue;
             }
             PacketByteBuf one = new PacketByteBuf();

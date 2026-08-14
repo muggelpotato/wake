@@ -128,8 +128,8 @@ public final class OBUSyncManager {
         return settings;
     }
 
-    private boolean nothingToSend(@NonNull UUID boatId, @NonNull List<OBUSetting> settings) {
-        return settings.isEmpty() && !knownBoatContexts.contains(boatId);
+    private boolean nothingToSend(@NonNull UUID boatId, @NonNull List<OBUSetting> settings, boolean toDriver) {
+        return !toDriver && settings.isEmpty() && !knownBoatContexts.contains(boatId);
     }
 
     public void syncPlayer(@NonNull Player player) {
@@ -149,8 +149,9 @@ public final class OBUSyncManager {
         if (!clients.isDriven(viewer.getUniqueId())) {
             return;
         }
-        List<OBUSetting> settings = settingsOn(boat, driverOf(boat));
-        if (nothingToSend(boat.getUniqueId(), settings)) {
+        Player driver = driverOf(boat);
+        List<OBUSetting> settings = settingsOn(boat, driver);
+        if (nothingToSend(boat.getUniqueId(), settings, viewer.equals(driver))) {
             return;
         }
         knownBoatContexts.add(boat.getUniqueId());
@@ -169,13 +170,6 @@ public final class OBUSyncManager {
         broadcastSync(boat, driverOf(boat));
     }
 
-    /**
-     * The client resolves a ridden boat's settings from its entity context alone — that context
-     * replaces the personal one rather than merging with it, and an absent one falls back to
-     * whatever the boat last held. A context that lands a tick after the mount is therefore a tick
-     * of the wrong physics, so the driver is taken from the caller: {@code VehicleEnterEvent} runs
-     * before the passenger is attached, and waiting for the passenger list costs that tick.
-     */
     public void broadcastSync(@NonNull Boat boat, @Nullable Player driver) {
         if (!boat.isValid()) {
             return;
@@ -186,7 +180,7 @@ public final class OBUSyncManager {
             viewers.add(driver);
         }
         viewers.removeIf(viewer -> !clients.isDriven(viewer.getUniqueId()));
-        if (viewers.isEmpty() || nothingToSend(boat.getUniqueId(), settings)) {
+        if (viewers.isEmpty() || nothingToSend(boat.getUniqueId(), settings, viewers.contains(driver))) {
             return;
         }
         knownBoatContexts.add(boat.getUniqueId());

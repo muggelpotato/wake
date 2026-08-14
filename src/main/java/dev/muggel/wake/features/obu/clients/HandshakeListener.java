@@ -155,6 +155,7 @@ public class HandshakeListener extends PacketListenerAbstract implements Listene
         } else if (versionId > OBUVersions.LATEST_SUPPORTED) {
             plugin.getMessageManager().send(player, "networking.obu.ahead");
         }
+        delivery.pushGlobals(player);
         if (state == null) {
             syncManager.syncPlayer(player);
         } else if (state.activeSandbox() == null && state.activeContext() == null) {

@@ -106,6 +106,7 @@ public class OBUModule extends WakeModule {
         if (delivery != null && syncManager != null && packetSender != null) {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 delivery.saveSelection(player);
+                delivery.restoreGlobals(player);
                 packetSender.sendWipePlayer(player);
             }
             syncManager.wipeAllBoatContexts();
@@ -129,6 +130,7 @@ public class OBUModule extends WakeModule {
         ContextDelivery service = this.delivery;
         if (manager == null || service == null) return;
         schedulePurgerSweep();
+        service.pushGlobals();
         manager.reloadAsync(changedContexts -> {
             if (!service.isStale()) {
                 service.resyncAffected(changedContexts);
@@ -171,7 +173,12 @@ public class OBUModule extends WakeModule {
     @Override
     protected int onImportData(@NonNull YamlConfiguration yaml) throws SQLException {
         OBUDataTransfer transfer = dataTransfer();
-        return importState(yaml) + transfer.importFrom(yaml);
+        int count = importState(yaml) + transfer.importFrom(yaml);
+        ContextDelivery service = this.delivery;
+        if (service != null) {
+            service.pushGlobals();
+        }
+        return count;
     }
 
     private @NonNull OBUDataTransfer dataTransfer() throws SQLException {

@@ -31,11 +31,16 @@ public final class CommandHelper {
      * Declare every on/off flag through this factory instead of writing a command class for it
      */
     public static @NonNull CommandNode toggleCommand(@NonNull Wake plugin, @NonNull String literal, @NonNull String stateKey, @NonNull String featureKey) {
+        return toggleCommand(plugin, literal, stateKey, featureKey, () -> {});
+    }
+
+    public static @NonNull CommandNode toggleCommand(@NonNull Wake plugin, @NonNull String literal, @NonNull String stateKey, @NonNull String featureKey, @NonNull Runnable onChange) {
         return CommandNode.literal(literal)
                 .arguments(CommandNode.argument("state", BoolArgumentType.bool())
                         .executesSender((ctx, subject) -> {
                             boolean enabled = BoolArgumentType.getBool(ctx, "state");
                             plugin.getStateDao().set(stateKey, enabled);
+                            onChange.run();
                             toggle(plugin, ctx.getSource().getSender(), featureKey, enabled);
                             return Command.SINGLE_SUCCESS;
                         }));

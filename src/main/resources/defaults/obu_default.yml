@@ -4,12 +4,11 @@ obu:
   collapse_default_context: true
   update_nag: true
   keep_unused_sandboxes: "30d"
+  setinterpolationten: false
 server:
   default:
     settings:
-      setinterpolationten: "true"
       collisionmode: "NO_ENTITIES"
-      setresetonworldload: "false"
       allowaccelstacking: "false"
       falldamage: "false"
       stepwhilefalling: "true"

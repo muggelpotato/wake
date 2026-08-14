@@ -31,6 +31,8 @@ import dev.muggel.wake.features.obu.OBUPlayerState;
 
 public final class ContextDelivery implements OBUService {
     public static final String STATE_KEY_PERSISTENT_STATES = "obu.persistent_player_states";
+    public static final String STATE_KEY_INTERPOLATION_TEN = "obu.setinterpolationten";
+    public static final boolean DEFAULT_INTERPOLATION_TEN = false;
     private final Wake plugin;
     private final PacketSender packetSender;
     private final OBUContextManager contextManager;
@@ -63,6 +65,33 @@ public final class ContextDelivery implements OBUService {
     public void requestClientVersion(@NonNull Player player) {
         clients.reopen(player.getUniqueId());
         packetSender.sendVersionRequest(player);
+    }
+
+    public void pushGlobals(@NonNull Player player) {
+        sendGlobal(player, OBUDefinition.setresetonworldload, "false");
+        sendGlobal(player, OBUDefinition.setinterpolationten, String.valueOf(plugin.getStateDao().get(STATE_KEY_INTERPOLATION_TEN, DEFAULT_INTERPOLATION_TEN)));
+    }
+
+    public void pushGlobals() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            pushGlobals(player);
+        }
+    }
+
+    public void restoreGlobals(@NonNull Player player) {
+        for (OBUDefinition definition : OBUDefinition.values()) {
+            String vanilla = definition.defaultValue();
+            if (definition.isGlobalSetting() && vanilla != null) {
+                sendGlobal(player, definition, vanilla);
+            }
+        }
+    }
+
+    private void sendGlobal(@NonNull Player player, @NonNull OBUDefinition definition, @NonNull String value) {
+        OBUSetting setting = OBUSetting.of(definition, List.of(value));
+        if (setting != null) {
+            packetSender.sendRawSetting(player, setting);
+        }
     }
 
     public void applyDefaultContext(@NonNull Player player) {
@@ -240,7 +269,7 @@ public final class ContextDelivery implements OBUService {
 
     @Override
     public double getVehicleScale(@NonNull Boat boat) {
-        double scale = syncManager.scaleOf(boat.getUniqueId());
+        double scale = Math.abs(syncManager.scaleOf(boat.getUniqueId()));
         return scale > 0 ? scale : 1.0;
     }
 

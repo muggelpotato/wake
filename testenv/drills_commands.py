@@ -205,7 +205,7 @@ def drill_gate():
     expect("an ungated branch runs from a console that could never satisfy the gate",
            "wobu -help", "OpenBoatUtils Help")
     expect("so does the second one", "wobu -context", "Contexts")
-    expect("and the third", "wobu -settings query-context-quantity", "Total")
+    expect("and the third", "wobu -settings query-context-count", "Total")
     # the gated branch never reaches its gate, because the target is resolved first and fails
     expect("a gated branch answers about its target, not about the gate",
            "wobu -context default", "must be executed by an entity")

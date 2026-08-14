@@ -9,6 +9,7 @@ import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.features.obu.clients.BoatLagInterceptor;
 import dev.muggel.wake.features.obu.clients.HandshakeListener;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager.ContextCounts;
+import dev.muggel.wake.features.obu.protocol.OBUDefinition;
 import dev.muggel.wake.features.obu.delivery.ContextDelivery;
 import dev.muggel.wake.features.obu.contexts.SandboxPurger;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -24,25 +25,26 @@ public class ConfigCommand {
                 .withHelpKey("commands.obu.help.config")
                 .withoutPresets()
                 .withGate(CommandNode.Gate.OPEN)
-                .addSubcommand(CommandHelper.toggleCommand(plugin, "persistence", ContextDelivery.STATE_KEY_PERSISTENT_STATES, "words.feature.persistent_states"))
+                .addSubcommand(CommandHelper.toggleCommand(plugin, "persistent-player-states", ContextDelivery.STATE_KEY_PERSISTENT_STATES, "words.feature.persistent_states"))
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "boat-lag-fix", BoatLagInterceptor.STATE_KEY_BOAT_LAG_FIX, "words.feature.boat_lag_fix"))
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "collapse-default-context", StatusCommand.STATE_KEY_COLLAPSE_DEFAULT_CONTEXT, "words.feature.collapse_default_context"))
                 .addSubcommand(CommandHelper.toggleCommand(plugin, "update-nag", HandshakeListener.STATE_KEY_UPDATE_NAG, "words.feature.update_nag"))
+                .addSubcommand(CommandHelper.toggleCommand(plugin, OBUDefinition.setinterpolationten.commandName(), ContextDelivery.STATE_KEY_INTERPOLATION_TEN, "words.feature.setinterpolationten", () -> OBUCommandHelper.delivery(plugin).pushGlobals()))
                 .addSubcommand(CommandNode.literal("keep-unused-sandboxes")
                         .arguments(CommandNode.argument("duration", StringArgumentType.string())
                                 .executesSender((ctx, sender) -> executeKeepUnused(ctx, plugin))))
-                .addSubcommand(CommandNode.literal("query-context-quantity")
-                        .executesSender((ctx, sender) -> executeContextQuantity(ctx, plugin)));
+                .addSubcommand(CommandNode.literal("query-context-count")
+                        .executesSender((ctx, sender) -> executeContextCount(ctx, plugin)));
     }
 
-    private static int executeContextQuantity(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
+    private static int executeContextCount(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
         CommandSender sender = ctx.getSource().getSender();
         ContextCounts counts = OBUCommandHelper.contexts(plugin).countContexts();
         if (counts == null) {
             plugin.getMessageManager().send(sender, "commands.obu.config.context_unavailable");
             return 0;
         }
-        plugin.getMessageManager().send(sender, "commands.obu.config.context_quantity",
+        plugin.getMessageManager().send(sender, "commands.obu.config.context_count",
                 Placeholder.unparsed("server", String.valueOf(counts.serverContexts())),
                 Placeholder.unparsed("sandboxes", String.valueOf(counts.sandboxes())),
                 Placeholder.unparsed("total", String.valueOf(counts.total())));

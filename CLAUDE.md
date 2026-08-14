@@ -151,6 +151,11 @@ module will need it.)
   one bad value must never cost a player every other setting they hold.
 - **Never mutate a shared context to represent one player.** Compose a per-player view and deliver
   it through the reserved per-player channel, leaving stored contexts untouched.
+- **Not everything the mod accepts is a context value.** Some settings it applies to itself, so a
+  context can switch one on and never hand it back on a switch away. Those are server state: pushed
+  to a client when it is first driven, pushed again when an admin changes one, and handed back at the
+  mod's own default when the module goes down. They are never stored in a context and never written
+  into a compound, and no command offers them beside the settings a context does hold.
 - **What the wire can carry is per client.** A release is only ever sent ids it shipped with: one it
   never had is skipped without its arguments, so every row behind it in the same compound is read at
   the wrong offset and one value too new costs a player everything they hold. A new id therefore

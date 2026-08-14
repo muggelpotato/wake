@@ -124,7 +124,7 @@ commands:
       invalid_duration: "<prefix><danger>Invalid duration: <accent><input></accent></danger> <neutral>→ use s, min, h, d, w, mo or y (e.g. 10h) or 0 to disable</neutral>"
       purge_set: "<prefix><neutral>Unused sandboxes are now kept for <primary><duration></primary></neutral>"
       purge_disabled: "<prefix><neutral>Automatic sandbox purging is now <danger>disabled</danger></neutral>"
-      context_quantity: "<gradient:$secondary:$primary>─── Stored Contexts ─────────</gradient><br>  <muted>●</muted> <neutral>Server contexts: <primary><server></primary></neutral><br>  <muted>●</muted> <neutral>Sandboxes (all owners): <primary><sandboxes></primary></neutral><br>  <muted>●</muted> <neutral>Total: <primary><total></primary></neutral>"
+      context_count: "<gradient:$secondary:$primary>─── Stored Contexts ─────────</gradient><br>  <muted>●</muted> <neutral>Server contexts: <primary><server></primary></neutral><br>  <muted>●</muted> <neutral>Sandboxes (all owners): <primary><sandboxes></primary></neutral><br>  <muted>●</muted> <neutral>Total: <primary><total></primary></neutral>"
       context_unavailable: "<prefix><danger>Cannot count contexts: the context table has not been read from the database yet</danger>"
     defaults:
       missing: "<prefix><danger>No default exists for: <accent><setting></accent></danger>"
@@ -163,7 +163,6 @@ commands:
       removed: "<prefix><neutral>Removed <primary><value></primary> from <accent><setting></accent> for <target></neutral>"
       removed_sandbox: "<prefix><neutral>Removed <primary><value></primary> from <accent><setting></accent> in sandbox <accent><sandbox></accent></neutral>"
       removed_none: "<prefix><neutral>No <accent><setting></accent> entries to remove from <target> temporary or sandbox settings</neutral>"
-      global_only: "<prefix><danger>Setting <accent><setting></accent> cannot be set to a boat (applies to players)</danger>"
       outdated_client: "<prefix><danger>Setting <accent><setting></accent> stored but not applied (unsupported by <target> OBU version)</danger>"
     sandbox:
       exists: "<prefix><danger>Sandbox <accent><sandbox></accent> already exists</danger>"
@@ -246,7 +245,8 @@ words:
     boat_lag_fix: 'Boat lag fix'
     collapse_default_context: 'Collapsed default context'
     update_nag: 'Update nag'
-    auto_kill: 'Auto-kill boat'
+    setinterpolationten: 'Ten-step interpolation'
+    auto_kill: 'Kill boat on exit'
     boostpad_early_out_x: 'early-out (X)'
     boostpad_early_out_y: 'early-out (Y)'
     boostpad_early_out_z: 'early-out (Z)'

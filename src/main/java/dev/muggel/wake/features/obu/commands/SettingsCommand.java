@@ -33,6 +33,9 @@ public class SettingsCommand {
     public static @NonNull List<CommandNode> getNodes(Wake plugin) {
         List<CommandNode> nodes = new ArrayList<>();
         for (OBUDefinition def : OBUDefinition.values()) {
+            if (def.isGlobalSetting()) {
+                continue;
+            }
             nodes.add(createSettingNode(def, plugin));
         }
         return nodes;
@@ -78,10 +81,6 @@ public class SettingsCommand {
         OBUDefinition edits = def.subtractsFrom();
         if (edits != null) {
             return executeRemoval(plugin, sender, target, SettingSelector.of(setting), edits, delivery);
-        }
-        if (target instanceof Boat && def.isGlobalSetting()) {
-            plugin.getMessageManager().send(sender, "commands.obu.settings.global_only", Placeholder.unparsed("setting", def.commandName()));
-            return 0;
         }
         if (!delivery.applySetting(target, setting)) {
             plugin.getMessageManager().send(sender, "commands.obu.context.invalid_target");

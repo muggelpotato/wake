@@ -127,8 +127,8 @@ public enum OBUDefinition {
         };
     }
 
-    public boolean isOneShot() {
-        return this == reset || isActionSetting() || subtractsFrom() != null;
+    public boolean isContextless() {
+        return this == reset || isActionSetting() || isGlobalSetting() || subtractsFrom() != null;
     }
 
     public boolean isGlobalSetting() {

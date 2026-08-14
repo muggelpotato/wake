@@ -56,7 +56,10 @@ GRAFT_OWNER = "3c4d5e6f-7081-4923-8a4b-5c6d7e8f9012"
 # a context every install seeds from the jar
 SEEDED_CONTEXT = "harbour"
 # settings the seeded `default` context carries and SEEDED_CONTEXT does not, so only inheritance can supply them
-DEFAULT_ONLY_SETTINGS = ["collisionmode", "falldamage", "setinterpolationten"]
+DEFAULT_ONLY_SETTINGS = ["collisionmode", "falldamage"]
+# the two the mod applies to itself rather than to the context carrying them: server state under
+# `-settings`, so no context holds one and no node under `/wakeobu` or `-clear` takes one
+CLIENT_WIDE = {"setinterpolationten", "setresetonworldload"}
 # the internal names, which no sandbox may take and which the name pattern already turns back
 INTERNAL = ["wake:empty", "wake:personal"]
 BULB = "\U0001F4A1"
@@ -601,16 +604,19 @@ def drill_empty_names():
 
 
 def drill_defaults_table():
-    """The command answers 'no default' for exactly the settings that carry none -- the predicate
-    its suggester filters on, so a name it offers can never answer with a refusal."""
+    """The command answers 'no default' for exactly the settings that carry one a context could be
+    holding instead -- the predicate its suggester filters on, so a name it offers can never answer with
+    a refusal. The two the mod applies to itself carry a default the table records and no context can
+    hold, so this surface has nothing to compare it against and refuses them with the rest."""
     print("\n-defaults answers for exactly the settings that have a vanilla default")
     missing, offered = [], []
     for _, name, _, default in DEFINITIONS:
         command_name = "-reset" if name == "reset" else name
         reply = run(f"wo -defaults {command_name}").lower()
         refused = "no default exists" in reply
-        if refused != (default is None):
-            (missing if default is None else offered).append(name)
+        answerable = default is not None and name not in CLIENT_WIDE
+        if refused == answerable:
+            (offered if answerable else missing).append(name)
     truthy(f"all {len(DEFINITIONS)} settings agree with the definition table",
            not missing and not offered,
            f"answered a value for {missing}, refused {offered}")
@@ -638,37 +644,44 @@ def drill_setting_nodes():
     """The tree is swept out of the definition enum, so what needs pinning is that the sweep reaches
     every row: a setting the table knows and the tree does not is a command nobody can type."""
     print("\nand every setting in the definition table is a command of its own")
-    missing = []
+    missing, offered = [], []
     for _, name, types, _ in DEFINITIONS:
         args = " ".join(SAMPLE[semantic] for semantic in types.split(",") if semantic)
         command = f"wo {'-reset' if name == 'reset' else name} {args}".strip()
         # a console is never an entity, so the target refusal is as far as a node that exists can get
-        if "must be executed by an entity" not in run(command).lower():
+        answered = "must be executed by an entity" in run(command).lower()
+        if name in CLIENT_WIDE:
+            if answered:
+                offered.append(name)
+        elif not answered:
             missing.append(name)
-    truthy(f"all {len(DEFINITIONS)} of them resolve under their own literal", not missing,
+    truthy(f"all {len(DEFINITIONS) - len(CLIENT_WIDE)} of them resolve under their own literal", not missing,
            f"no node answered for {missing}")
+    truthy(f"and neither of the {len(CLIENT_WIDE)} the mod applies to itself has one", not offered,
+           f"a node answered for {offered}")
 
     # -clear sweeps the same enum, minus the rows no context can hold: a node for one of those would be a
     # command that can only ever answer "nothing to clear", and a permission an admin could grant for it
     print("\nand -clear mirrors that sweep for exactly the settings a context can hold")
-    ONE_SHOT = {"reset": "-reset", "applyimpulse": "applyimpulse", "applyimpulserelative": "applyimpulserelative",
-                "removeblockslipperiness": "removeblockslipperiness", "clearslipperiness": "clearslipperiness",
-                "clearcollisionfilter": "clearcollisionfilter"}
-    unmirrored, mirrored_one_shots, unnamed_one_shots = [], [], []
+    CONTEXTLESS = {"reset": "-reset", "applyimpulse": "applyimpulse", "applyimpulserelative": "applyimpulserelative",
+                   "removeblockslipperiness": "removeblockslipperiness", "clearslipperiness": "clearslipperiness",
+                   "clearcollisionfilter": "clearcollisionfilter",
+                   "setinterpolationten": "setinterpolationten", "setresetonworldload": "setresetonworldload"}
+    unmirrored, mirrored, unnamed = [], [], []
     run("forceload add 0 0")
     run(f"kill @e[tag={STAND_TAG}]")
     run(STAND)
     time.sleep(SETTLE)  # the first row of the table is a one-shot, so the stand is selected immediately
     try:
         for _, name, types, _ in DEFINITIONS:
-            if name in ONE_SHOT:
+            if name in CONTEXTLESS:
                 # no literal of its own, so the greedy key argument swallows the whole tail and resolves
                 # nothing. Driven from the stand: a console fails the entity target before any of this
-                if "unknown obu setting" not in run(f"{AS_STAND}wo -clear {ONE_SHOT[name]} 1.0").lower():
-                    mirrored_one_shots.append(name)
+                if "unknown obu setting" not in run(f"{AS_STAND}wo -clear {CONTEXTLESS[name]} 1.0").lower():
+                    mirrored.append(name)
                 # the bare name is still a setting though, so it reads as absent rather than as unknown
-                if "is not active" not in run(f"{AS_STAND}wo -clear {ONE_SHOT[name]}").lower():
-                    unnamed_one_shots.append(name)
+                if "is not active" not in run(f"{AS_STAND}wo -clear {CONTEXTLESS[name]}").lower():
+                    unnamed.append(name)
                 continue
             identity = [semantic for semantic in types.split(",")
                         if semantic in ("SETTING_ENUM", "BLOCK_LIST", "ENTITY_LIST")]
@@ -680,12 +693,12 @@ def drill_setting_nodes():
     finally:
         run(f"kill @e[tag={STAND_TAG}]")
         run("forceload remove 0 0")
-    truthy(f"every setting a context holds has a -clear node taking its identity arguments ({len(DEFINITIONS) - len(ONE_SHOT)})",
+    truthy(f"every setting a context holds has a -clear node taking its identity arguments ({len(DEFINITIONS) - len(CONTEXTLESS)})",
            not unmirrored, f"no -clear node answered for {unmirrored}")
-    truthy(f"and none of the {len(ONE_SHOT)} a context never holds has a node of its own",
-           not mirrored_one_shots, f"a node answered for {mirrored_one_shots}")
+    truthy(f"and none of the {len(CONTEXTLESS)} a context never holds has a node of its own",
+           not mirrored, f"a node answered for {mirrored}")
     truthy("while each of them named alone still reads as absent rather than as unknown",
-           not unnamed_one_shots, f"answered as unknown for {unnamed_one_shots}")
+           not unnamed, f"answered as unknown for {unnamed}")
 
 
 def drill_player_only():

@@ -99,7 +99,7 @@ public class OBUDao extends WakeDao {
         selectByKeys("SELECT context_name, definition_name, args FROM wake_obu_settings", "context_name", keys, row -> {
             OBUDefinition def = OBUDefinition.byName(row.getString("definition_name"));
             String contextName = row.getString("context_name");
-            if (def == null || def.isOneShot() || contextName == null) return;
+            if (def == null || def.isContextless() || contextName == null) return;
             OBUSetting setting = readSetting(def, row.getString("args"));
             if (setting == null) {
                 plugin.getLogger().warning("Skipping OBU setting '" + def.commandName() + "' of context '" + contextName + "': the client cannot be sent that value");

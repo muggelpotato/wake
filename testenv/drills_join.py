@@ -48,6 +48,11 @@ NAG = b"outdated version of OpenBoatUtils"
 AHEAD = b"newer than the server's supported version"
 REFUSED = b"bugged or no longer supported"
 CHANNELS = b"openboatutils"
+CONTEXT_CHANNEL = b"openboatutils:context"
+# the two the mod applies to itself rather than to a context: reset-on-world-load pinned off, and the
+# interpolation flag whichever way the switch is set. Raw settings, so the id follows the channel name
+WORLD_LOAD = b"openboatutils:settings\x00\x26\x00"
+INTERPOLATION = b"openboatutils:settings\x00\x1d"
 
 CB_DISCONNECT, CB_FINISH, CB_KEEPALIVE, CB_KNOWN_PACKS = 0x02, 0x03, 0x04, 0x0E
 SB_CLIENT_INFO, SB_PLUGIN, SB_FINISH_ACK, SB_KEEPALIVE, SB_KNOWN_PACKS = 0x00, 0x02, 0x03, 0x04, 0x07
@@ -149,12 +154,21 @@ class Seen:
         self.ahead = AHEAD in stream
         self.refused = REFUSED in stream
         self.payloads = stream.count(CHANNELS)
+        # a world load between the two would drop a context the server still thinks the client holds,
+        # so the flag that switches that off has to be on the wire ahead of the context, not behind it
+        pinned, context = stream.find(WORLD_LOAD), stream.find(CONTEXT_CHANNEL)
+        self.globals_first = 0 <= pinned < context and INTERPOLATION in stream
+        # every interpolation flag that went out, in order, so a push nothing made is as visible as one twice
+        self.interpolation = ",".join("on" if stream[at.end():at.end() + 1] == b"\x01" else "off"
+                                      for at in re.finditer(re.escape(INTERPOLATION), stream))
         self.lines = lines
         self.connected = connected
 
     def __str__(self):
         return (f"{self.lines} console line(s), {self.nags} nag(s), ahead={self.ahead}, "
-                f"refused={self.refused}, {self.payloads} channel mention(s), connected={self.connected}")
+                f"refused={self.refused}, {self.payloads} channel mention(s), "
+                f"globals_first={self.globals_first}, interpolation=[{self.interpolation}], "
+                f"connected={self.connected}")
 
 
 def handshake(version, unstable=False):
@@ -176,8 +190,11 @@ def protocol_of(host, port):
         probe.close()
 
 
-def join(version, play_copy=False, config_delay=0.0, listen=6.0):
-    """One full join announcing `version`, reported by what the server said back."""
+def join(version, play_copy=False, config_delay=0.0, listen=6.0, during=()):
+    """One full join announcing `version`, reported by what the server said back.
+
+    `during` is run on the console one command at a time while the client is still listening, which is
+    the only place a packet the server sends of its own accord can be watched arriving."""
     log = Log()
     host, port = game
     client = Connection(host, port)
@@ -219,8 +236,12 @@ def join(version, play_copy=False, config_delay=0.0, listen=6.0):
 
         stream, connected = bytearray(), True
         client.sock.settimeout(1.0)
+        pending, due = list(during), time.monotonic() + SETTLE
         deadline = time.monotonic() + listen
         while time.monotonic() < deadline:
+            if pending and time.monotonic() >= due:
+                rcon.run(pending.pop(0))
+                due = time.monotonic() + SETTLE
             try:
                 _, payload = client.read()
                 stream += payload
@@ -260,6 +281,7 @@ def drill_floor_build(floor):
     truthy("one console line names the version", seen.lines == 1, str(seen))
     truthy("one outdated line, not two", seen.nags == 1, str(seen))
     truthy("and the join carried a context with it", seen.payloads > 0, str(seen))
+    truthy("behind the two flags the mod applies to itself", seen.globals_first, str(seen))
     truthy("and the client is driven, not dropped", seen.connected, str(seen))
 
 
@@ -303,8 +325,28 @@ def drill_table_edges(latest):
     truthy("and it is still driven", seen.payloads > 0, str(seen))
 
 
+def drill_globals_pushed(floor):
+    """A client-wide flag is pushed and never asked for, so every way of moving one owes a connected
+    client a packet: the switch in both directions, and an import, which writes the row behind it."""
+    log = Log()
+    rcon.run("wobu -settings setinterpolationten true")
+    rcon.run("wake database export obu")
+    if not log.await_line("Database export completed for module obu", 30):
+        bad("the export never finished, so no import could hand the flag back")
+        return
+    try:
+        rcon.run("wobu -settings setinterpolationten false")
+        seen = join(floor, listen=12.0, during=("wobu -settings setinterpolationten true",
+                                                "wobu -settings setinterpolationten false",
+                                                "wake database import obu confirm"))
+        truthy("the join, both switches and the import each put the flag on the wire",
+               seen.interpolation == "off,on,off,on", str(seen))
+    finally:
+        rcon.run("wobu -settings setinterpolationten false")
+
+
 def drill_quiet_console(log):
-    """Nine joins and nine quits behind us: a listener that leaks per-player state says so here."""
+    """Ten joins and ten quits behind us: a listener that leaks per-player state says so here."""
     noise = wake_errors(log.read())
     truthy("no Wake error or warning behind any of the joins", not noise, "; ".join(noise[:3]))
 
@@ -352,6 +394,7 @@ def main():
                              (drill_refused_builds, (floor, broken[0])),
                              (drill_table_edges, (latest,)),
                              (drill_nag_switch, (floor,)),
+                             (drill_globals_pushed, (floor,)),
                              (drill_quiet_console, (log,))):
         print(f"\n{drill.__name__.removeprefix('drill_').replace('_', ' ')}")
         drill(*arguments)

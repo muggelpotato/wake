@@ -307,10 +307,6 @@ def drill_boat_overrides():
     boat_says("blocks separated by spaces rather than commas", "wobu -clear blockslipperiness ice stone", "cleared")
     boat_says("leaving the one neither named", "wobu -clear 3:packed_ice", "cleared blockslipperiness")
 
-    step("a player-wide setting is refused on a boat rather than stored on it")
-    boat_says("setinterpolationten names the reason", "wobu setinterpolationten true", "applies to players")
-    boat_says("and left no override behind", "wobu -clear setinterpolationten", "is not active")
-
     # a fold rebuilds the override map whole, and losing the last entry drops the boat's uuid with it:
     # a rebuild that loses the settings beside the one it folded, or a boat that empties and can never
     # take another, would both read as an override that is simply not there
@@ -621,7 +617,7 @@ def drill_rows_no_command_wrote():
     log = Log()
     reread_store()
     try:
-        counts = run("wobu -settings query-context-quantity")
+        counts = run("wobu -settings query-context-count")
         truthy("the table was still read", "has not been read" not in counts, counts.strip()[:200])
         listing = run("wobu -context").lower()
         truthy("every context the store already had is still in it", KNOWN_CONTEXT in listing, listing.strip()[:300])
@@ -675,18 +671,20 @@ def drill_import_settings_door():
     """A settings block in an export file is the one place a setting arrives without a command argument
     type behind it, so it is where the door has to stand.
 
-    Four of them are not settings at all: `-reset` clears a context, an impulse fires once at whoever
-    is aimed at, and the subtractive ones edit what a context already holds -- no context holds any of
-    them, so a file naming one has to be refused rather than written, or the table ends up holding a
-    row the loader will never hand back and nothing can delete. The next shape is the same setting
-    twice: the table keys settings by identity, so the file's last word is the one that survives, and
-    the cache has to say the same thing the table does. The last is the same setting twice over one
+    Five of them are not settings a context can hold: `-reset` clears a context, an impulse fires once at
+    whoever is aimed at, the subtractive ones edit what a context already holds, and the interpolation
+    flag is one the mod applies to itself -- no context holds any of them, so a file naming one has to be
+    refused rather than written, or the table ends up holding a row the loader will never hand back and
+    nothing can delete. The next shape is the same setting twice: the table keys settings by identity, so
+    the file's last word is the one that survives, and the cache has to say the same thing the table
+    does. The last is the same setting twice over one
     list, which is not a replacement but a fold -- both blocks are kept, in one entry, or the client is
     sent the same block twice and applies whichever arrived last."""
     console = graft_export({"sandbox": "  doorprobe:\n    settings:\n      '-reset': ''\n"
                                        "      applyimpulserelative: '0.0 5.0 0.0'\n"
                                        "      clearslipperiness: ''\n"
                                        "      removeblockslipperiness: 'ice'\n"
+                                       "      setinterpolationten: 'true'\n"
                                        "      stepsize:\n        - '1.5'\n        - '2.5'\n"
                                        "      blockslipperiness:\n        - '0.9 ice'\n        - '0.9 packed_ice'\n"})
     if console is None:
@@ -694,10 +692,10 @@ def drill_import_settings_door():
         return
     try:
         truthy("the import named every setting no context can hold",
-               console.count("acts once, so no context holds it") == 4, console.strip()[-600:])
+               console.count("no context holds that setting") == 5, console.strip()[-600:])
         view = run("wobu -sandbox view doorprobe").lower()
         truthy("none of them reached the context",
-               "reset" not in view and "applyimpulse" not in view
+               "reset" not in view and "applyimpulse" not in view and "interpolation" not in view
                and "clearslipperiness" not in view and "removeblockslipperiness" not in view,
                view.strip()[:400])
         truthy("while the setting beside them did, as the file's last word",
@@ -710,9 +708,9 @@ def drill_import_settings_door():
             return
         block = re.search(r"(?ms)^  doorprobe:\n((?:[ \t]+.*\n?)*)", text)
         body = block.group(1) if block else ""
-        truthy("one stepsize, not a list, and nothing that acts once",
+        truthy("one stepsize, not a list, and nothing no context can hold",
                body.count("stepsize") == 1 and "2.5" in body and "1.5" not in body
-               and "reset" not in body and "impulse" not in body
+               and "reset" not in body and "impulse" not in body and "interpolation" not in body
                and "clearslipperiness" not in body and "removeblockslipperiness" not in body,
                body[:400] or text[:400])
         truthy("and one blockslipperiness carrying both blocks, not one entry per line",
@@ -744,7 +742,7 @@ def drill_export_of_a_store_never_read():
         set_module_enabled("obu", True)
         rcon.run("wake reload")
         time.sleep(SETTLE * 2)
-        counts = run("wobu -settings query-context-quantity")
+        counts = run("wobu -settings query-context-count")
         truthy("the store says it never read the table", "has not been read" in counts, counts.strip()[:200])
         truthy("and the console says so once, as a failed read",
                log.read().count("Failed to read wake_obu_contexts") == 1, log.read().strip()[-500:])
@@ -771,7 +769,7 @@ def drill_export_of_a_store_never_read():
         rcon.run("wake reload")
         time.sleep(SETTLE * 2)
     truthy("and the store reads again once the column is back",
-           "has not been read" not in run("wobu -settings query-context-quantity")
+           "has not been read" not in run("wobu -settings query-context-count")
            and KNOWN_CONTEXT in run("wobu -context").lower(), run("wobu -context").strip()[:300])
 
 
@@ -1099,17 +1097,18 @@ def drill_purge():
 def drill_settings_switches():
     """Every switch `-settings` carries, the answer it owes, and the row it has to land in.
 
-    None of them shows from a console -- persistence only on a relog, the lag fix only on a client
-    computing its own physics, the collapsed layer only inside `-status`, which needs a player -- so a
-    key the command writes but nothing reads would still reply `enabled`. The export is what binds the
-    two: it sweeps the module's prefix, so the value set here has to come back out under the name the
-    reader asks for."""
-    switches = {"persistence": ("persistent player states", "persistent_player_states"),
-                "boat-lag-fix": ("boat lag fix", "boat_lag_fix"),
-                "collapse-default-context": ("collapsed default context", "collapse_default_context"),
-                "update-nag": ("update nag", "update_nag")}
+    None of them shows from a console -- persistence only on a relog, the lag fix and the interpolation
+    flag only on a client computing its own physics, the collapsed layer only inside `-status`, which
+    needs a player -- so a key the command writes but nothing reads would still reply `enabled`. The
+    export is what binds the two: it sweeps the module's prefix, so the value set here has to come back
+    out under the name the reader asks for."""
+    switches = {"persistent-player-states": ("persistent player states", "persistent_player_states", "true"),
+                "boat-lag-fix": ("boat lag fix", "boat_lag_fix", "true"),
+                "collapse-default-context": ("collapsed default context", "collapse_default_context", "true"),
+                "update-nag": ("update nag", "update_nag", "true"),
+                "setinterpolationten": ("ten-step interpolation", "setinterpolationten", "false")}
     try:
-        for literal, (feature, _) in switches.items():
+        for literal, (feature, _, _) in switches.items():
             on = run(f"wobu -settings {literal} true")
             truthy(f"{literal} on names the feature", feature in on.lower() and "enabled" in on.lower(), on.strip()[:200])
             off = run(f"wobu -settings {literal} false")
@@ -1122,11 +1121,11 @@ def drill_settings_switches():
             bad("the export never finished, so no row could be read back")
             return
         text = EXPORT.read_text(encoding="utf-8", errors="replace")
-        for literal, (_, key) in switches.items():
+        for literal, (_, key, _) in switches.items():
             truthy(f"{literal} wrote {key}", f"{key}: false" in text, text[:400])
     finally:
-        for literal in switches:
-            rcon.run(f"wobu -settings {literal} true")
+        for literal, (_, _, default) in switches.items():
+            rcon.run(f"wobu -settings {literal} {default}")
 
 
 def main():

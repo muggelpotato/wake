@@ -37,7 +37,7 @@ public class DefaultsCommand {
 
     private static @NonNull CompletableFuture<Suggestions> suggestSetting(CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
         return CommandHelper.suggestMatching(builder, Arrays.stream(OBUDefinition.values())
-                .filter(def -> def.defaultValue() != null)
+                .filter(def -> def.defaultValue() != null && !def.isGlobalSetting())
                 .map(OBUDefinition::commandName).toList());
     }
 
@@ -45,7 +45,7 @@ public class DefaultsCommand {
         CommandSender sender = ctx.getSource().getSender();
         String settingName = StringArgumentType.getString(ctx, "setting");
         OBUDefinition def = OBUDefinition.byName(settingName);
-        String defValueStr = def == null ? null : def.defaultValue();
+        String defValueStr = def == null || def.isGlobalSetting() ? null : def.defaultValue();
         if (defValueStr == null) {
             plugin.getMessageManager().send(sender, "commands.obu.defaults.missing", Placeholder.unparsed("setting", settingName));
             return 0;

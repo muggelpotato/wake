@@ -109,8 +109,8 @@ final class OBUDataTransfer {
                 for (String settingName : settingsSec.getKeys(false)) {
                     OBUDefinition def = OBUDefinition.byName(settingName);
                     if (def == null) continue;
-                    if (def.isOneShot()) {
-                        plugin.getLogger().warning("Skipped OBU setting '" + settingName + "' in context '" + name + "': that setting acts once, so no context holds it");
+                    if (def.isContextless()) {
+                        plugin.getLogger().warning("Skipped OBU setting '" + settingName + "' in context '" + name + "': no context holds that setting");
                         continue;
                     }
                     List<String> invocations = settingsSec.isList(settingName)
