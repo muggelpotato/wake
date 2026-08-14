@@ -19,12 +19,13 @@ reviews:
   auto_review:
     enabled: false
   path_filters:
-    - "src/main/java/dev/muggel/wake/features/obu/**"
-    - "src/main/java/dev/muggel/wake/core/commands/**"
-    - "src/main/java/dev/muggel/wake/core/database/**"
-    - "src/main/java/dev/muggel/wake/core/module/**"
-    - "src/main/java/dev/muggel/wake/core/text/**"
-    - "src/main/java/dev/muggel/wake/core/Scheduling.java"
+    - "src/main/java/dev/muggel/wake/core/**"
+    - "src/main/java/dev/muggel/wake/Wake.java"
+    - "src/main/java/dev/muggel/wake/features/**"
+    - "!src/main/java/dev/muggel/wake/features/obu/**"
+    - "src/main/resources/**"
+    - "schema.sql"
+    - "build.gradle.kts"
     - "CLAUDE.md"
     - ".ast-grep/**"
   pre_merge_checks:
