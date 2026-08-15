@@ -22,6 +22,8 @@ import java.util.logging.Level;
  * A database table held in memory. <br>
  * A DAO owns one per mirrored table and every read and write of that table goes through it. <br>
  * A write -> updates cache -> queues the statement -> announces the key once queue drains. <br>
+ * A lookup answers on any thread and another server's invalidation arrives on one. <br>
+ * Every write, every reload and the apply that settles it run on the main thread. <br>
  *
  * Four rules keep a reload from corrupting the cache: <br>
  * 1. a loader that throws is a failed read, never an empty result. The keys stay dirty and are retried <br>
@@ -187,7 +189,10 @@ public final class CachedStore<V> {
         if (readWouldRewind()) {
             return false;
         }
-        plugin.getDatabaseManager().awaitWrites();
+        if (!plugin.getDatabaseManager().awaitWrites()) {
+            Scheduling.onMain(plugin, () -> reloadAsync(null));
+            return false;
+        }
         long wholeTableAt = wholeTableRequests.get();
         Map<String, Long> covered = Map.copyOf(staleKeys);
         long readFrom = writeClock.get();

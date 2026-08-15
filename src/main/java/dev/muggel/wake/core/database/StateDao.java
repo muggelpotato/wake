@@ -104,7 +104,10 @@ public class StateDao extends WakeDao {
         state.save(key, value, "Failed to save state", List.of(new SqlStatement(UPSERT, new Object[]{key, gson.toJson(value)})));
     }
 
-    public boolean toggle(String key, boolean defaultValue) {
+    public @Nullable Boolean toggle(String key, boolean defaultValue) {
+        if (!state.isLoaded()) {
+            return null;
+        }
         boolean newState = !get(key, defaultValue);
         set(key, newState);
         return newState;

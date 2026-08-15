@@ -56,7 +56,7 @@
  * <h2>Argument types</h2>
  * Prefer Brigadier/Paper built-ins (bool, integer, player, ...). <br>
  * For Wake's domain values use the core types in {@code core/commands/arguments/}. <br>
- * They are core infrastructure: a module holding its own values hands them to one ({@code KeyArgumentType.of(...)} <br>
+ * They are core infrastructure: a module holding its own values hands them to one ({@code KeyArgumentType.of(...)}) <br>
  * A good argument type validates at parse time with a localized error and suggests as you type, so executors never re-validate.
  *
  * <h2>Failure and text</h2>

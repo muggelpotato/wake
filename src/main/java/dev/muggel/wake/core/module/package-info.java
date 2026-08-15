@@ -25,6 +25,6 @@
  * Module data lives in the database (see {@code core/database}).
  * {@code seedDataIfEmpty(...)} applies bundled defaults when the store was read and found empty (the export/import/reset hooks back {@code /wake database}). <br>
  * {@code exportState}/{@code importState} sweep the module's state prefix, so a setting added later is carried without naming it anywhere. <br>
- * A seed, an import and a reset all announce the module's scope, because the database they write to is one another server may share.
+ * A seed, an import and a reset all announce the module's scope, because another server may share the database they write to.
  */
 package dev.muggel.wake.core.module;

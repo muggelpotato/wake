@@ -73,11 +73,7 @@ class OutageMonitor {
     }
 
     boolean journal(@NonNull List<SqlStatement> statements) {
-        boolean kept = true;
-        for (SqlStatement statement : statements) {
-            kept &= journal.append(statement.sql(), statement.params());
-        }
-        return kept;
+        return journal.append(statements);
     }
 
     void closeJournal() {

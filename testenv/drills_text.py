@@ -47,6 +47,8 @@ ENTRY = re.compile(r"^(\s*)([a-z_][a-z0-9_]*):(?: (.*))?$")
 KEY_LITERAL = re.compile(r'"([a-z][a-z0-9_]*(?:\.[a-z0-9_]*)+)"')
 PALETTE_ENTRY = re.compile(r'^\s+[A-Z_]+\("([a-z_]+)", 0x([0-9A-Fa-f]{6})\)')
 HEADER_COLOUR = re.compile(r"^#\s+<([a-z_]+)>")
+# the placeholder list is too long for one line, so its declaration is every <tag>-only line under the heading
+PLACEHOLDER_ROW = re.compile(r"^#\s+(?:<[a-z_]+>\s*)+$")
 # a tag carrying no arguments: <click:...> and friends bring their own and are never placeholders
 PLAIN_TAG = re.compile(r"(?<!\\)</?([a-z_]+)>")
 HEX_COLOUR = re.compile(r"§x((?:§[0-9a-fA-F]){6})")
@@ -141,6 +143,17 @@ def header_tags(comments):
             break
         listed.append(match.group(1))
     return listed
+
+
+def header_placeholders(comments):
+    """The placeholders the header declares: the run of `<tag>` lines under its heading."""
+    at = next((index for index, line in enumerate(comments) if "Dynamic placeholders" in line), -1)
+    declared = set()
+    for line in comments[at + 1:]:
+        if not PLACEHOLDER_ROW.match(line):
+            break
+        declared |= set(re.findall(r"<([a-z_]+)>", line))
+    return declared
 
 
 def source_keys(lang_roots, config_keys):
@@ -242,10 +255,7 @@ def drill_templates(lang, comments):
 
     # a placeholder answers before a template, so one taking a name the plugin fills would apply only
     # in the messages that leave it unfilled: one name meaning two things, decided by the call site
-    listed = next((comments[at + 1] for at, line in enumerate(comments[:-1])
-                   if "Dynamic placeholders" in line), "")
-    filled = set(re.findall(r"<([a-z_]+)>", listed))
-    stolen = sorted(set(shared) & (filled | STANDARD_TAGS | set(palette())))
+    stolen = sorted(set(shared) & (header_placeholders(comments) | STANDARD_TAGS | set(palette())))
     for name in stolen:
         bad("template on a name that is already answered", name)
     if not stolen:
@@ -268,9 +278,7 @@ def drill_placeholders(lang, comments):
     used = {tag for key, value in lang.items() if not key.startswith("templates.")
             for tag in PLAIN_TAG.findall(value)}
     used -= STANDARD_TAGS | set(palette()) | set(shared)
-    listed = next((comments[at + 1] for at, line in enumerate(comments[:-1])
-                   if "Dynamic placeholders" in line), "")
-    declared = set(re.findall(r"<([a-z_]+)>", listed))
+    declared = header_placeholders(comments)
     for name in sorted(used - declared):
         bad("placeholder used but not documented", name)
     for name in sorted(declared - used):

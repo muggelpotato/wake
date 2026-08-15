@@ -49,19 +49,19 @@ Wake was developed and tested on Paper 1.21.11
 ### Architecture
 Modular Monolith. Features are isolated into distinct modules
 - [wake.core](src/main/java/dev/muggel/wake/core) provides shared, generic utilities that modules can and should use, like:
-  - [WakeCommandBuilder](src/main/java/dev/muggel/wake/core/commands/WakeCommandBuilder.java) for Brigadier commands
+  - [WakeCommandManager](src/main/java/dev/muggel/wake/core/commands/WakeCommandManager.java) for Brigadier commands
   - [MessageManager](src/main/java/dev/muggel/wake/core/text/MessageManager.java) for fetching/parsing localized MiniMessages
-  - [StateManager](src/main/java/dev/muggel/wake/core/config/StateManager.java) for simple persistent data handling
+  - [StateDao](src/main/java/dev/muggel/wake/core/database/StateDao.java) for simple persistent data handling
 - Modules never directly import or reference concrete classes from one another. They communicate in two decoupled ways:
-  - Data & API: [Wake.getServiceRegistry().get(OBUService.class)](src/main/java/dev/muggel/wake/Wake.java#L29-L31) for API calls like getBoatState
+  - Data & API: [Wake.getServiceRegistry().get(OBUService.class)](src/main/java/dev/muggel/wake/Wake.java#L121-L123) for API calls like getVehicleScale
   - Event Bus: Modules listen for custom Bukkit Events from other modules rather than calling them directly to keep modules independent for reactive logic, like driving into a drydock powerup triggers an OBU context change
 - Wake is event-driven where possible to avoid big impacts on server performance
-- To add new feature modules, put your class in [wake.features](src/main/java/dev/muggel/wake/features), extend [AbstractModule](src/main/java/dev/muggel/wake/core/module/AbstractModule.java) and register it in [Wake](src/main/java/dev/muggel/wake/Wake.java).
+- To add new feature modules, put your class in [wake.features](src/main/java/dev/muggel/wake/features), extend [WakeModule](src/main/java/dev/muggel/wake/core/module/WakeModule.java) and register it in [Wake](src/main/java/dev/muggel/wake/Wake.java).
   To ensure your module unloads gracefully without breaking the rest of the plugin when admins disable modules via the [config](src/main/resources/config.yml), put all your logic inside your module's package
 
 Wake is designed to be as flexible and maintainable as possible (Zero [NMS](https://docs.papermc.io/paper/dev/internals/), standard Paper APIs, using [PacketEvents](https://github.com/retrooper/packetevents)). Please keep that in mind if you create pull requests
 > [!Warning]
-> Wake's OBU module intentionally bypasses server-side anticheat for simplicity by canceling vehicle correction packets (VEHICLE_MOVE) > [BoatLagInterceptor](src/main/java/dev/muggel/wake/features/obu/networking/interceptors/BoatLagInterceptor.java)<br>
+> Wake's OBU module intentionally bypasses server-side anticheat for simplicity by canceling vehicle correction packets (VEHICLE_MOVE) > [BoatLagInterceptor](src/main/java/dev/muggel/wake/features/obu/clients/BoatLagInterceptor.java)<br>
 > If you want to use Wake on a public server you would need to disable the OBU module or use a dedicated anti-cheat plugin
 
 Proper documentation will be created eventually
@@ -76,4 +76,4 @@ Wake is primarily developed as a hobby project **for small hobby server projects
 - [PaperMC](https://papermc.io/): For providing the Paper API that Wake makes use of
 - [PacketEvents](https://www.packetevents.com/): For providing the NMS-free packet manipulation engine that Wake makes use of
 - [OpenBoatUtils](https://github.com/OpenBoatUtils/OpenBoatUtils): The client-side mod that powers a big portion of Wake's features
-- [@microwavedram](https://github.com/microwavedram) for implementing suggested OBU features that Wake will make use of and for giving me the idea of how to fix boatlag via [BoatLagInterceptor](src/main/java/dev/muggel/wake/features/obu/networking/interceptors/BoatLagInterceptor.java)
+- [@microwavedram](https://github.com/microwavedram) for implementing suggested OBU features that Wake will make use of and for giving me the idea of how to fix boatlag via [BoatLagInterceptor](src/main/java/dev/muggel/wake/features/obu/clients/BoatLagInterceptor.java)

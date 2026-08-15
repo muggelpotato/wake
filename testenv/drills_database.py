@@ -20,6 +20,7 @@ import argparse
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -345,7 +346,7 @@ def drill_journal_bad_line(rcon: Rcon, log: Log, mariadb):
         # a hard kill mid-append leaves exactly this: a line that is not a whole JSON object
         with JOURNAL.open("a", encoding="utf-8") as handle:
             handle.write('{"q": "REPLACE INTO wake_state (state_key, sta\n')
-            handle.write('{"q": "UPDATE wake_no_such_table SET x = ?", "p": [{"t": "i", "v": 1}]}\n')
+            handle.write('{"s": [{"q": "UPDATE wake_no_such_table SET x = ?", "p": [{"t": "i", "v": 1}]}]}\n')
         step(f"appended a truncated line and one naming a table that does not exist to {good} good one(s)")
 
     if not log.await_line("Database recovered", 90):
@@ -479,6 +480,70 @@ def drill_reload_during_outage(rcon: Rcon, log: Log, mariadb):
     time.sleep(SETTLE)
 
 
+def drill_reload_behind_a_locked_row(rcon: Rcon, log: Log, mariadb):
+    """A write another session's row lock is sitting on has to be journaled, not lost, and not rewound.
+
+    The database answers everything here -- one session simply holds the row the writer thread needs.
+    The write waits out the DSN's 3s socketTimeout, which reads as a connection failure, so the outage
+    path takes it and a reload during it is refused by the degraded guard. That 3s cap is also why the
+    drain check in `awaitWrites` is not what this drill reaches: it answers the other case, a database
+    that is healthy and merely slower than the 10s drain, which no lock held from outside can stage.
+    """
+    step("a write blocked by another session is journaled, and a reload during it rewinds nothing")
+    if not mariadb:
+        step("skipped: sqlite has no second session to hold a row lock with")
+        return
+    container, user, password, database = mariadb
+    key = "drydock.boostpads_enabled"
+    if state(key, mariadb) is None:
+        bad(f"{key} is not in the table, so there is no row to hold")
+        return
+    before = switch(rcon.run("dd boostpad list"))
+    log.reset()
+    holder = subprocess.Popen([os.environ.get("DOCKER", "docker"), "exec", "-i", container, "mariadb",
+                               f"-u{user}", f"-p{password}", database],
+                              stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                              text=True)
+    try:
+        step(f"holding the {key} row in an open transaction")
+        holder.stdin.write(f"BEGIN;\nUPDATE wake_state SET state_value = state_value WHERE state_key = '{key}';\n")
+        holder.stdin.flush()
+        time.sleep(SETTLE)
+
+        rcon.run("dd boostpad toggle")
+        toggled = switch(rcon.run("dd boostpad list"))
+        truthy("the switch flipped in the cache with its write stuck behind the lock",
+               toggled and toggled != before, f"{before!r} -> {toggled!r}")
+
+        step("reloading, which reads the whole state table back")
+        started = time.monotonic()
+        rcon.run("wake reload")
+        step(f"the reload answered after {time.monotonic() - started:.0f}s")
+        time.sleep(SETTLE)
+        truthy("the reload left the cache alone rather than serving the row the table still holds",
+               switch(rcon.run("dd boostpad list")) == toggled, f"want {toggled!r}")
+        truthy("and the blocked write went to the journal rather than being dropped",
+               "journaling until it returns" in log.read(), log.read()[-200:])
+    finally:
+        holder.stdin.write("ROLLBACK;\n")
+        holder.stdin.close()
+        holder.wait(timeout=30)
+        step("released the row")
+
+    # the probe that ends a degraded spell runs every 5s, so waiting a fixed couple of seconds reads the row
+    # before the replay rather than after it
+    if not log.await_line("Database recovered", 90):
+        bad("no recovery within 90s of the row being released")
+        return
+    time.sleep(SETTLE)
+    truthy("the write landed once the row was free",
+           state(key, mariadb) == ("true" if toggled == "enabled" else "false"), repr(state(key, mariadb)))
+    truthy("and the cache still agrees with it", switch(rcon.run("dd boostpad list")) == toggled)
+    if switch(rcon.run("dd boostpad list")) != before:
+        rcon.run("dd boostpad toggle")
+    time.sleep(SETTLE)
+
+
 def drill_reenable_during_outage(rcon: Rcon, log: Log, mariadb):
     """Re-enabling a module during an outage rebuilds its cache from scratch, and the table is the wrong source.
 
@@ -564,7 +629,8 @@ def main():
                       drill_failure_names_the_cause, drill_one_at_a_time,
                       drill_state_roundtrip, drill_drop_is_scoped,
                       drill_obu_export_shape, drill_malformed_state_row, drill_refused_while_degraded,
-                      drill_reload_during_outage, drill_reenable_during_outage, drill_journal_bad_line]:
+                      drill_reload_during_outage, drill_reload_behind_a_locked_row,
+                      drill_reenable_during_outage, drill_journal_bad_line]:
             print(f"\n{drill.__name__.removeprefix('drill_').replace('_', ' ')}")
             drill(rcon, log, mariadb)
     except RuntimeError as error:

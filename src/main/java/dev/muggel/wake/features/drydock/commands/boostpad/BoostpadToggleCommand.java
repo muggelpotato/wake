@@ -23,10 +23,15 @@ public class BoostpadToggleCommand {
     }
 
     private static int executeGlobal(@NonNull CommandContext<CommandSourceStack> ctx, Wake plugin) {
-        boolean newState = plugin.getStateDao().toggle(BoostpadDetectorListener.STATE_KEY_ENABLED, BoostpadDetectorListener.DEFAULT_ENABLED);
+        CommandSender sender = ctx.getSource().getSender();
+        Boolean newState = plugin.getStateDao().toggle(BoostpadDetectorListener.STATE_KEY_ENABLED, BoostpadDetectorListener.DEFAULT_ENABLED);
+        if (newState == null) {
+            plugin.getMessageManager().send(sender, "commands.drydock.boostpad.settings_unavailable");
+            return 0;
+        }
         DrydockCommandHelper.refreshBoostpadRegistration(plugin);
         String stateKey = newState ? "commands.drydock.boostpad.enabled" : "commands.drydock.boostpad.disabled";
-        plugin.getMessageManager().send(ctx.getSource().getSender(), stateKey);
+        plugin.getMessageManager().send(sender, stateKey);
         return Command.SINGLE_SUCCESS;
     }
 

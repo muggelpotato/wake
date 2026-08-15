@@ -499,12 +499,26 @@ def drill_outage(rcon: Rcon, log: Log, mariadb: Optional[tuple]):
         rcon.run(f"wake hints {target}")
         if await_file(JOURNAL, True, 45):
             lines = [ln for ln in JOURNAL.read_text(encoding="utf-8").splitlines() if ln.strip()]
-            if all(ln.lstrip().startswith("{") for ln in lines):
-                ok(f"journaled {len(lines)} write(s), one JSON object per line")
+            try:
+                groups = [json.loads(ln).get("s") for ln in lines]
+            except ValueError:
+                groups = []
+            if groups and all(group and all("q" in statement for statement in group) for group in groups):
+                ok(f"journaled {len(lines)} write(s), one line each with its statements")
             else:
-                bad("journal is not one JSON object per line")
+                bad("a journal line is not a write with the statements it queued")
         else:
             bad("no outage journal appeared within 45s")
+
+        # a write of several statements is one line or it is a torn transaction: journal a rename's shape
+        # by hand, because nothing the console can reach queues more than one statement
+        step("appending a two-statement write by hand")
+        with JOURNAL.open("a", encoding="utf-8") as out:
+            out.write(json.dumps({"s": [
+                {"q": "REPLACE INTO wake_state (state_key, state_value) VALUES (?, ?)",
+                 "p": [{"t": "s", "v": "core.journal_pair_a"}, {"t": "s", "v": '"one"'}]},
+                {"q": "REPLACE INTO wake_state (state_key, state_value) VALUES (?, ?)",
+                 "p": [{"t": "s", "v": "core.journal_pair_b"}, {"t": "s", "v": '"two"'}]}]}) + "\n")
 
         # a reload reads the state table back before the modules re-derive from it, and that read must not
         # sit on a database that is not answering: an admin reloading during an outage would hang the server
@@ -532,6 +546,14 @@ def drill_outage(rcon: Rcon, log: Log, mariadb: Optional[tuple]):
         ok(f"replayed value landed in the database ({target})")
     else:
         bad(f"database holds {state('core.show_hints', mariadb)!r}, expected {target!r}")
+
+    pair = (state("core.journal_pair_a", mariadb), state("core.journal_pair_b", mariadb))
+    if pair == ("one", "two"):
+        ok("the two-statement write replayed whole")
+    else:
+        bad(f"the two-statement write replayed as {pair}, expected ('one', 'two')")
+    write_state_raw("core.journal_pair_a", None, mariadb)
+    write_state_raw("core.journal_pair_b", None, mariadb)
 
     rcon.run(f"wake hints {original}")
 
@@ -818,8 +840,8 @@ def drill_boot_without_database(jar, plugin, host, port, password):
         bad(f"could not point {config.name} at an unreachable database")
         return
     # a stand-in for what the last run left behind: nothing replays it, so what it holds does not matter
-    left_behind = json.dumps({"q": "REPLACE INTO wake_state (state_key, state_value) VALUES (?, ?)",
-                              "p": [{"t": "s", "v": "core.journal_drill"}, {"t": "s", "v": "kept"}]}) + "\n"
+    left_behind = json.dumps({"s": [{"q": "REPLACE INTO wake_state (state_key, state_value) VALUES (?, ?)",
+                                     "p": [{"t": "s", "v": "core.journal_drill"}, {"t": "s", "v": "kept"}]}]}) + "\n"
     server = None
     try:
         config.write_text(broken, encoding="utf-8")

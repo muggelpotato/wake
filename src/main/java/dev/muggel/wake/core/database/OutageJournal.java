@@ -1,6 +1,5 @@
 package dev.muggel.wake.core.database;
 
-import co.aikar.idb.DB;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -20,10 +19,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 
 /**
  * Write-ahead journal used while the database is unreachable. <br>
+ * One line is one queued write, whole: it lands or it doesn't, and replays through the same transaction the live path would have run. <br>
  * Replayed in order on recovery.
  */
 class OutageJournal {
@@ -40,25 +42,34 @@ class OutageJournal {
         return !file.isFile() || file.length() == 0;
     }
 
-    boolean append(String query, Object @NonNull ... params) {
-        JsonObject entry = new JsonObject();
-        entry.addProperty("q", query);
-        JsonArray encoded = new JsonArray();
-        for (Object param : params) {
-            encoded.add(encode(param));
+    boolean append(@NonNull List<SqlStatement> statements) {
+        if (statements.isEmpty()) {
+            return true;
         }
-        entry.add("p", encoded);
+        JsonArray group = new JsonArray();
+        for (SqlStatement statement : statements) {
+            JsonObject entry = new JsonObject();
+            entry.addProperty("q", statement.sql());
+            JsonArray encoded = new JsonArray();
+            for (Object param : statement.params()) {
+                encoded.add(encode(param));
+            }
+            entry.add("p", encoded);
+            group.add(entry);
+        }
+        JsonObject line = new JsonObject();
+        line.add("s", group);
         try {
             FileOutputStream out = writer;
             if (out == null) {
                 out = new FileOutputStream(file, true);
                 writer = out;
             }
-            out.write((GSON.toJson(entry) + "\n").getBytes(StandardCharsets.UTF_8));
+            out.write((GSON.toJson(line) + "\n").getBytes(StandardCharsets.UTF_8));
             out.getFD().sync();
             return true;
         } catch (IOException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to journal write for recovery (change will be lost): " + query, e);
+            plugin.getLogger().log(Level.SEVERE, "Failed to journal write for recovery (change will be lost): " + statements.getFirst().sql(), e);
             return false;
         }
     }
@@ -78,14 +89,17 @@ class OutageJournal {
                     continue;
                 }
                 try {
-                    JsonObject entry = JsonParser.parseString(line).getAsJsonObject();
-                    String query = entry.get("q").getAsString();
-                    JsonArray encoded = entry.getAsJsonArray("p");
-                    Object[] params = new Object[encoded.size()];
-                    for (int p = 0; p < params.length; p++) {
-                        params[p] = decode(encoded.get(p).getAsJsonObject());
+                    List<SqlStatement> statements = new ArrayList<>();
+                    for (JsonElement element : JsonParser.parseString(line).getAsJsonObject().getAsJsonArray("s")) {
+                        JsonObject entry = element.getAsJsonObject();
+                        JsonArray encoded = entry.getAsJsonArray("p");
+                        Object[] params = new Object[encoded.size()];
+                        for (int p = 0; p < params.length; p++) {
+                            params[p] = decode(encoded.get(p).getAsJsonObject());
+                        }
+                        statements.add(new SqlStatement(entry.get("q").getAsString(), params));
                     }
-                    DB.executeUpdate(query, params);
+                    DatabaseManager.execute(statements);
                     replayed++;
                 } catch (Exception e) {
                     if (OutageMonitor.isRetryableFailure(e)) {

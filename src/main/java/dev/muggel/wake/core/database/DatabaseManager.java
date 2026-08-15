@@ -172,8 +172,7 @@ public class DatabaseManager {
         Scheduling.async(plugin, () -> {
             T result;
             try {
-                awaitWrites();
-                result = read.get();
+                result = awaitWrites() ? read.get() : null;
             } catch (RuntimeException e) {
                 plugin.getLogger().log(Level.SEVERE, "Database read threw instead of reporting a failed read", e);
                 result = null;
@@ -187,11 +186,13 @@ public class DatabaseManager {
         readAsync(() -> null, ignored -> body.run());
     }
 
-    public void awaitWrites() {
+    public boolean awaitWrites() {
         try {
             writeExecutor.submit(() -> {}).get(10, TimeUnit.SECONDS);
+            return true;
         } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Timed out waiting for pending database writes", e);
+            plugin.getLogger().log(Level.WARNING, "Pending database writes did not drain", e);
+            return false;
         }
     }
 

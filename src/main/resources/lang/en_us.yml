@@ -107,6 +107,7 @@ commands:
       global_cooldown_set: "<reply>Global boost cooldown set to <primary><delay></primary>ms"
       global_cooldown_disabled: "<reply>Global boost cooldown is now <danger>disabled</danger>"
       table_unavailable: "<alert>Cannot change a boostpad: the boostpad table has not been read from the database yet"
+      settings_unavailable: "<alert>Cannot toggle boostpads: the settings table has not been read from the database yet"
       status:
         layout: "<header:'Boostpads'><hint><br><state><br><cooldown><br><early_out><br><blocks>"
         hint: " <info><hover:show_text:'<secondary>Boostpad profiles</secondary><br><hoverrow><neutral>Global cooldown <muted>→</muted> Duration between any two boosts</neutral><br><hoverrow><neutral>Early-out <muted>→</muted> Axes a jump cancels the boost on</neutral><br><hoverrow><neutral>xyz <muted>→</muted> Boost force per axis</neutral><br><hoverrow><neutral>ms <muted>→</muted> Cooldown before the pad boosts again</neutral><br><hoverrow><neutral>Padding <muted>→</muted> Widens the trigger box in blocks (<1 shrinks)</neutral>'>💡</hover></info>"

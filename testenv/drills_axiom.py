@@ -26,7 +26,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from drills import (ROOT, WAKE, Log, Rcon, bad, failures, ok,  # noqa: E402
+from drills import (ROOT, WAKE, Log, Rcon, bad, detect_backend, failures, ok,  # noqa: E402
                     reload_outcomes, set_module_enabled, step)
 
 CONFIG = WAKE / "config.yml"
@@ -206,6 +206,29 @@ def drill_unusable_keys_are_skipped(rcon: Rcon, log: Log):
            "MUGGEL:BANANA" not in models and "muggel:banana" in models, str(sorted(models)))
 
 
+def drill_a_refused_row_fails_the_import(rcon: Rcon, log: Log):
+    """A row the database refuses has to fail the import, not be logged behind a line saying it worked.
+
+    `model_key` is `VARCHAR(255)`: sqlite stores an oversized key, MariaDB refuses it, so this is the
+    shape where one export imports on one backend and silently loses a row on the other. The import
+    writes each row itself rather than queueing it, so the refusal is what the admin is answered with.
+    What landed ahead of it stays -- every row announced itself as it went, and the file re-imports.
+    """
+    if not detect_backend(None):
+        step("skipped: sqlite stores an oversized key rather than refusing it")
+        return
+    step("importing a file whose second row is longer than the column takes")
+    kept = "muggel:refused_probe"
+    EXPORT.write_text(f"version: 1\ndisplays:\n- {kept}\n- muggel:{'x' * 300}\n", encoding="utf-8")
+    log.reset()
+    rcon.run("wake database import axiom confirm")
+    truthy("the console names the import as failed", log.await_line("Database import failed for module axiom", 20),
+           log.read()[-300:])
+    truthy("and never reported it completed", "import completed for module axiom" not in log.read(),
+           log.read()[-300:])
+    truthy("while the row ahead of the refused one is in the store", kept in set(listed(export(rcon)[0])))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--host", default="127.0.0.1")
@@ -231,7 +254,8 @@ def main():
         raise SystemExit(f"axiom would not come up ({outcome or 'no line named it'})")
     try:
         for drill in [drill_seeds_the_bundled_models, drill_export_is_ordered, drill_round_trip,
-                      drill_cycles_register_once, drill_unusable_keys_are_skipped]:
+                      drill_cycles_register_once, drill_unusable_keys_are_skipped,
+                      drill_a_refused_row_fails_the_import]:
             print(f"\n{drill.__name__.removeprefix('drill_').replace('_', ' ')}")
             drill(rcon, log)
     except RuntimeError as error:
