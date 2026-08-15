@@ -10,12 +10,10 @@
 A lightweight and highly configurable framework for Minecraft boatracing
 - Supports: **Paper `1.21.x`, `26.x`**
 
-<a href="https://github.com/muggelpotato/wake/releases">
-  <img src="https://img.shields.io/badge/Github-Download-181717?logo=github&logoColor=white" height="24" alt="GitHub Download" />
-</a>
-<a href="https://modrinth.com/project/wake">
-  <img src="https://img.shields.io/badge/Modrinth-Download-00AF5C?logo=modrinth&logoColor=00AF5C" height="24" alt="Modrinth Download" />
-</a>
+<p>
+  <a href="https://github.com/muggelpotato/wake/releases"><img src="https://img.shields.io/badge/Github-Download-181717?logo=github&logoColor=white" width="155" alt="GitHub Download" /></a>
+  <a href="https://modrinth.com/project/wake"><img src="https://img.shields.io/badge/Modrinth-Download-00AF5C?logo=modrinth&logoColor=00AF5C" width="169" alt="Modrinth Download" /></a>
+</p>
 
 ## Feature Modules
 Wake is a framework with isolated modules that can be toggled off
@@ -132,9 +130,9 @@ Wake is a framework with isolated modules that can be toggled off
 </details>
 
 ## Documentation
-<a href="soon">
-  <img src="https://img.shields.io/badge/Wake-Docs-5C66FF?logo=read-the-docs&logoColor=33B5FF" height="24" alt="Wakes documentation" />
-</a>
+<p>
+  <a href="soon"><img src="https://img.shields.io/badge/Wake-Docs-5C66FF?logo=read-the-docs&logoColor=33B5FF" width="114" alt="Wakes documentation" /></a>
+</p>
 
 ## AI Usage
 Large parts of the codebase are written by or with the help of LLMs. They were used for code generation, reviews, drills and unit tests. <br>
