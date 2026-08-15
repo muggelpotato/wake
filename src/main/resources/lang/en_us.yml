@@ -1,111 +1,287 @@
-prefix: "<secondary>[Wake] </secondary>"
+# Every message is a plain MiniMessage string. All standard tags work here:
+#   <b> <i> <u> <strikethrough> <br> <gradient:...> <shadow:...> <click:run_command:...> <click:open_url:...> <click:copy_to_clipboard:...> <hover:show_text:...> ... (https://docs.advntr.dev/minimessage/format.html)
+#
+# Wake color tags you can recolor in the `colors` section below:
+#   <primary>     highlights, success values, counts
+#   <secondary>   accents, [Button] chips
+#   <accent>      names, identifiers, echoed user input
+#   <overridden>  values shadowed by another OBU context
+#   <info>        hint chips, notices
+#   <danger>      errors, destructive results
+#   <neutral>     body text
+#   <muted>       arrows, separators, bullets, » prefix
+#   <muted_dark>  empty states
+#
+# Palette variables for tags that expect the hex code of a color tag: $primary $secondary $accent $overridden $info $danger $neutral $muted $muted_dark
+#   <gradient:$secondary:$primary>...</gradient>
+#
+# Dynamic placeholders are filled by the plugin per message and only work in the message they already appear in (moving them to other keys does nothing):
+#   <alias> <aliases> <amount> <axis> <badge> <block> <blocks> <boat> <button> <code> <command> <confirm_btn> <context> <cooldown> <count> <delay> <description> <duration> <early_out> <entry> <error> <hint> <input>
+#   <literal> <module> <name> <padding> <rows> <sandbox> <setting> <source> <state> <sub> <subcommands> <target> <value> <variant> <x> <y> <z>
+# ─────────────────────────────────────────────────────────────────────────────
+colors:
+  primary: "#33B5FF"
+  secondary: "#5C66FF"
+  accent: "#95A5FF"
+  overridden: "#AA55FF"
+  info: "#4DD0E1"
+  danger: "#FF5252"
+  neutral: "#C9CEE4"
+  muted: "#8B92BD"
+  muted_dark: "#62678C"
+templates:
+  prefix: "<gradient:$secondary:$primary>Wake</gradient> <muted>»</muted> "
+  reply: "<prefix><neutral>"
+  alert: "<prefix><danger>"
+  row: "  <muted>●</muted> "
+  subrow: "    <muted>○</muted> "
+  hoverrow: "  <muted>○</muted> "
+  header: "<gradient:$secondary:$primary>─── <text> ─────────</gradient>"
+database:
+  degraded: "<alert>Database unreachable: changes are only saved in memory"
+  recovered: "<reply>Database <primary>reachable again</primary>: changes are being saved"
+  replayed: "<reply>Recovered <primary><count></primary> queued changes to the database"
 commands:
-  invalid_option: "<danger>Invalid option: </danger><accent><input></accent>"
-  invalid_entity: "<danger>Invalid entity: </danger><accent><input></accent>"
-  invalid_block: "<danger>Invalid block: </danger><accent><input></accent>"
-  only_players: "<prefix><danger>This command can only be executed by players</danger>"
-  only_entities: "<prefix><danger>This command must be executed by an entity or via /execute as <targets></danger>"
-  requires_version: "<prefix><danger>This feature requires Minecraft 1.21.2+ or newer</danger>"
-  module_not_loaded: "<prefix><danger>The <module> module is not loaded</danger>"
-  setting_updated: "<prefix><neutral>Auto-kill boat set to </neutral><primary><state></primary>"
+  error: "<alert>An internal error occurred while executing this command"
+  invalid_option: "<alert>Invalid option: <accent><input></accent>"
+  invalid_entity: "<alert>Invalid entity: <accent><input></accent>"
+  invalid_block: "<alert>Invalid block: <accent><input></accent>"
+  invalid_boat: "<alert>Invalid boat type: <accent><input></accent>"
+  invalid_module: "<alert>Module not loaded: <accent><input></accent>"
+  only_players: "<alert>This command can only be executed by players"
+  only_entities: "<alert>This command must be executed by an entity or via /execute as \\<targets>"
+  requires_version: "<alert>This feature requires Minecraft 1.21.2+ or newer"
+  help:
+    title: "<header:'Wake Commands'>"
+    entry: "<row><click:suggest_command:'/<command> '><hover:show_text:'<subcommands>'><accent>/<command></accent></hover></click> <muted_dark><aliases></muted_dark> <neutral><description></neutral>"
+    aliases:
+      list: "(<aliases>)"
+      one: "/<alias>"
+    hover:
+      title: "<secondary>Subcommands of /<command></secondary>"
+      line: "<neutral>/<command> <accent><sub></accent></neutral>"
+      more: "<muted_dark>... and <count> more</muted_dark>"
+    module:
+      core: "Core plugin management"
+      obu: "OpenBoatUtils boat physics settings"
+      drydock: "Features for the Drydock server"
+  core:
+    module_not_loaded: "<alert>The <module> module is not loaded"
+    toggle_enabled: "<reply>Set <accent><name></accent> to <primary>enabled</primary>"
+    toggle_disabled: "<reply>Set <accent><name></accent> to <danger>disabled</danger>"
+  database:
+    export_success: "<reply>Exported <primary><count></primary> records for module <accent><module></accent>"
+    export_fail: "<alert>Failed to export data for module <accent><module></accent>: <accent><error></accent>"
+    import_success: "<reply>Imported <primary><count></primary> records for module <accent><module></accent>"
+    import_fail: "<alert>Failed to import data for module <accent><module></accent>: <accent><error></accent>"
+    import_confirm: "<alert>Matching <accent><module></accent> records will be overwritten with imported data</danger><br><confirm_btn>"
+    setdefaults_success: "<reply>Seeded <primary><count></primary> default records for module <accent><module></accent>"
+    setdefaults_fail: "<alert>Failed to seed defaults for module <accent><module></accent>: <accent><error></accent>"
+    setdefaults_confirm: "<alert><accent><module></accent> records will be reset to plugin defaults (custom records are kept)</danger><br><confirm_btn>"
+    drop_success: "<reply>Dropped records for module <accent><module></accent>"
+    drop_fail: "<alert>Failed to drop records for module <accent><module></accent>: <accent><error></accent>"
+    drop_confirm: "<alert>Dropping deletes every stored <accent><module></accent> record from the database</danger><br><confirm_btn>"
+    confirm_btn: "<row><neutral>This cannot be undone. Run <click:suggest_command:'/wake database <literal> <module> confirm'><hover:show_text:'<secondary>Click to fill in</secondary>'><accent>/wake database <literal> <module> confirm</accent></hover></click> to go ahead</neutral>"
+    unavailable: "<alert>Database is unreachable: try again once it has recovered"
+    busy: "<alert>Another database operation on <accent><module></accent> is still running: wait for it to finish"
   killemptyboats:
-    success: "<prefix><neutral>Successfully removed </neutral><primary><amount></primary><neutral> empty boats</neutral>"
+    success: "<reply>Removed <primary><amount></primary> empty boats"
   reload:
-    success: "<prefix><primary>Configuration reloaded:</primary>"
-    enabled: "  <primary>+</primary> <neutral>Enabled module:</neutral> <accent><module></accent>"
-    disabled: "  <danger>-</danger> <neutral>Disabled module:</neutral> <accent><module></accent>"
-    reloaded: "  <secondary><b>⟳</b></secondary> <neutral>Reloaded module:</neutral> <accent><module></accent>"
-    incompatible: "  <danger>!</danger> <neutral>Module enabled in config but incompatible:</neutral> <accent><module></accent>"
-    failed: "  <danger>! Failed to sync module:</danger> <accent><module></accent>"
+    success: "<reply>Reloaded configuration"
+    enabled: "  <primary>+</primary> <neutral>Enabled module: <accent><module></accent></neutral>"
+    disabled: "  <danger>-</danger> <neutral>Disabled module: <accent><module></accent></neutral>"
+    reloaded: "  <secondary><b>⟳</b></secondary> <neutral>Reloaded module: <accent><module></accent></neutral>"
+    incompatible: "  <danger>!</danger> <neutral>Module enabled in config but incompatible: <accent><module></accent></neutral>"
+    failed: "  <danger>! Failed to sync module: <accent><module></accent></danger>"
   drydock:
-    give: "<prefix><neutral>Gave a <primary><boat></primary> item with variant </neutral><accent><variant></accent>"
-    invalid_boat: "<prefix><danger>Invalid boat type specified</danger>"
-    invalid_variant: "<prefix><danger>Invalid variant specified</danger>"
-    invalid_oars: "<prefix><danger>Invalid oars setting specified</danger>"
-    invalid_block: "<prefix><danger>Invalid block specified</danger>"
-    block_added: "<prefix><neutral>Added boostpad block</neutral>"
-    block_not_found: "<prefix><danger>Block is not in the boostpad list</danger>"
-    block_removed: "<prefix><neutral>Removed boostpad block</neutral>"
-    boostpad_status: "<prefix><neutral>Boostpads enabled: </neutral><primary><enabled></primary><newline><prefix><neutral>Configured boostpads:</neutral><newline><blocks>"
-    boostpad_item_enabled: "  <neutral>- <accent><block></accent>: <primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><hitbox>%</primary> hitbox</neutral>"
-    boostpad_item_disabled: "  <neutral>- <danger><block></danger>: <primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><hitbox>%</primary> hitbox</neutral>"
-    boostpad_empty: "  <muted_dark>(No blocks configured)</muted_dark>"
-    boostpad_enabled: "<prefix><neutral>Boostpads </neutral><primary>enabled</primary>"
-    boostpad_disabled: "<prefix><neutral>Boostpads </neutral><danger>disabled</danger>"
-    boostpad_block_enabled: "<prefix><neutral>Boostpad profile for <accent><block></accent> is now </neutral><primary>enabled</primary>"
-    boostpad_block_disabled: "<prefix><neutral>Boostpad profile for <accent><block></accent> is now </neutral><danger>disabled</danger>"
+    getboat:
+      success: "<reply>Gave a <primary><boat></primary> item with variant <accent><variant></accent>"
+      fail: "<alert>Failed to create the boat item"
+      variant_oars: 'parkour (with oars)'
+      variant_no_oars: 'parkour (no oars)'
+    boostpad:
+      block_added: "<reply>Added boostpad block"
+      block_updated: "<reply>Updated boostpad block"
+      block_removed: "<reply>Removed boostpad block"
+      block_not_found: "<alert>Block is not in the boostpad list"
+      global_cooldown_set: "<reply>Global boost cooldown set to <primary><delay></primary>ms"
+      global_cooldown_disabled: "<reply>Global boost cooldown is now <danger>disabled</danger>"
+      table_unavailable: "<alert>Cannot change a boostpad: the boostpad table has not been read from the database yet"
+      settings_unavailable: "<alert>Cannot toggle boostpads: the settings table has not been read from the database yet"
+      status:
+        layout: "<header:'Boostpads'><hint><br><state><br><cooldown><br><early_out><br><blocks>"
+        hint: " <info><hover:show_text:'<secondary>Boostpad profiles</secondary><br><hoverrow><neutral>Global cooldown <muted>→</muted> Duration between any two boosts</neutral><br><hoverrow><neutral>Early-out <muted>→</muted> Axes a jump cancels the boost on</neutral><br><hoverrow><neutral>xyz <muted>→</muted> Boost force per axis</neutral><br><hoverrow><neutral>ms <muted>→</muted> Cooldown before the pad boosts again</neutral><br><hoverrow><neutral>Padding <muted>→</muted> Widens the trigger box in blocks (<1 shrinks)</neutral>'>💡</hover></info>"
+        state:
+          enabled: "<row><neutral>Status: <primary>enabled</primary></neutral>"
+          disabled: "<row><neutral>Status: <danger>disabled</danger></neutral>"
+        cooldown:
+          set: "<row><neutral>Global cooldown: <primary><delay></primary>ms</neutral>"
+          unset: "<row><neutral>Global cooldown: <danger>off</danger></neutral>"
+        early_out:
+          text: "<row><neutral>Early-out: <x><y><z></neutral>"
+          axis_enabled: "<primary><axis></primary>"
+          axis_disabled: "<danger><axis></danger>"
+        blocks:
+          item: "<row><accent><block></accent> <muted>→</muted> <neutral><primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><padding></primary> padding</neutral>"
+          item_disabled: "<row><danger><block></danger> <muted>→</muted> <neutral><primary><x></primary>x <primary><y></primary>y <primary><z></primary>z, <primary><delay></primary>ms, <primary><padding></primary> padding</neutral>"
+          empty: "<row><muted_dark>(none configured)</muted_dark>"
+          unavailable: "<row><danger>(the boostpad table has not been read from the database yet)</danger>"
+      enabled: "<reply>Boostpads <primary>enabled</primary>"
+      disabled: "<reply>Boostpads <danger>disabled</danger>"
+      block_enabled: "<reply>Boostpad profile for <accent><block></accent> is now <primary>enabled</primary>"
+      block_disabled: "<reply>Boostpad profile for <accent><block></accent> is now <danger>disabled</danger>"
   obu:
-    not_loaded: "<prefix><danger>OBU module is not loaded</danger>"
+    requires_client: "<alert>This command needs the OpenBoatUtils mod installed on <target> client"
+    unsupported_client: "<alert>OpenBoatUtils is disabled for <target> client (version not supported by server)"
+    reconnect_client: "<alert>Server hasn't recognized OpenBoatUtils on <target> client (reconnect if its installed)"
+    no_settings: "<row><muted_dark>(no settings configured)</muted_dark>"
+    config:
+      overview:
+        layout: "<header:'OBU Settings'><hint><br><rows>"
+        hint: " <info><hover:show_text:'<secondary>Server-side OBU settings</secondary><br><hoverrow><neutral>Persistent player states <muted>→</muted> Players keep contexts on relog</neutral><br><hoverrow><neutral>Boat lag fix <muted>→</muted> Drop boat position packets sent to the driver</neutral><br><hoverrow><neutral>Collapsed default context <muted>→</muted> Turns the status display into one line</neutral><br><hoverrow><neutral>Update nag <muted>→</muted> Warn a client running an older OBU release</neutral><br><hoverrow><neutral>Ten-step interpolation <muted>→</muted> Smoother boat movement</neutral>'>💡</hover></info>"
+        rows:
+          switch_enabled: "<row><neutral><name>: <primary>on</primary></neutral>"
+          switch_disabled: "<row><neutral><name>: <danger>off</danger></neutral>"
+          purge: "<row><neutral>Unused sandboxes kept for: <primary><duration></primary></neutral>"
+          purge_unset: "<row><neutral>Unused sandboxes kept for: <danger>never purged</danger></neutral>"
+      invalid_duration: "<alert>Invalid duration: <accent><input></accent></danger> <neutral>→ use s, min, h, d, w, mo or y (e.g. 10h) or 0 to disable</neutral>"
+      purge_set: "<reply>Unused sandboxes are now kept for <primary><duration></primary>"
+      purge_disabled: "<reply>Automatic sandbox purging is now <danger>disabled</danger>"
+      contexts:
+        layout: "<header:'Stored Contexts'><br><rows>"
+        server: "<row><neutral>Server contexts: <primary><count></primary></neutral>"
+        sandboxes: "<row><neutral>Sandboxes (all owners): <primary><count></primary></neutral>"
+        total: "<row><neutral>Total: <primary><count></primary></neutral>"
+      context_unavailable: "<alert>Cannot count contexts: the context table has not been read from the database yet"
     defaults:
-      missing: "<prefix><danger>No default exists for: </danger><accent><setting></accent>"
-      vanilla: "<prefix><neutral>Vanilla default for </neutral><accent><setting></accent><neutral> is </neutral><primary><value></primary>"
-      custom: "<neutral>- Currently active: </neutral><primary><value></primary> <button>"
-      active: "<neutral>- Currently active: </neutral><primary><value></primary> <muted_dark>(Not overridden)</muted_dark>"
-      clear_btn: "<click:run_command:/wobu -clear <setting>><hover:show_text:'<accent>Click to clear current setting</accent>'><secondary>[Clear current]</secondary></hover></click>"
-      blocked_btn: "<hover:show_text:'<danger>This is a server default setting</danger><newline><neutral>- Create a sandbox to remove it</neutral><newline><neutral>- Or override it with a temporary context to modify it</neutral>'><danger>[Server Default]</danger></hover>"
+      missing: "<alert>No default exists for: <accent><setting></accent>"
+      vanilla: "<reply>Vanilla default for <accent><setting></accent> is <primary><value></primary>"
+      custom: "<row><neutral>Currently active: <primary><value></primary></neutral><badge> <button>"
+      active: "<row><neutral>Currently active: <primary><value></primary></neutral> <muted_dark>(not overridden)</muted_dark>"
+      clear_btn: "<click:run_command:/wakeobu -clear <setting>><hover:show_text:'<secondary>Clear current setting</secondary>'><secondary>[Clear current]</secondary></hover></click>"
+      blocked_btn: "<hover:show_text:'<danger>This is a server default setting</danger><br><neutral>Create a sandbox to remove it, or override it with a temporary context to modify it</neutral>'><danger>[Server Default]</danger></hover>"
     context:
-      empty: "<prefix><danger>No contexts found in config.yml</danger>"
-      header: "<prefix><primary>Available OBU Contexts:</primary>"
-      item: " <neutral>-</neutral> <accent><context></accent>"
-      hover: "<primary>Click to apply!</primary>"
-      missing: "<prefix><danger>Context </danger><accent><context></accent><danger> does not exist</danger>"
-      applied: "<prefix><neutral>Applied context: </neutral><primary><context></primary><neutral> to </neutral><primary><target></primary>"
-      invalid_target: "<prefix><danger>Contexts can only be applied to players or boats</danger>"
-      settings: "<secondary>Settings for <primary><context></primary>:</secondary>"
+      server:
+        title: "<header:'Server Contexts'><hint>"
+        hint: " <info><hover:show_text:'<secondary>Server contexts</secondary><br><neutral>Shared presets you can apply to yourself or a boat</neutral>'>💡</hover></info>"
+      sandbox:
+        title: "<header:'Your Sandboxes'><hint>"
+        hint: " <info><hover:show_text:'<secondary>Your sandboxes</secondary><br><neutral>Basically private command block chains</neutral><br><neutral>You can share them via <accent>/wakeobu -sandbox export</accent></neutral>'>💡</hover></info>"
+      item:
+        text: "<row><accent><context></accent>"
+        hover: "<secondary>Click to apply</secondary>"
+      missing: "<alert>Context <accent><context></accent> does not exist"
+      applied: "<reply>Applied context <accent><context></accent> to <target></neutral><hint>"
+      applied_from_sandbox: "<reply>Exited sandbox <accent><sandbox></accent> and applied context <accent><context></accent></neutral><hint>"
+      applied_hint: " <info><hover:show_text:'<secondary>Context applied</secondary><br><neutral>Temporary overrides were dropped</neutral>'>💡</hover></info>"
+      invalid_target: "<alert>Contexts can only be applied to players or boats"
+      cannot_delete: "<alert>Cannot delete protected context: <accent><context></accent>"
+      deleted: "<reply>Deleted server context <accent><context></accent>"
+      kicked: "<alert>The context <accent><context></accent> you were in was deleted"
+      settings: "<header:'Settings for <context>'>"
     clear:
-      unknown: "<prefix><danger>Unknown OBU setting: </danger><accent><setting></accent>"
-      temp: "<prefix><neutral>Cleared </neutral><accent><setting></accent><neutral> from <target> temporary context</neutral>"
-      sandbox: "<prefix><neutral>Cleared </neutral><accent><setting></accent><neutral> from sandbox context </neutral><primary><sandbox></primary><neutral></neutral>"
-      missing: "<prefix><neutral>Setting </neutral><accent><setting></accent><neutral> is not active in <target> temporary or sandbox contexts</neutral>"
-      base_blocked: "<prefix><danger>Setting </danger><accent><setting></accent><danger> is a server default and can only be removed in a sandbox session</danger>"
+      unknown: "<alert>Unknown OBU setting: <accent><setting></accent>"
+      took: " <muted>→</muted> <primary><value></primary>"
+      temp: "<reply>Cleared <accent><setting></accent><value> from <target> temporary context"
+      sandbox: "<reply>Cleared <accent><setting></accent><value> from sandbox <accent><sandbox></accent>"
+      missing: "<reply>Setting <accent><setting></accent> is not active in <target> temporary or sandbox contexts"
+      base_blocked: "<alert>Setting <accent><setting></accent> is a server default and can only be removed in a sandbox session"
     settings:
-      reset: "<prefix><primary>Reset player context</primary>"
-      sandbox: "<prefix><neutral>Set </neutral><accent><setting></accent><neutral> to </neutral><primary><value></primary><neutral> for sandbox context </neutral><primary><sandbox></primary>"
-      success: "<prefix><neutral>Set </neutral><accent><setting></accent><neutral> to </neutral><primary><value></primary><neutral> for </neutral><primary><target></primary>"
-      invalid_block: "<prefix><danger>Invalid block: </danger><accent><input></accent>"
-      invalid_entity: "<prefix><danger>Invalid entity: </danger><accent><input></accent>"
+      reset: "<reply>Reset <target> context"
+      sandbox: "<reply>Set <accent><setting></accent> to <primary><value></primary> for sandbox <accent><sandbox></accent>"
+      success: "<reply>Set <accent><setting></accent> to <primary><value></primary> for <target>"
+      removed: "<reply>Removed <primary><value></primary> from <accent><setting></accent> for <target>"
+      removed_sandbox: "<reply>Removed <primary><value></primary> from <accent><setting></accent> in sandbox <accent><sandbox></accent>"
+      removed_none: "<reply>No <accent><setting></accent> entries to remove from <target> temporary or sandbox settings"
+      outdated_client: "<alert>Setting <accent><setting></accent> stored but not applied (unsupported by <target> OBU version)"
     sandbox:
-      exists: "<prefix><danger>Sandbox </danger><accent><sandbox></accent><danger> already exists</danger>"
-      created: "<prefix><neutral>Created & entered new sandbox: </neutral><primary><sandbox></primary>"
-      missing: "<prefix><danger>Sandbox </danger><accent><sandbox></accent><danger> does not exist</danger>"
-      forked: "<prefix><neutral>Forked </neutral><accent><source></accent><neutral> into new sandbox: </neutral><primary><sandbox></primary>"
-      none_active: "<prefix><danger>You are not currently in a sandbox</danger>"
-      exited: "<prefix><neutral>Exited sandbox</neutral>"
-      switched: "<prefix><neutral>Switched to sandbox: </neutral><primary><sandbox></primary>"
-      exported: "<prefix><neutral>Sandbox </neutral><accent><sandbox></accent><neutral> exported</neutral>"
-      export_fail: "<prefix><danger>Failed to export sandbox: </danger><accent><error></accent>"
-      import_fail: "<prefix><danger>Failed to import sandbox: </danger><accent><error></accent>"
-      imported: "<prefix><neutral>Imported sandbox: </neutral><primary><sandbox></primary>"
-      hint: "<prefix><hover:show_text:'<neutral>You can now use <primary>/wobu</primary> to modify the sandbox context</neutral>'><info>Hint</info>"
-      invalid: "<prefix><danger><accent><sandbox></accent> is not a sandbox context<newline>You can switch to it using <primary>/wobu -context <sandbox></primary></danger>"
-      dropped: "<prefix><neutral>Switched to sandbox context </neutral><primary><sandbox></primary>"
-      header: "<prefix><secondary> == Sandbox Context <accent><sandbox></accent> ==</secondary>"
-      empty: "  <muted_dark>(No settings configured)</muted_dark>"
-      yaml: "<click:copy_to_clipboard:'<yaml>'><hover:show_text:'<accent>Copy YAML to clipboard</accent>'><primary>[Click to copy YAML]</primary></hover></click><newline><neutral>- For sending the context to an <accent>Admin</accent></neutral>"
-      code: "<click:copy_to_clipboard:'<code>'><hover:show_text:'<accent>Copy Share Code</accent>'><primary>[Click to copy Share Code]</primary></hover></click><newline><neutral>- For <accent>You</accent> to share and import the context</neutral>"
-      header_export: "<prefix><neutral>Exported Sandbox <accent><sandbox></accent>:</neutral>"
+      exists: "<alert>Sandbox <accent><sandbox></accent> already exists"
+      reserved: "<alert>Sandbox <accent><sandbox></accent> uses a reserved name"
+      created: "<reply>Created new sandbox <accent><sandbox></accent></neutral><hint>"
+      missing: "<alert>Sandbox <accent><sandbox></accent> does not exist"
+      forked: "<reply>Forked <accent><source></accent> into new sandbox <accent><sandbox></accent></neutral><hint>"
+      none_active: "<alert>You are not currently in a sandbox"
+      exited: "<reply>Exited sandbox"
+      switched: "<reply>Switched to sandbox <accent><sandbox></accent></neutral><hint>"
+      import_fail: "<alert>Failed to import sandbox: <accent><error></accent>"
+      imported: "<reply>Imported sandbox <accent><sandbox></accent></neutral><hint>"
+      import_skipped: "<alert>Skipped <accent><count></accent> invalid settings from the share code"
+      active_hint: " <info><hover:show_text:'<secondary>Sandbox active</secondary><br><neutral>OBU settings you change are saved to this sandbox now</neutral><br><neutral>Leave it with <accent>/wakeobu -sandbox exit</accent></neutral>'>💡</hover></info>"
+      invalid_name: "<alert>Invalid sandbox name: <accent><input></accent>"
+      title: "<header:'Sandbox <sandbox>'>"
+      deleted: "<reply>Deleted sandbox <accent><sandbox></accent>"
+      kicked: "<alert>The sandbox <accent><sandbox></accent> you were in was deleted"
+      purged: "<alert>The sandbox <accent><sandbox></accent> you were in was deleted (unused for too long)"
+      published: "<reply>Published sandbox <accent><sandbox></accent> as a server context</neutral><hint>"
+      published_hint: " <info><hover:show_text:'<secondary>Sandbox published</secondary><br><neutral>It is now a server context anyone can apply</neutral>'>💡</hover></info>"
+      published_kicked: "<alert>The sandbox <accent><sandbox></accent> you were in is now a server context"
+      code: "<click:copy_to_clipboard:'<code>'><hover:show_text:'<secondary>Copy share code</secondary>'><secondary>[Copy Share Code]</secondary></hover></click>"
+      header_export: "<reply>Exported sandbox <accent><sandbox></accent>: <button><br><row><neutral>Share it or import it with <accent>/wakeobu -sandbox import</accent></neutral>"
     status:
-      player: "<prefix><secondary> == Player Context ==</secondary>"
-      boat: "<newline><hover:show_text:'<primary>Overrides Player Context!</primary><newline><neutral>Look at the boat and run <primary>/wobu</primary> commands to apply settings to this specific boat or use <primary>/execute as</primary></neutral>'><prefix><secondary> == Boat Context ==</secondary></hover>"
-      subtitle: "  <primary><contexts></primary> <accent>Context Applied:</accent>"
-      empty: "  <muted_dark>(No settings applied)</muted_dark>"
-      line: "    <neutral>- <name>: <primary><value></primary></neutral>"
-      overridden: "    <muted_dark>- <strikethrough><name>: <value></strikethrough></muted_dark>"
-      suffix: " <overridden>(Overridden)</overridden>"
-      boat_suffix: " <overridden>(Overridden by Boat)</overridden>"
-      temp: "  <overridden>Temporary Overrides:</overridden>"
-      hint: "<newline><prefix><hover:show_text:'<primary>Temporary Settings</primary><newline><neutral>Local changes sync to your context but aren\\'t saved</neutral><newline><newline><primary>Sandboxes</primary><newline><neutral>Use sandboxes to test, and export </neutral><newline><neutral>your configurations</neutral><newline><newline><accent>/wobu -sandbox create <name></accent>'><info>Hint</info></hover>"
+      player:
+        title: "<header:'Player Context'><hint>"
+        hint: " <info><hover:show_text:'<secondary>No sandbox active</secondary><br><neutral>Changes apply to your live context and are lost when you disconnect</neutral><br><neutral>Keep and share a setup with <accent>/wakeobu -sandbox</accent></neutral>'>💡</hover></info>"
+      boat:
+        title: "<br><header:'Boat Context'><hint>"
+        hint: " <info><hover:show_text:'<secondary>Overrides Player Context</secondary><br><neutral>Look at the boat and run <accent>/wakeobu</accent> commands to apply settings to this boat, or use <accent>/execute as</accent></neutral>'>💡</hover></info>"
+      temp:
+        title: "<row><overridden>Temporary overrides:</overridden><hint>"
+        hint: " <info><hover:show_text:'<secondary>Temporary overrides</secondary><br><neutral>They are applied on top of contexts but are never saved</neutral><br><neutral>Use sandboxes (<accent>/wakeobu -sandbox</accent>) to keep them permanently</neutral>'>💡</hover></info>"
+      subtitle: "<row><neutral>Applied context</neutral> <accent><context></accent>"
+      line: "<subrow><neutral><name> <muted>→</muted> <primary><value></primary></neutral>"
+      overridden: "<subrow><muted_dark><strikethrough><name> → <value></strikethrough></muted_dark>"
+      no_settings: "<subrow><muted_dark>(no settings configured)</muted_dark>"
+      entry_overridden: "<muted_dark><strikethrough><entry></strikethrough></muted_dark>"
+      collapsed:
+        title: "<header:'<count> entries'>"
+        layer: "<subrow><count><neutral> settings</neutral>"
+        layer_overridden: "<subrow><count><muted_dark><strikethrough> settings</strikethrough></muted_dark>"
+        line: "<hoverrow><neutral><name> <muted>→</muted> <primary><value></primary></neutral>"
+        line_overridden: "<hoverrow><muted_dark><strikethrough><name> → <value></strikethrough></muted_dark>"
+        no_settings: "<hoverrow><muted_dark>(no settings configured)</muted_dark>"
+        entry: "<hoverrow><neutral><entry></neutral>"
+        entry_overridden: "<hoverrow><muted_dark><strikethrough><entry></strikethrough></muted_dark>"
+        count: "<muted>[<primary><count></primary>]</muted>"
+        count_overridden: "<muted_dark><strikethrough>[<count>]</strikethrough></muted_dark>"
+      suffix:
+        context: " <overridden>(overridden)</overridden>"
+        boat: " <overridden>(overridden by boat)</overridden>"
+        outdated: " <danger><hover:show_text:'<danger>Unsupported Setting</danger><br><neutral>It is stored, but the server cannot send/apply it until OBU is updated</neutral>'>(update OBU)</hover></danger>"
     help:
-      header: "<prefix> <secondary>== OpenBoatUtils Help ==</secondary>"
-      status: "  <accent>/wobu -status</accent><neutral><newline>  - View your active context and temporary overrides</neutral>"
-      sandbox: "  <accent>/wobu -sandbox</accent><neutral><newline>  - Create and manage isolated environments for OBU settings</neutral>"
-      context: "  <accent>/wobu -context</accent><neutral><newline>  - List or apply preset contexts to yourself or boats</neutral>"
-      clear: "  <accent>/wobu -clear</accent><neutral><newline>  - Remove a temporary or sandbox setting</neutral>"
-      defaults: "  <accent>/wobu -defaults</accent><neutral><newline>  - List or revert OBU settings to vanilla defaults</neutral>"
-      settings: "  <accent>/wobu <setting> [args]</accent><neutral><newline>  - Add OBU settings to player and boat contexts</neutral>"
-      wiki: "<prefix><click:open_url:'https://openboatutils.github.io/commands.html'><hover:show_text:'<accent>Open in Browser</accent>'><primary>[Click to read the official OBU Wiki]</primary></hover></click>"
+      title: "<header:'OpenBoatUtils Help'>"
+      status: "<row><accent>/wakeobu -status</accent><br><subrow><neutral>View your active context and temporary overrides</neutral>"
+      sandbox: "<row><accent>/wakeobu -sandbox</accent><br><subrow><neutral>Create and manage isolated environments for OBU settings</neutral>"
+      context: "<row><accent>/wakeobu -context</accent><br><subrow><neutral>List or apply preset contexts to yourself or boats</neutral>"
+      clear: "<row><accent>/wakeobu -clear</accent><br><subrow><neutral>Remove a temporary or sandbox setting</neutral>"
+      defaults: "<row><accent>/wakeobu -defaults</accent><br><subrow><neutral>List or revert OBU settings to vanilla defaults</neutral>"
+      settings: "<row><accent>/wakeobu <setting> [args]</accent><br><subrow><neutral>Add OBU settings to player and boat contexts</neutral>"
+      reset: "<row><accent>/wakeobu -reset</accent><br><subrow><neutral>Drop temporary overrides and return to the default context</neutral>"
+      config: "<row><accent>/wakeobu -settings</accent><br><subrow><neutral>Server-side configuration</neutral>"
+      fallback: "<row><accent>/wakeobu <command></accent>"
+      wiki: "<prefix><click:open_url:'https://openboatutils.github.io/commands.html'><hover:show_text:'<secondary>Open in browser</secondary>'><secondary>[OBU Wiki]</secondary></hover></click>"
+axiom:
+  display_name: "<accent><b><!i><name></b></accent>"
 networking:
   obu:
-    outdated: "<prefix><danger>Warning: You are using an outdated version of OpenBoatUtils. Some features on this server may not work correctly</danger>"
-    ahead: "<prefix><info>Notice: Your OpenBoatUtils version is newer than the server's supported version. New OBU features won't be available</info>"
-    rejected: "<danger>Your OpenBoatUtils version is bugged or no longer supported by this server<newline><newline>Please update to the latest version</danger>"
+    outdated: "<alert>You are using an outdated version of OpenBoatUtils. Some features on this server may not work correctly"
+    ahead: "<prefix><info>Your OpenBoatUtils version is newer than the server's supported version. New OBU features won't be available</info>"
+    unsupported: "<alert>Your OpenBoatUtils version is bugged or no longer supported by this server (features disabled)</danger><br><neutral>Please update to the latest version</neutral>"
+
+words:
+  target:
+    self: 'you'
+    self_possessive: 'your'
+    boat: 'the boat'
+    boat_possessive: 'the boat''s'
+    other_possessive: "<name>'s"
+  feature:
+    hints: 'Hints'
+    persistent_states: 'Persistent player states'
+    boat_lag_fix: 'Boat lag fix'
+    collapse_default_context: 'Collapsed default context'
+    update_nag: 'Update nag'
+    setinterpolationten: 'Ten-step interpolation'
+    auto_kill: 'Kill boat on exit'
+    boostpad_early_out_x: 'early-out (X)'
+    boostpad_early_out_y: 'early-out (Y)'
+    boostpad_early_out_z: 'early-out (Z)'

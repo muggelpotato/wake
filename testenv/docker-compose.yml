@@ -1,0 +1,56 @@
+name: wake-testenv
+
+services:
+  mariadb:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: password
+      MARIADB_DATABASE: wake
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  paper2:
+    image: itzg/minecraft-server:latest
+    environment:
+      EULA: "TRUE"
+      TYPE: PAPER
+      VERSION: "1.21.11"
+      ONLINE_MODE: "FALSE"
+      MEMORY: 2G
+      SYNC_SKIP_NEWER_IN_DESTINATION: "false"
+    ports:
+      - "25566:25565"
+    volumes:
+      - ./paper2/plugins:/plugins:ro
+      - ./paper2/config:/config:ro
+      - paper2-data:/data
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+  valkey:
+    image: valkey/valkey:8
+    ports:
+      - "6379:6379"
+
+  velocity:
+    image: itzg/mc-proxy:latest
+    environment:
+      TYPE: VELOCITY
+    ports:
+      - "25577:25577"
+    volumes:
+      - ./velocity:/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  mariadb-data:
+  paper2-data:

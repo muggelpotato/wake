@@ -1,0 +1,13 @@
+config-version = "2.7"
+bind = "0.0.0.0:25577"
+motd = "Wake test proxy"
+online-mode = true
+player-info-forwarding-mode = "modern"
+forwarding-secret-file = "forwarding.secret"
+
+[servers]
+primary = "host.docker.internal:25565"
+backend2 = "paper2:25565"
+try = ["primary", "backend2"]
+
+[forced-hosts]

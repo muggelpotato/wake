@@ -1,0 +1,28 @@
+drydock:
+  boostpads_enabled: false
+  boostpads_early_out_x: false
+  boostpads_early_out_y: true
+  boostpads_early_out_z: false
+  boostpads_global_cooldown_ms: 0
+boostpads:
+  minecraft:horn_coral_block:
+    enabled: true
+    force_x: 1.0
+    force_y: 0.0
+    force_z: 0.0
+    delay_ms: 500
+    padding: 1.0
+  minecraft:tube_coral_block:
+    enabled: true
+    force_x: 0.0
+    force_y: 1.0
+    force_z: 0.0
+    delay_ms: 500
+    padding: 1.0
+  minecraft:fire_coral_block:
+    enabled: true
+    force_x: 0.0
+    force_y: 0.0
+    force_z: 1.0
+    delay_ms: 500
+    padding: 1.0

@@ -1,110 +1,26 @@
+# whatever floats your boat
+language: en_us
 modules:
-  base:
-    enabled: true
   obu:
     enabled: true
   drydock:
     enabled: true
   axiom:
-    enabled: true
-config:
-  show_hints: true
-
-obu:
-  # see https://openboatutils.github.io/commands.html
-  versions:
-    latest: 22
-    rejected:
-      - 8
-      - 12
-      - 15
-      - 20
-      - 21
-  contexts:
-    # the default context that is enforced by the server. Other contexts (excluding sandbox contexts ingame) are layered ontop of the default context
-    default:
-      setinterpolationten: true
-      collisionmode: "NO_ENTITIES"
-      setresetonworldload: false
-      allowaccelstacking: false
-      falldamage: false
-      stepwhilefalling: true
-      setmultistepping: true
-      fixdoublewaterelevation: true
-      sethoneycompat: true
-    harbour:
-      defaultslipperiness: 0.98
-      aircontrol: true
-      stepsize: 1
-      jumpforce: 0.75
-      setforwardaccel: 0.04
-      setbackwardaccel: 0.03
-      setturnforwardaccel: 0
-      stepwhilefalling: true
-    parkour1:
-      defaultslipperiness: 0.98
-      aircontrol: true
-      stepsize: 1
-      jumpforce: 0.75
-      setforwardaccel: 0.04
-      setbackwardaccel: 0.03
-      setturnforwardaccel: 0
-      stepwhilefalling: true
-      waterjumping: true
-    city:
-      defaultslipperiness: 0.98
-      aircontrol: true
-      stepsize: 1
-      jumpforce: .56
-      setforwardaccel: 0.04
-      setbackwardaccel: 0.03
-      setturnforwardaccel: 0
-      stepwhilefalling: true
-    mazewave:
-      defaultslipperiness: .98
-      aircontrol: true
-      stepsize: 1
-      jumpforce: 0.7
-      setforwardaccel: 0.04
-      setbackwardaccel: 0.03
-      setturnforwardaccel: 0
-      stepwhilefalling: true
-    taiyang-only-first-gear:
-      defaultslipperiness: 0.96
-      aircontrol: true
-      stepsize: 1
-      boatgravity: -0.1
-      jumpforce: 0.1
-      setforwardaccel: 0.06
-      setbackwardaccel: 0.03
-      setturnforwardaccel: 0
-      setyawaccel: 1
-      stepwhilefalling: true
-      blockslipperiness:
-        - "0.8 grass_block, sand, stone, gravel, coarse_dirt, cobblestone, mossy_cobblestone, moss_block"
-    example:
-      jumpforce: 1
-      aircontrol: true
-      blockslipperiness:
-        - "0.98 create:crushing_wheel, create:cogwheel, ice, packed_ice, blue_ice, avaritia:block_infinity"
-      setblocksetting:
-        - "WALLTAP_MULTIPLIER 1 stone, light_blue_concrete, blue_concrete"
-        - "JUMPS 2 stone"
-
-axiom:
-  format: "<#33B5FF><bold><!italic>%s"
-  displays:
-    - "muggel:banana"
-    - "muggel:coppermedal"
-    - "muggel:cube1"
-    - "muggel:cube2"
-    - "muggel:cube3"
-    - "muggel:cube4"
-    - "muggel:cube5"
-    - "muggel:cube6"
-    - "muggel:cube7"
-    - "muggel:goldmedal"
-    - "muggel:menu"
-    - "muggel:oakboat"
-    - "muggel:silvermedal"
-    - "muggel:walter"
+    enabled: false
+database:
+  type: "sqlite" # sqlite, mariadb
+  host: "localhost"
+  port: 3306
+  database: "wake"
+  username: "root"
+  password: "password"
+  pool:
+    maximum_connections: 5 # 2-50
+    minimum_idle: 1 # 0-maximum_connections
+sync: # cross-server cache invalidation via Valkey pub-sub (requires shared mariadb/valkey instance)
+  enabled: false
+  verbose_logging: false
+  redis:
+    host: "localhost"
+    port: 6379
+    password: ""

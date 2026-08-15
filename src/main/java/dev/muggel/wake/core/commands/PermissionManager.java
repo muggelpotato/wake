@@ -5,74 +5,141 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionDefault;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
-import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class PermissionManager {
-    private static final Set<String> REGISTERED_PERMISSIONS = Collections.newSetFromMap(new ConcurrentHashMap<>());
+/**
+ * Registers the permission nodes, most specific rule first. <br>
+ * 1. An explicit {@code true} or {@code false} on the command itself <br>
+ * 2. The closest parent that says anything <br>
+ * 3. A {@link PermissionPreset} naming it (the floor a handwritten permission always outranks) <br>
+ * 4. Its default: commands OP, bundles nobody <br>
+ * Never construct permission strings elsewhere.
+ * This class only ever sees what {@link WakeCommandManager} derives from the command tree.
+ */
+public final class PermissionManager {
+    private static final Map<String, Set<String>> CHILD_NODES = new ConcurrentHashMap<>();
+    private static final Map<String, Set<PermissionPreset>> NODE_PRESETS = new ConcurrentHashMap<>();
+    private static final Set<String> EXECUTABLE_NODES = ConcurrentHashMap.newKeySet();
+    private PermissionManager() {}
 
-    public static @NonNull Permission registerPermission(String permissionStr) {
-        REGISTERED_PERMISSIONS.add(permissionStr);
-        Permission perm = Bukkit.getPluginManager().getPermission(permissionStr);
-        if (perm == null) {
-            perm = new Permission(permissionStr, PermissionDefault.OP);
-            Bukkit.getPluginManager().addPermission(perm);
-        }
-
-        int lastDot = permissionStr.lastIndexOf('.');
-        if (lastDot > 0) {
-            String parentStr = permissionStr.substring(0, lastDot);
-            Permission parentPerm = registerPermission(parentStr);
-
-            if (!parentPerm.getChildren().containsKey(permissionStr)) {
-                parentPerm.getChildren().put(permissionStr, true);
-                parentPerm.recalculatePermissibles();
-            }
-        }
-
-        return perm;
+    /** Marks a permission as a command rather than a group node (decides how it is reached) */
+    static void markExecutable(@NonNull String permissionStr) {
+        EXECUTABLE_NODES.add(permissionStr);
     }
 
-    /**
-     * 1. any parent node set to false -> access denied
-     * 2. node set to true -> access granted
-     * 3. any child permission of this parent node true -> access granted
-     */
-
-    public static boolean hasAccess(CommandSender sender, String permissionNode) {
-        if (sender == null || permissionNode == null || permissionNode.isEmpty()) {
-            return true;
+    static void assignPresets(@NonNull String permissionStr, @NonNull Set<PermissionPreset> presets) {
+        if (presets.isEmpty()) {
+            return;
         }
+        NODE_PRESETS.computeIfAbsent(permissionStr, ignored -> EnumSet.noneOf(PermissionPreset.class)).addAll(presets);
+    }
 
-        // 1
-        String[] parts = permissionNode.split("\\.");
-        StringBuilder currentPath = new StringBuilder();
-        for (int i = 0; i < parts.length - 1; i++) {
-            if (i > 0) currentPath.append(".");
-            currentPath.append(parts[i]);
-            String node = currentPath.toString();
-            if (sender.isPermissionSet(node) && !sender.hasPermission(node)) {
-                return false;
+    /** Settles the bundles once the whole tree is derived, then registers them */
+    static void sealPresets() {
+        NODE_PRESETS.keySet().retainAll(EXECUTABLE_NODES);
+        for (Map.Entry<String, Set<PermissionPreset>> entry : NODE_PRESETS.entrySet()) {
+            String above = enclosingCommand(entry.getKey());
+            if (above == null) {
+                continue;
             }
-        }
-
-        // 2
-        if (sender.hasPermission(permissionNode)) {
-            return true;
-        }
-
-        // 3 bottom-up check
-        String prefix = permissionNode + ".";
-        for (String registered : REGISTERED_PERMISSIONS) {
-            if (registered.startsWith(prefix)) {
-                if (sender.hasPermission(registered)) {
-                    return true;
+            Set<PermissionPreset> carried = NODE_PRESETS.getOrDefault(above, Set.of());
+            for (PermissionPreset preset : entry.getValue()) {
+                if (!carried.contains(preset)) {
+                    throw new IllegalStateException(entry.getKey() + " is in bundle " + preset + " but the command above it (" + above + ") is not, so the bundle can never reach it");
                 }
             }
         }
+        for (PermissionPreset preset : PermissionPreset.values()) {
+            if (Bukkit.getPluginManager().getPermission(preset.node()) == null) {
+                Bukkit.getPluginManager().addPermission(new Permission(preset.node(), PermissionDefault.FALSE));
+            }
+        }
+    }
 
+    private static @Nullable String enclosingCommand(@NonNull String permissionStr) {
+        for (int dot = permissionStr.lastIndexOf('.'); dot > 0; dot = permissionStr.lastIndexOf('.', dot - 1)) {
+            String candidate = permissionStr.substring(0, dot);
+            if (EXECUTABLE_NODES.contains(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /** Registers the node so admins can discover it, and records the parent link {@link #canReach} walks */
+    static void registerPermission(@NonNull String permissionStr) {
+        if (Bukkit.getPluginManager().getPermission(permissionStr) == null) {
+            Bukkit.getPluginManager().addPermission(new Permission(permissionStr, PermissionDefault.OP));
+        }
+        int lastDot = permissionStr.lastIndexOf('.');
+        if (lastDot > 0) {
+            String parentStr = permissionStr.substring(0, lastDot);
+            CHILD_NODES.computeIfAbsent(parentStr, ignored -> ConcurrentHashMap.newKeySet()).add(permissionStr);
+            registerPermission(parentStr);
+        }
+    }
+
+    /** Whether the node is shown */
+    public static boolean canReach(@NonNull CommandSender sender, @NonNull String permissionNode) {
+        return canReach(sender, permissionNode, inheritedVerdict(sender, permissionNode));
+    }
+
+    private static boolean canReach(@NonNull CommandSender sender, @NonNull String node, @Nullable Boolean inherited) {
+        if (EXECUTABLE_NODES.contains(node)) {
+            return allows(sender, node, inherited);
+        }
+        Set<String> children = CHILD_NODES.get(node);
+        if (children == null) {
+            return false;
+        }
+        Boolean below = inherited;
+        if (sender.isPermissionSet(node)) {
+            below = sender.hasPermission(node);
+        }
+        for (String child : children) {
+            if (canReach(sender, child, below)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The specificity ladder (command itself -> whatever closest parent said -> bundle naming it -> its own default) */
+    private static boolean allows(@NonNull CommandSender sender, @NonNull String node, @Nullable Boolean inherited) {
+        if (sender.isPermissionSet(node)) {
+            return sender.hasPermission(node);
+        }
+        if (inherited != null) {
+            return inherited;
+        }
+        return grantedByPreset(sender, node) || sender.hasPermission(node);
+    }
+
+    private static @Nullable Boolean inheritedVerdict(@NonNull CommandSender sender, @NonNull String permissionNode) {
+        for (int dot = permissionNode.lastIndexOf('.'); dot > 0; dot = permissionNode.lastIndexOf('.', dot - 1)) {
+            String ancestor = permissionNode.substring(0, dot);
+            if (sender.isPermissionSet(ancestor)) {
+                return sender.hasPermission(ancestor);
+            }
+        }
+        return null;
+    }
+
+    private static boolean grantedByPreset(@NonNull CommandSender sender, @NonNull String permissionNode) {
+        Set<PermissionPreset> presets = NODE_PRESETS.get(permissionNode);
+        if (presets == null) {
+            return false;
+        }
+        for (PermissionPreset preset : presets) {
+            if (sender.hasPermission(preset.node())) {
+                return true;
+            }
+        }
         return false;
     }
 }

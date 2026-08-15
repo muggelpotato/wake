@@ -1,0 +1,27 @@
+obu:
+  persistent_player_states: true
+  boat_lag_fix: true
+  collapse_default_context: true
+  update_nag: true
+  keep_unused_sandboxes: "30d"
+  setinterpolationten: false
+server:
+  default:
+    settings:
+      collisionmode: "NO_ENTITIES"
+      allowaccelstacking: "false"
+      falldamage: "false"
+      stepwhilefalling: "true"
+      setmultistepping: "true"
+      fixdoublewaterelevation: "true"
+      sethoneycompat: "true"
+  example:
+    settings:
+      jumpforce: "0.4"
+      aircontrol: "true"
+      setscale: "0.8"
+      blockslipperiness:
+        - "0.98 create:crushing_wheel, create:cogwheel, minecraft:ice, packed_ice, blue_ice, avaritia:block_infinity, air"
+      setblocksetting:
+        - "WALLTAP_MULTIPLIER 1 stone, light_blue_concrete, blue_concrete"
+        - "JUMPS 2 stone"

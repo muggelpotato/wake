@@ -27,6 +27,10 @@ reviews:
     - "!gradle/wrapper/**"
     - "!**/*.jar"
     - "!**/*.class"
+    - "!.claude/**"
+    - "!gradlew"
+    - "!gradlew.bat"
+    - "!testenv/**"
   pre_merge_checks:
     docstrings:
       mode: "off"

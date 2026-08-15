@@ -1,119 +1,82 @@
 package dev.muggel.wake.features.axiom;
 
-import dev.muggel.wake.core.module.AbstractModule;
-import org.bukkit.Bukkit;
-import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
-import net.kyori.adventure.key.Key;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import org.bukkit.plugin.Plugin;
+import dev.muggel.wake.Wake;
+import dev.muggel.wake.core.database.CachedStore;
+import dev.muggel.wake.core.module.WakeModule;
+import dev.muggel.wake.features.axiom.integration.AxiomDisplays;
 import org.jspecify.annotations.NonNull;
+import org.bukkit.configuration.file.YamlConfiguration;
 
-import java.lang.reflect.Method;
+import java.sql.SQLException;
 import java.util.List;
 
-public class AxiomModule extends AbstractModule {
-    private static final String DEFAULT_NAME_FORMAT = "<#33B5FF><bold><!italic>%s";
-
-    public AxiomModule() {
-        super("axiom");
+public class AxiomModule extends WakeModule {
+    private AxiomDao dao;
+    private AxiomDisplays axiomDisplays;
+    public AxiomModule(Wake plugin) {
+        super(plugin, "axiom");
     }
 
     @Override
     public boolean isCompatible() {
-        return Bukkit.getPluginManager().isPluginEnabled("AxiomPaper");
+        return AxiomDisplays.isAvailable();
     }
 
     @Override
-    @SuppressWarnings("PatternValidation")
     protected void onModuleEnable() {
-        String nameFormat = plugin.getConfig().getString("axiom.format", DEFAULT_NAME_FORMAT);
-        List<String> models = plugin.getConfig().getStringList("axiom.displays");
-        if (models.isEmpty()) return;
-
-        try {
-            Class<?> apiClass = Class.forName("com.moulberry.axiom.paperapi.AxiomCustomDisplayAPI");
-            Object apiInstance = apiClass.getMethod("getAPI").invoke(null);
-            Method createMethod = apiClass.getMethod("create", Key.class, String.class, ItemStack.class);
-            Method registerMethod = apiClass.getMethod("register", Plugin.class, createMethod.getReturnType());
-
-            for (String model : models) {
-                try {
-                    NamespacedKey modelKey = NamespacedKey.fromString(model.toLowerCase());
-                    if (modelKey == null) {
-                        plugin.getLogger().warning("Skipping invalid Axiom model key in config: " + model);
-                        continue;
-                    }
-
-                    String namespace = modelKey.getNamespace();
-                    String itemId = modelKey.getKey();
-
-                    String displayName = formatDisplayName(itemId);
-                    String formattedName = String.format(nameFormat, displayName);
-                    Component nameComponent = MiniMessage.miniMessage().deserialize(formattedName);
-
-                    ItemStack item = new ItemStack(Material.PAPER);
-                    ItemMeta meta = item.getItemMeta();
-                    if (meta != null) {
-                        try {
-                            meta.setItemModel(modelKey);
-                        } catch (LinkageError err) {
-                            plugin.getLogger().warning("Custom item models are not supported on this server version (requires Paper 1.21.2+)");
-                        }
-                        
-                        meta.displayName(nameComponent);
-                        item.setItemMeta(meta);
-                    }
-
-                    Key axiomKey = Key.key("wake", namespace + "_" + itemId);
-                    Object builder = createMethod.invoke(apiInstance, axiomKey, model.toLowerCase(), item);
-                    registerMethod.invoke(apiInstance, plugin, builder);
-                } catch (Exception e) {
-                    plugin.getLogger().severe("Failed to register Axiom model " + model + ": " + e.getMessage());
-                    throw new RuntimeException("Failed to register Axiom model " + model, e);
-                }
-            }
-        } catch (Exception e) {
-            if (e instanceof RuntimeException re) throw re;
-            plugin.getLogger().severe("Failed to initialize Axiom API integration: " + e.getMessage());
-            throw new RuntimeException("Failed to initialize Axiom API integration", e);
+        axiomDisplays = new AxiomDisplays(plugin);
+        dao = registerDao(new AxiomDao(plugin));
+        dao.initTables();
+        CachedStore<String> displays = dao.displays();
+        boolean read = displays.load();
+        axiomDisplays.apply(displays.keys());
+        if (!read) {
+            reload();
         }
+        seedDataIfEmpty(() -> displays.isLoaded() || displays.load() ? displays.keys().isEmpty() : null);
     }
 
     @Override
     protected void onModuleDisable() {
-        if (!Bukkit.getPluginManager().isPluginEnabled("AxiomPaper")) return;
-        try {
-            Class<?> apiClass = Class.forName("com.moulberry.axiom.paperapi.AxiomCustomDisplayAPI");
-            Object apiInstance = apiClass.getMethod("getAPI").invoke(null);
-            apiClass.getMethod("unregisterAll", Plugin.class).invoke(apiInstance, plugin);
-        } catch (Exception e) {
-            plugin.getLogger().severe("Failed to unregister Axiom displays: " + e.getMessage());
-            throw new RuntimeException("Failed to unregister Axiom displays", e);
+        if (axiomDisplays != null) {
+            axiomDisplays.unregisterAll();
         }
+        axiomDisplays = null;
+        dao = null;
     }
 
     @Override
     public void reload() {
-        onModuleDisable();
-        onModuleEnable();
+        AxiomDao currentDao = this.dao;
+        AxiomDisplays displays = this.axiomDisplays;
+        if (currentDao == null || displays == null) return;
+        currentDao.displays().reloadAsync(ignored -> {
+            if (this.dao == currentDao) {
+                displays.apply(currentDao.displays().keys());
+            }
+        });
     }
 
-    private @NonNull String formatDisplayName(@NonNull String itemId) {
-        String[] parts = itemId.split("[_-]");
-        StringBuilder sb = new StringBuilder();
-        for (String part : parts) {
-            if (!part.isEmpty()) {
-                if (!sb.isEmpty()) {
-                    sb.append(" ");
-                }
-                sb.append(Character.toUpperCase(part.charAt(0)))
-                  .append(part.substring(1).toLowerCase());
-            }
+    @Override
+    protected int onExportData(@NonNull YamlConfiguration yaml) throws SQLException {
+        AxiomDao currentDao = this.dao;
+        if (currentDao == null || !currentDao.displays().isLoaded()) {
+            throw new SQLException("Axiom displays could not be read");
         }
-        return sb.toString();
+        int count = exportState(yaml);
+        List<String> models = currentDao.displays().keys().stream().sorted().toList();
+        yaml.set("displays", models);
+        return count + models.size();
+    }
+
+    @Override
+    protected int onImportData(@NonNull YamlConfiguration yaml) throws SQLException {
+        List<String> models = yaml.getStringList("displays");
+        for (String model : models) {
+            dao.importDisplay(model);
+        }
+        int count = models.size() + importState(yaml);
+        reload();
+        return count;
     }
 }

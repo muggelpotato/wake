@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+    branches: [master, dev]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  gradle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - name: build
+        run: ./gradlew build
+      - name: checkVersionCompat
+        run: ./gradlew checkVersions --continue
+  lint:
+    name: ast-grep
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - run: npm install -g @ast-grep/cli@0.45.0
+      - run: ast-grep scan --error --format github
