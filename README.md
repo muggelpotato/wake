@@ -5,75 +5,165 @@
 </div>
 
 > [!NOTE]
-> Gemini 3.1 Pro & 3.5 Flash as well as CodeRabbit were used during development
+> See [AI Usage](#ai-usage)
 ## Wake
-A lightweight and modular framework for Minecraft boatracing<br>
-- Supported versions: **Paper `1.21.x`**<br>
-- Download: [GitHub](https://github.com/muggelpotato/wake/releases) & Modrinth soon™<br>
+A lightweight and highly configurable framework for Minecraft boatracing
+- Supports: **Paper `1.21.x`, `26.x`**
+
+<a href="https://github.com/muggelpotato/wake/releases">
+  <img src="https://img.shields.io/badge/Github-Download-181717?logo=github&logoColor=white" height="24" alt="GitHub Download" />
+</a>
+<a href="https://modrinth.com/project/wake">
+  <img src="https://img.shields.io/badge/Modrinth-Download-00AF5C?logo=modrinth&logoColor=00AF5C" height="24" alt="Modrinth Download" />
+</a>
 
 ## Feature Modules
-Wake is a framework with isolated modules that can be toggled off via the [config](src/main/resources/config.yml) if you don't need them (e.g. [Drydock](#drydock-module))<br>
-### Base Module
-- Adds administration commands like: 
-- `/wake:wa killboatonexit`
-- `/wake:wa killemptyboats`
+Wake is a framework with isolated modules that can be toggled off
+
+### Core Module
+- Adds administration and utility commands
+- The only module that cannot be toggled off
+- see the [docs](#documentation)
+
 ### OBU Module
-- Adds commands to configure boat physics via the OBU client, like:
-- `/wakeobu:wobu -context` to apply preset contexts
-- `/wakeobu:wobu -sandbox` to work on custom contexts in an isolated environment
-- `/wakeobu:wobu -status` to get a report detailing which contexts and settings apply or are being overridden by other settings
-- `/wakeobu:wobu [obusetting] [args]` to apply temporary overrides to contexts
-- see the documentation for all commands (soon™)
+- Adds commands to configure boat physics via an [OpenBoatUtils](https://github.com/OpenBoatUtils/OpenBoatUtils) client
+- Adds a custom command interface and features that OBU doesn't provide natively
+  - Saving/loading preconfigured boat modes (contexts)
+  - Immutable contexts you can layer and add temporary overrides to
+  - Entity contexts (per boat settings) are easier to use via commands and sync to other players
+  - Sandboxes that provide isolated environments to build contexts instead of using loose command block chains
+  - A dashboard showing applied settings/contexts/overrides of boats and players
+  - Listing default values for OBU settings
+  - Clearing specific settings in your context rather than resetting or writing the default value
+  - Keeping contexts across relogs and fixing boat lag on collisions (configurable)
+  - etc.
+- Supports OBU `0.5.0+`
+- see the [docs](#documentation)
+
 ### Drydock Module
-- Adds content for the Drydock boatracing server:
-- Currently adds `/drydock:dd getboat` to get boats with custom models via [Drydock RSP](https://github.com/muggelpotato/drydock-resourcepack)
+- Adds content for the Drydock boatracing server
+- see the [docs](#documentation)
+
+### Axiom Module
+- Lets admins register namespaced item models in the create item display menu of Axiom
+- see the [docs](#documentation)
+
 ## Showcase
-<img src="assets/status.png" alt="Status Command Feedback">
+<div align="center">
+  <img src="assets/wakeshowcase/cover.png" alt="Wake" width="100%">
+</div>
+
 <details>
-  <summary><b>Click to view more screenshots</b></summary><br>
-  <table>
-    <tr>
-      <td width="50%"><img src="assets/wobu.png" alt="Wobu Command Options"></td>
-      <td><img src="assets/sandbox.png" alt="Wobu Sandbox Options"></td>
-    </tr>
-    <tr>
-      <td><img src="assets/mulitarg.png" alt="Wobu Command Suggestions"></td>
-      <td><img src="assets/reload.png" alt="Wake Module Reload"></td>
-    </tr>
-  </table>
+<summary><b>OBU context layering</b></summary>
+
+**The status dashboard for OBU settings and contexts**
+<p align="center">
+  <img src="assets/wakeshowcase/1/obustatus.png" alt="/wakeobu -status" width="49%">
+  <img src="assets/wakeshowcase/1/obustatushover.png" alt="A collapsed context layer on hover" width="49%">
+</p>
+
+**Shared server contexts and your own sandboxes**
+<p align="center">
+  <img src="assets/wakeshowcase/2/obucontexts.png" alt="/wakeobu -context" width="49%">
+  <img src="assets/wakeshowcase/2/obucontextshover.png" alt="A context preview on hover" width="49%">
+</p>
+
 </details>
 
-## Developers
-Wake was developed and tested on Paper 1.21.11
-- Wake will only be actively developed and tested for one major Paper API version (feel free to fork)
-### Architecture
-Modular Monolith. Features are isolated into distinct modules
-- [wake.core](src/main/java/dev/muggel/wake/core) provides shared, generic utilities that modules can and should use, like:
-  - [WakeCommandManager](src/main/java/dev/muggel/wake/core/commands/WakeCommandManager.java) for Brigadier commands
-  - [MessageManager](src/main/java/dev/muggel/wake/core/text/MessageManager.java) for fetching/parsing localized MiniMessages
-  - [StateDao](src/main/java/dev/muggel/wake/core/database/StateDao.java) for simple persistent data handling
-- Modules never directly import or reference concrete classes from one another. They communicate in two decoupled ways:
-  - Data & API: [Wake.getServiceRegistry().get(OBUService.class)](src/main/java/dev/muggel/wake/Wake.java#L121-L123) for API calls like getVehicleScale
-  - Event Bus: Modules listen for custom Bukkit Events from other modules rather than calling them directly to keep modules independent for reactive logic, like driving into a drydock powerup triggers an OBU context change
-- Wake is event-driven where possible to avoid big impacts on server performance
-- To add new feature modules, put your class in [wake.features](src/main/java/dev/muggel/wake/features), extend [WakeModule](src/main/java/dev/muggel/wake/core/module/WakeModule.java) and register it in [Wake](src/main/java/dev/muggel/wake/Wake.java).
-  To ensure your module unloads gracefully without breaking the rest of the plugin when admins disable modules via the [config](src/main/resources/config.yml), put all your logic inside your module's package
+<details>
+<summary><b>Sandboxes</b></summary>
 
-Wake is designed to be as flexible and maintainable as possible (Zero [NMS](https://docs.papermc.io/paper/dev/internals/), standard Paper APIs, using [PacketEvents](https://github.com/retrooper/packetevents)). Please keep that in mind if you create pull requests
+**Two sample workflows:** Create, fork, switch and publish a sandbox. Add, narrow or remove single settings instead of resetting everything.
+<p align="center">
+  <img src="assets/wakeshowcase/3/obusandboxworkflow.png" alt="Creating/forking/switching/publishing a sandbox" width="49%">
+  <img src="assets/wakeshowcase/3/obuworkflow.png" alt="Setting/narrowing/clearing OBU settings" width="49%">
+</p>
+
+**Look up and share sandboxes**
+<p align="center">
+  <img src="assets/wakeshowcase/4/obusandboxview.png" alt="/wakeobu -sandbox view" width="49%">
+  <img src="assets/wakeshowcase/4/obusandboxexport.png" alt="/wakeobu -sandbox export" width="49%">
+</p>
+
+</details>
+
+<details>
+<summary><b>More custom OBU features</b></summary>
+
+**Server-side settings for the OBU module**
+<div align="center">
+  <img src="assets/wakeshowcase/5/obusettings.png" alt="/wakeobu -settings" width="100%">
+</div>
+
+**Autocompletion and a command to look up OBU defaults**
+<p align="center">
+  <img src="assets/wakeshowcase/6/obuclear.png" alt="/wakeobu -clear with narrowed suggestions" width="49%">
+  <img src="assets/wakeshowcase/6/obudefaults.png" alt="/wakeobu -defaults" width="49%">
+</p>
+
+**All commands are listed and explained in custom help menus**
+<p align="center">
+  <img src="assets/wakeshowcase/7/obuhelp.png" alt="/wakeobu -help" width="49%">
+  <img src="assets/wakeshowcase/7/wakehelp.png" alt="/wake help" width="49%">
+</p>
+
+</details>
+
+<details>
+<summary><b>More</b></summary>
+
+**OBU Client handling:** Outdated clients are notified and see badges on unavailable settings. Unsupported ones are refused.
+<p align="center">
+  <img src="assets/wakeshowcase/8/obuclientoutdated.png" alt="An outdated OpenBoatUtils client" width="49%">
+  <img src="assets/wakeshowcase/8/obuclientrejected.png" alt="An unsupported OpenBoatUtils client" width="49%">
+</p>
+
+**Boostpads and durability:** Wake queues every change in case of database outages and replays them on recovery.
+<p align="center">
+  <img src="assets/wakeshowcase/9/drydockboostpads.png" alt="/drydock boostpad list" width="49%">
+  <img src="assets/wakeshowcase/9/wakedatabaseoutage.png" alt="A database outage, journaled and replayed" width="49%">
+</p>
+
+**Current modules in the reload dashboard**
+<div align="center">
+  <img src="assets/wakeshowcase/10/wakemodules.png" alt="/wake reload" width="100%">
+</div>
+
+</details>
+
+## Documentation
+<a href="soon">
+  <img src="https://img.shields.io/badge/Wake-Docs-5C66FF?logo=read-the-docs&logoColor=33B5FF" height="24" alt="Wakes documentation" />
+</a>
+
+## AI Usage
+Large parts of the codebase are written by or with the help of LLMs. They were used for code generation, reviews, drills and unit tests. <br>
+While I use them heavily to generate boilerplate, the architectural/implementation decisions, ideas and code reviews are entirely my responsibility. For releases, I dedicate days to manual testing following iterative reviews and automated tests. See [PR #10](/../../pull/10): I spent 12 full days to review code, fix findings and run ~350 manual testcases on top of the automated ones for the 2.0.0 release.
+I'm aware that using LLMs is a dealbreaker for some. But I can ensure you that Wake is properly tested and that I'm aware of my responsibilities using LLMs. I'm developing and sharing Wake as a passion project that smaller private servers like mine might benefit from as well. **Not critical infrastructure**.
+
+## Developer & Admins
+Wake is primarily developed and tested on Paper 1.21.11.<br>
+It is compiled on all versions Wake claims to support. It is also sporadically tested on the lowest and highest supported versions but the majority of automated and manual testing will happen on the latest Minecraft version OBU supports.
+
+### Database
+By default Wake uses a **SQLite** database. <br>
+You can set up a **MariaDB** database and point Wake to it via the [config](src/main/resources/config.yml). Wake automatically recovers after database outages and handles ingame notifications and cache reloading for you.
+
+Wake caches gameplay related data in memory for instant access. Therefore the caches of individual servers can drift from the shared MariaDB database in a multi-server setup. Set up a **Valkey** instance and point Wake to it via the [config](src/main/resources/config.yml). Backends announce changes to their cache via **pub/sub** and Wake handles the invalidation/reloads so your backends stay synced if you choose to use that feature.
+
+### Things you should know
+Make sure to increase `moved-wrongly-threshold` and `moved-too-quickly-multiplier` in your `spigot.yml`
+
 > [!Warning]
-> Wake's OBU module intentionally bypasses server-side anticheat for simplicity by canceling vehicle correction packets (VEHICLE_MOVE) > [BoatLagInterceptor](src/main/java/dev/muggel/wake/features/obu/clients/BoatLagInterceptor.java)<br>
-> If you want to use Wake on a public server you would need to disable the OBU module or use a dedicated anti-cheat plugin
+> Wake's OBU module cancels vehicle correction packets (VEHICLE_MOVE) for OBU clients in boats to avoid rubber banding when airstepping or at speed. Or anything that trips vanilla movement checks that isn't handled by the configs above.
+> Make sure you account for that with a dedicated anti-cheat plugin or toggle it off via `/wakeobu -settings boat-lag-fix false`.<br>
+> Private servers can ignore this warning.
 
-Proper documentation will be created eventually
-
-## Development
-Wake is primarily developed as a hobby project **for small hobby server projects** that need a plugin that just works<br>
-- I'll prioritize simplicity and maintainability over, e.g., validating OBU vehicle movement via [NMS](https://docs.papermc.io/paper/dev/internals/) on the server
-- If I think I could massively improve the plugin's architecture with a refactor like in https://github.com/muggelpotato/wake/pull/6, I'll also go ahead and prioritize code quality over backward compatibility<br>
-<sub>Although I'm very happy with v1.0.1's state and probably won't introduce any major changes to the architecture for a very long time</sub>
+1.21-1.21.3 will log a warning about EntityRemoveEvent which you can ignore (or suppress via `deprecated-verbose: false` in `bukkit.yml`)
 
 ## Credits
-- [PaperMC](https://papermc.io/): For providing the Paper API that Wake makes use of
-- [PacketEvents](https://www.packetevents.com/): For providing the NMS-free packet manipulation engine that Wake makes use of
-- [OpenBoatUtils](https://github.com/OpenBoatUtils/OpenBoatUtils): The client-side mod that powers a big portion of Wake's features
-- [@microwavedram](https://github.com/microwavedram) for implementing suggested OBU features that Wake will make use of and for giving me the idea of how to fix boatlag via [BoatLagInterceptor](src/main/java/dev/muggel/wake/features/obu/clients/BoatLagInterceptor.java)
+- [PaperMC](https://papermc.io/) provides the Paper API
+- [PacketEvents](https://www.packetevents.com/) saves me from NMS packet manipulation
+- [OpenBoatUtils](https://github.com/OpenBoatUtils/OpenBoatUtils) introduced me to a new genre of boatracing and inspired me to start working on Wake
+- [@o7Moon](https://github.com/o7Moon) and [@microwavedram](https://github.com/microwavedram) for maintaining OBU
+- [HikariCP](https://github.com/brettwooldridge/hikaricp) - [SQLite JDBC](https://github.com/xerial/sqlite-jdbc) - [MariaDB JDBC](https://github.com/mariadb-corporation/mariadb-connector-j) - [Lettuce](https://github.com/redis/lettuce) - [Aikar IDB](https://github.com/aikar/db)

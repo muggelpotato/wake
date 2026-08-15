@@ -74,7 +74,7 @@ commands:
     export_fail: "<alert>Failed to export data for module <accent><module></accent>: <accent><error></accent>"
     import_success: "<reply>Imported <primary><count></primary> records for module <accent><module></accent>"
     import_fail: "<alert>Failed to import data for module <accent><module></accent>: <accent><error></accent>"
-    import_confirm: "<alert> Matching <accent><module></accent> records will be overwritten with imported data</danger><br><confirm_btn>"
+    import_confirm: "<alert>Matching <accent><module></accent> records will be overwritten with imported data</danger><br><confirm_btn>"
     setdefaults_success: "<reply>Seeded <primary><count></primary> default records for module <accent><module></accent>"
     setdefaults_fail: "<alert>Failed to seed defaults for module <accent><module></accent>: <accent><error></accent>"
     setdefaults_confirm: "<alert><accent><module></accent> records will be reset to plugin defaults (custom records are kept)</danger><br><confirm_btn>"
@@ -215,8 +215,8 @@ commands:
       published: "<reply>Published sandbox <accent><sandbox></accent> as a server context</neutral><hint>"
       published_hint: " <info><hover:show_text:'<secondary>Sandbox published</secondary><br><neutral>It is now a server context anyone can apply</neutral>'>💡</hover></info>"
       published_kicked: "<alert>The sandbox <accent><sandbox></accent> you were in is now a server context"
-      code: "<click:copy_to_clipboard:'<code>'><hover:show_text:'<secondary>Copy share code</secondary>'><secondary>[Copy Share Code]</secondary></hover></click><br><row><neutral>Share it or import it with <accent>/wakeobu -sandbox import</accent></neutral>"
-      header_export: "<reply>Exported sandbox <accent><sandbox></accent>:"
+      code: "<click:copy_to_clipboard:'<code>'><hover:show_text:'<secondary>Copy share code</secondary>'><secondary>[Copy Share Code]</secondary></hover></click>"
+      header_export: "<reply>Exported sandbox <accent><sandbox></accent>: <button><br><row><neutral>Share it or import it with <accent>/wakeobu -sandbox import</accent></neutral>"
     status:
       player:
         title: "<header:'Player Context'><hint>"
@@ -258,7 +258,7 @@ commands:
       reset: "<row><accent>/wakeobu -reset</accent><br><subrow><neutral>Drop temporary overrides and return to the default context</neutral>"
       config: "<row><accent>/wakeobu -settings</accent><br><subrow><neutral>Server-side configuration</neutral>"
       fallback: "<row><accent>/wakeobu <command></accent>"
-      wiki: "<prefix><click:open_url:'https://openboatutils.github.io/commands.html'><hover:show_text:'<info>Open in browser</info>'><info>[OBU Wiki]</info></hover></click>"
+      wiki: "<prefix><click:open_url:'https://openboatutils.github.io/commands.html'><hover:show_text:'<secondary>Open in browser</secondary>'><secondary>[OBU Wiki]</secondary></hover></click>"
 axiom:
   display_name: "<accent><b><!i><name></b></accent>"
 networking:

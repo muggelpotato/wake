@@ -6,6 +6,7 @@ import com.mojang.brigadier.context.CommandContext;
 import dev.muggel.wake.Wake;
 import dev.muggel.wake.core.commands.CommandNode;
 import dev.muggel.wake.core.commands.arguments.NameArgumentType;
+import dev.muggel.wake.core.text.MessageManager;
 import dev.muggel.wake.features.obu.contexts.OBUContext;
 import dev.muggel.wake.features.obu.protocol.OBUSetting;
 import dev.muggel.wake.features.obu.contexts.OBUContextManager;
@@ -37,8 +38,11 @@ public class SandboxExportCommand {
         for (OBUSetting setting : context.settings()) {
             joiner.add(setting.definition().id() + ":" + String.join(" ", setting.args()));
         }
-        plugin.getMessageManager().send(sender, "commands.obu.sandbox.header_export", Placeholder.unparsed("sandbox", OBUContextManager.displayName(context.name())));
-        plugin.getMessageManager().send(sender, "commands.obu.sandbox.code", Placeholder.parsed("code", SandboxCommandHelper.encodeShareCode(joiner.toString())));
+        MessageManager messages = plugin.getMessageManager();
+        messages.send(sender, "commands.obu.sandbox.header_export",
+                Placeholder.unparsed("sandbox", OBUContextManager.displayName(context.name())),
+                Placeholder.component("button", messages.getComponent("commands.obu.sandbox.code",
+                        Placeholder.parsed("code", SandboxCommandHelper.encodeShareCode(joiner.toString())))));
         return Command.SINGLE_SUCCESS;
     }
 }
