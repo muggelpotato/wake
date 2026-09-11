@@ -12,7 +12,7 @@ A lightweight and highly configurable framework for Minecraft boatracing
 
 <p>
   <a href="https://github.com/muggelpotato/wake/releases"><img src="https://img.shields.io/badge/Github-Download-181717?logo=github&logoColor=white" width="155" alt="GitHub Download" /></a>
-  <a href="https://modrinth.com/project/wake"><img src="https://img.shields.io/badge/Modrinth-Download-00AF5C?logo=modrinth&logoColor=00AF5C" width="169" alt="Modrinth Download" /></a>
+  <a href="https://modrinth.com/plugin/wake"><img src="https://img.shields.io/badge/Modrinth-Download-00AF5C?logo=modrinth&logoColor=00AF5C" width="169" alt="Modrinth Download" /></a>
 </p>
 
 ## Feature Modules
