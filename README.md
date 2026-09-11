@@ -1,5 +1,5 @@
 <div align="center">
-<img src="https://raw.githubusercontent.com/muggelpotato/drydock-modpack/main/pack/icon.png" alt="Wake logo" width="10%" height="10%">
+<img src="assets/logo/logo1.svg" alt="Wake logo" width="128">
 
 # Wake
 </div>
@@ -164,4 +164,5 @@ Make sure to increase `moved-wrongly-threshold` and `moved-too-quickly-multiplie
 - [PacketEvents](https://www.packetevents.com/) saves me from NMS packet manipulation
 - [OpenBoatUtils](https://github.com/OpenBoatUtils/OpenBoatUtils) introduced me to a new genre of boatracing and inspired me to start working on Wake
 - [@o7Moon](https://github.com/o7Moon) and [@microwavedram](https://github.com/microwavedram) for maintaining OBU
+- [@Icedmi](https://www.artstation.com/icedmi) for the logo
 - [HikariCP](https://github.com/brettwooldridge/hikaricp) - [SQLite JDBC](https://github.com/xerial/sqlite-jdbc) - [MariaDB JDBC](https://github.com/mariadb-corporation/mariadb-connector-j) - [Lettuce](https://github.com/redis/lettuce) - [Aikar IDB](https://github.com/aikar/db)
