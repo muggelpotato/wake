@@ -9,3 +9,6 @@
 
 # Binary files should be left untouched
 *.jar           binary
+
+# Test tooling, not the project's language
+/testenv/**     linguist-vendored

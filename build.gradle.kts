@@ -17,7 +17,7 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    implementation("com.github.retrooper:packetevents-spigot:2.13.0")
+    implementation("com.github.retrooper:packetevents-spigot:2.14.0")
 
     compileOnly("com.zaxxer:HikariCP:5.1.0")
     compileOnly("org.xerial:sqlite-jdbc:3.46.0.0")
@@ -51,6 +51,7 @@ val claimed = mapOf(
     "26.1.1" to "26.1.1.build.29-alpha",
     "26.1.2" to "26.1.2.build.74-stable",
     "26.2" to "26.2.build.111-stable",
+    "26.3" to "26.3.build.181-stable",
 )
 
 val matrixFiles = mapOf(
@@ -64,6 +65,7 @@ val matrixFiles = mapOf(
         gamemode=creative
         level-type=flat
         spawn-protection=0
+        white-list=false
     """,
     "spigot.yml" to """
         settings:

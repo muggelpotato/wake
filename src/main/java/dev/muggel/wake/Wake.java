@@ -68,7 +68,13 @@ public final class Wake extends JavaPlugin {
     private void initPacketEvents() {
         PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
         PacketEvents.getAPI().getSettings().checkForUpdates(false);
-        PacketEvents.getAPI().load();
+        try {
+            PacketEvents.getAPI().load();
+        } catch (IllegalStateException e) {
+            getLogger().severe("Server version unsupported: disabling Wake");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         PacketEvents.getAPI().init();
     }
 
